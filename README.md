@@ -21,4 +21,4 @@ The `v2` in the archive name means **planning bundle revision 2**. The implement
 configured sources -> SQLite catalog -> regenerable facets -> set curator
 ```
 
-`tracks.tsv` is created in V1A and becomes the supported first-party availability contract in V1B. Legacy `djing-files.tsv`/`music-files.tsv` remain optional compatibility facets after cut-over.
+`tracks.tsv` is created in V1A and becomes the supported first-party availability contract in V1B. Compatibility facets remain optional after cut-over.

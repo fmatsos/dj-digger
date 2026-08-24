@@ -10,6 +10,14 @@ from jsonschema import Draft202012Validator, FormatChecker
 
 ROOT = Path(__file__).resolve().parents[1]
 FIXTURES = ROOT / "tests" / "fixtures"
+FIRST_PARTY_CONSUMER_FILES = (
+    ROOT / "README.md",
+    ROOT / "PROJECT_INSTRUCTIONS.md",
+    ROOT / "skills" / "electronic-dj-set-curator" / "SKILL.md",
+    ROOT / "skills" / "electronic-dj-set-curator" / "references" / "compatibility-engine.md",
+    ROOT / "skills" / "electronic-dj-set-curator" / "references" / "set-emission.md",
+    ROOT / "skills" / "electronic-dj-set-curator" / "references" / "source-contracts.md",
+)
 
 
 def _read_analysis() -> tuple[list[str], list[dict[str, str]]]:
@@ -47,6 +55,16 @@ def _decode_tsv_row(row: dict[str, str | None], schema: dict[str, object]) -> di
 
 
 def main() -> None:
+    for path in FIRST_PARTY_CONSUMER_FILES:
+        assert path.is_file(), f"missing first-party consumer: {path.relative_to(ROOT)}"
+        text = path.read_text(encoding="utf-8")
+        assert "djing-files.tsv" not in text, (
+            f"legacy inventory dependency: {path.relative_to(ROOT)}"
+        )
+        assert "music-files.tsv" not in text, (
+            f"legacy inventory dependency: {path.relative_to(ROOT)}"
+        )
+
     tracks_path = FIXTURES / "tracks.tsv"
     assert tracks_path.is_file(), f"missing fixture: {tracks_path.relative_to(ROOT)}"
     with tracks_path.open(encoding="utf-8", newline="") as handle:
