@@ -5,6 +5,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, cast
 
+from dj_digger.analysis.audio import TechnicalAudioMetadata
 from dj_digger.catalog.database import Database
 from dj_digger.catalog.models import Track
 
@@ -587,6 +588,47 @@ class EmbeddedMetadataRepository:
                 normalization_version,
             ),
         )
+
+
+class TechnicalAudioMetadataRepository:
+    """Current normalized FFmpeg-owned technical metadata."""
+
+    def __init__(self, database: Database) -> None:
+        self._database = database
+
+    def upsert(self, track: Track, metadata: TechnicalAudioMetadata, probe_version: str) -> None:
+        """Replace the current probe result for one immutable track identity."""
+        self._database.execute(
+            """
+            INSERT INTO technical_audio_metadata (
+                track_id, duration_seconds, sample_rate, channels, codec, container, bitrate,
+                lossless, loudness_lufs, true_peak_db, dynamic_range, probe_version, probed_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(track_id) DO UPDATE SET
+                duration_seconds=excluded.duration_seconds, sample_rate=excluded.sample_rate,
+                channels=excluded.channels, codec=excluded.codec, container=excluded.container,
+                bitrate=excluded.bitrate, lossless=excluded.lossless,
+                loudness_lufs=excluded.loudness_lufs, true_peak_db=excluded.true_peak_db,
+                dynamic_range=excluded.dynamic_range, probe_version=excluded.probe_version,
+                probed_at=excluded.probed_at
+            """,
+            (
+                track.id,
+                metadata.duration_seconds,
+                metadata.sample_rate,
+                metadata.channels,
+                metadata.codec,
+                metadata.container,
+                metadata.bitrate,
+                metadata.lossless,
+                metadata.loudness_lufs,
+                metadata.true_peak_db,
+                metadata.dynamic_range,
+                probe_version,
+                _now(),
+            ),
+        )
+        self._database.commit()
 
 
 @dataclass(frozen=True)
