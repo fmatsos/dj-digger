@@ -1,0 +1,20 @@
+[workspace]
+database = "/workspace/dj-digger.sqlite"
+exports = "/workspace/exports"
+
+[export]
+legacy_compatibility = true
+
+[[library.sources]]
+id = "djing"
+path = "/music/djing"
+set_eligible = true
+analyze = true
+enabled = true
+
+[[library.sources]]
+id = "music"
+path = "/music/music"
+set_eligible = false
+analyze = false
+enabled = true

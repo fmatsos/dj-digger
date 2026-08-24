@@ -1,0 +1,7 @@
+services:
+  dj-digger:
+    build: .
+    volumes:
+      - ./config:/config:ro
+      - ./workspace:/workspace
+    command: ["--help"]
