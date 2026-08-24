@@ -447,36 +447,37 @@ class EmbeddedMetadataRepository:
         extractor_version: str,
         normalization_version: str,
         force: bool,
+        path_prefix: str | None = None,
     ) -> list[Track]:
         """Return present tracks requiring extraction based on persisted input facts."""
-        where_source = "" if source_id is None else "AND t.source_id = ?"
-        parameters: tuple[Any, ...] = (
-            extractor_version,
-            normalization_version,
-            *((source_id,) if source_id is not None else ()),
-        )
+        conditions = ["t.presence_status = 'present'"]
+        filters: list[Any] = []
+        if source_id is not None:
+            conditions.append("t.source_id = ?")
+            filters.append(source_id)
+        if path_prefix is not None:
+            conditions.append("substr(t.relative_path, 1, length(?)) = ?")
+            filters.extend((path_prefix, path_prefix))
+        where = " AND ".join(conditions)
         if force:
             query = f"""
                 SELECT t.id, t.source_id, t.relative_path, t.filename, t.extension, t.size_bytes,
                        t.mtime_ns, t.presence_status
-                FROM tracks t WHERE t.presence_status = 'present' {where_source} ORDER BY t.id
+                FROM tracks t WHERE {where} ORDER BY t.id
             """
-            rows = self._database.execute(query, parameters[2:]).fetchall()
+            rows = self._database.execute(query, tuple(filters)).fetchall()
             return [_track_from_row(row) for row in rows]
         query = f"""
             SELECT t.id, t.source_id, t.relative_path, t.filename, t.extension, t.size_bytes,
                    t.mtime_ns, t.presence_status
             FROM tracks t LEFT JOIN embedded_metadata m ON m.track_id = t.id
-            WHERE t.presence_status = 'present' {where_source} AND (
+            WHERE {where} AND (
                 m.track_id IS NULL OR m.input_size_bytes IS NULL OR m.input_mtime_ns IS NULL OR
                 m.input_size_bytes != t.size_bytes OR m.input_mtime_ns != t.mtime_ns OR
                 m.extractor_version != ? OR m.normalization_version != ?
             ) ORDER BY t.id
         """
-        if source_id is None:
-            parameters = (extractor_version, normalization_version)
-        else:
-            parameters = (source_id, extractor_version, normalization_version)
+        parameters = (*filters, extractor_version, normalization_version)
         rows = self._database.execute(query, parameters).fetchall()
         return [_track_from_row(row) for row in rows]
 

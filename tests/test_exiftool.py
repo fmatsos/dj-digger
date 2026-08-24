@@ -7,7 +7,12 @@ import pytest
 
 from dj_digger.catalog.database import Database
 from dj_digger.catalog.models import Track
-from dj_digger.catalog.repositories import ScanRunRepository, SourceRepository, TrackRepository
+from dj_digger.catalog.repositories import (
+    EmbeddedMetadataRepository,
+    ScanRunRepository,
+    SourceRepository,
+    TrackRepository,
+)
 from dj_digger.metadata.exiftool import (
     EMBEDDED_FIELDS,
     EmbeddedMetadata,
@@ -248,6 +253,20 @@ def test_version_probe_failure_records_each_present_track_failure(tmp_path: Path
         "SELECT id, presence_status FROM tracks WHERE id IN (?, ?) ORDER BY id",
         (first.id, second.id),
     ).fetchall() == [(first.id, "present"), (second.id, "present")]
+
+
+def test_metadata_eligibility_honors_a_path_prefix(tmp_path: Path) -> None:
+    database, first, _second = catalog_with_two_tracks(tmp_path)
+
+    eligible = EmbeddedMetadataRepository(database).eligible_tracks(
+        "source",
+        extractor_version="test",
+        normalization_version="1",
+        force=True,
+        path_prefix="A",
+    )
+
+    assert eligible == [first]
 
 
 def test_global_extraction_failure_events_are_atomic(tmp_path: Path) -> None:

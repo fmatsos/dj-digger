@@ -210,7 +210,9 @@ class MetadataService:
         self._metadata = EmbeddedMetadataRepository(database)
         self._events = EventRepository(database)
 
-    def refresh(self, source_id: str | None, force: bool = False) -> MetadataRunResult:
+    def refresh(
+        self, source_id: str | None, force: bool = False, path_prefix: str | None = None
+    ) -> MetadataRunResult:
         if isinstance(self._extractor, ExifToolExtractor):
             self._extractor.configure_source_roots(SourceRepository(self._database).roots())
         present = self._metadata.present_count(source_id)
@@ -222,14 +224,18 @@ class MetadataService:
                 extractor_version="",
                 normalization_version=self.NORMALIZATION_VERSION,
                 force=True,
+                path_prefix=path_prefix,
             )
             with self._database.transaction():
                 for track in tracks:
                     self._record_failure(track.id, str(error))
             return MetadataRunResult(extracted=0, failed=len(tracks), skipped=0)
         eligible = self._metadata.eligible_tracks(
-            source_id, extractor_version=version, normalization_version=self.NORMALIZATION_VERSION,
+            source_id,
+            extractor_version=version,
+            normalization_version=self.NORMALIZATION_VERSION,
             force=force,
+            path_prefix=path_prefix,
         )
         if not eligible:
             return MetadataRunResult(extracted=0, failed=0, skipped=present)
