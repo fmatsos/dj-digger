@@ -1,0 +1,55 @@
+{
+  "plans": {
+    "2026-08-24-dj-digger-analysis-v1a.md": {
+      "tasks": 8,
+      "checkbox_steps": 40,
+      "red_flags": [],
+      "has_required_header": true
+    },
+    "2026-08-24-dj-digger-catalog-v1a.md": {
+      "tasks": 9,
+      "checkbox_steps": 45,
+      "red_flags": [],
+      "has_required_header": true
+    },
+    "2026-08-24-dj-digger-integration-v1a-v1b.md": {
+      "tasks": 7,
+      "checkbox_steps": 35,
+      "red_flags": [],
+      "has_required_header": true
+    },
+    "2026-08-24-dj-digger-unified-v1-master.md": {
+      "tasks": 0,
+      "checkbox_steps": 0,
+      "red_flags": [],
+      "has_required_header": true
+    },
+    "2026-08-24-electronic-dj-set-curator-v1a-v1b.md": {
+      "tasks": 6,
+      "checkbox_steps": 30,
+      "red_flags": [],
+      "has_required_header": true
+    }
+  },
+  "schemas": {
+    "dj-analysis-run.schema.json": "OK",
+    "dj-analysis.schema.json": "OK",
+    "dj-sections.schema.json": "OK",
+    "dj-set.schema.json": "OK",
+    "library-artifacts.schema.json": "OK",
+    "snapshot-manifest.schema.json": "OK",
+    "tracks.schema.json": "OK"
+  },
+  "coverage_file": "docs/superpowers/plans/SPEC-COVERAGE.md",
+  "obsolete_contract_scan": {
+    "--inventory": 1,
+    "--no-prune": 0,
+    "AnalysisCache.prune()": 1,
+    "dj-audio-analyzer": 1,
+    "interpretation": "All remaining occurrences are explicit negative/superseded-contract statements."
+  },
+  "notes": [
+    "Plan revision 2 implements functional V1A/V1B only.",
+    "Fingerprint/move/duplicate detection remains out of scope."
+  ]
+}
