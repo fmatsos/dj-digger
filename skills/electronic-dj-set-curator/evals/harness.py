@@ -23,6 +23,75 @@ STRATEGIES = {
 }
 
 
+def emit_facts_only(case_dir: Path, output_dir: Path, identity: str = "acceptance") -> None:
+    """Emit a deterministic contract artifact from canonical facets only.
+
+    This is an acceptance adapter, not a curator: it selects the first eligible
+    row and records uncertainty rather than inventing transitions or metadata.
+    """
+    output_dir.mkdir(parents=True, exist_ok=True)
+    tracks = _rows(case_dir / "tracks.tsv")
+    eligible = [row for row in tracks if row.get("set_eligible") == "true"]
+    selected = eligible[:1]
+    payload = {
+        "schema_version": 2,
+        "identity": identity,
+        "series": identity,
+        "set_name": "Facts-only acceptance",
+        "brief": {
+            "target_duration_minutes": 1,
+            "hard": [],
+            "mixability": [],
+            "narrative": [],
+        },
+        "tracks": [
+            {
+                "position": 1,
+                "source_id": row["source_id"],
+                "track_id": int(row["track_id"]),
+                "path": row["path"],
+                "role": "uncertain opener",
+                "source_quality": "unknown",
+                "analysis_confidence": None,
+                "mixability_status": "unverified",
+            }
+            for row in selected
+        ],
+        "transitions": [],
+        "alternatives": [],
+        "validation": {
+            "core_tracks": len(selected),
+            "alternative_tracks": 0,
+            "availability_verified": len(selected),
+            "analysis_available": 0,
+            "lossless_tracks": 0,
+            "core_transitions_validated": 0,
+            "lowest_transition_compatibility": None,
+            "unverified_transitions": 0,
+            "hard_constraints_violated": 0,
+        },
+    }
+    # Keep this small acceptance adapter honest when the v2 contract changes.
+    Draft202012Validator(SCHEMA).validate(payload)
+    stem = identity
+    (output_dir / f"{stem}.set.json").write_text(
+        json.dumps(payload, separators=(",", ":")), encoding="utf-8"
+    )
+    (output_dir / f"{stem}.m3u8").write_text(
+        "#EXTM3U\n" + "\n".join(row["path"] for row in selected) + "\n", encoding="utf-8"
+    )
+    (output_dir / f"{stem}.md").write_text(
+        "## Facts-only acceptance\n\n"
+        "### Position 1 candidates\n"
+        "1. Uncertain: canonical facet row\n"
+        "2. Uncertain: no additional facts\n"
+        "3. Uncertain: no additional facts\n\n"
+        "## Improvisation branches\n"
+        "1. Refuse unsupported transition\n",
+        encoding="utf-8",
+    )
+
+
 def _rows(path: Path) -> list[dict[str, str]]:
     with path.open(encoding="utf-8", newline="") as handle:
         return list(csv.DictReader(handle, delimiter="\t"))
