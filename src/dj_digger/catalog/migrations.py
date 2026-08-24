@@ -3,7 +3,7 @@
 import sqlite3
 from importlib.resources import files
 
-MIGRATIONS = ((1, "catalog-v1.sql"), (2, "catalog-v2.sql"))
+MIGRATIONS = ((1, "catalog-v1.sql"), (2, "catalog-v2.sql"), (3, "catalog-v3.sql"))
 
 
 def migrate(connection: sqlite3.Connection) -> None:

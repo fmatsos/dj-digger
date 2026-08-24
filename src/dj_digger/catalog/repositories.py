@@ -3,7 +3,7 @@
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from dj_digger.catalog.database import Database
 from dj_digger.catalog.models import Track
@@ -55,6 +55,11 @@ class SourceRepository:
             "? WHERE source_id = ?",
             (run_id, now, source_id),
         )
+
+    def roots(self) -> dict[str, Path]:
+        """Return current source roots keyed by stable source identity."""
+        rows = self._database.execute("SELECT source_id, root_path FROM library_sources").fetchall()
+        return {str(source_id): Path(root_path) for source_id, root_path in rows}
 
 
 class ScanRunRepository:
@@ -344,13 +349,108 @@ class EventRepository:
         self._database = database
 
     def append(
-        self, track_id: int, run_id: int, event_type: str, payload_json: str | None, now: str
+        self, track_id: int, run_id: int | None, event_type: str, payload_json: str | None, now: str
     ) -> None:
         self._database.execute(
             "INSERT INTO track_events (track_id, occurred_at, scan_run_id, event_type, "
             "payload_json) "
             "VALUES (?, ?, ?, ?, ?)",
             (track_id, now, run_id, event_type, payload_json),
+        )
+
+
+class EmbeddedMetadataRepository:
+    """Current normalized ExifTool-owned metadata."""
+
+    def __init__(self, database: Database) -> None:
+        self._database = database
+
+    def eligible_tracks(
+        self,
+        source_id: str | None,
+        *,
+        extractor_version: str,
+        normalization_version: str,
+        force: bool,
+    ) -> list[Track]:
+        """Return present tracks requiring extraction based on persisted input facts."""
+        where_source = "" if source_id is None else "AND t.source_id = ?"
+        parameters: tuple[Any, ...] = (
+            extractor_version,
+            normalization_version,
+            *((source_id,) if source_id is not None else ()),
+        )
+        if force:
+            query = f"""
+                SELECT t.id, t.source_id, t.relative_path, t.filename, t.extension, t.size_bytes,
+                       t.mtime_ns, t.presence_status
+                FROM tracks t WHERE t.presence_status = 'present' {where_source} ORDER BY t.id
+            """
+            rows = self._database.execute(query, parameters[2:]).fetchall()
+            return [_track_from_row(row) for row in rows]
+        query = f"""
+            SELECT t.id, t.source_id, t.relative_path, t.filename, t.extension, t.size_bytes,
+                   t.mtime_ns, t.presence_status
+            FROM tracks t LEFT JOIN embedded_metadata m ON m.track_id = t.id
+            WHERE t.presence_status = 'present' {where_source} AND (
+                m.track_id IS NULL OR m.input_size_bytes IS NULL OR m.input_mtime_ns IS NULL OR
+                m.input_size_bytes != t.size_bytes OR m.input_mtime_ns != t.mtime_ns OR
+                m.extractor_version != ? OR m.normalization_version != ?
+            ) ORDER BY t.id
+        """
+        if source_id is None:
+            parameters = (extractor_version, normalization_version)
+        else:
+            parameters = (source_id, extractor_version, normalization_version)
+        rows = self._database.execute(query, parameters).fetchall()
+        return [_track_from_row(row) for row in rows]
+
+    def present_count(self, source_id: str | None) -> int:
+        """Count present tracks in the requested source scope."""
+        if source_id is None:
+            query = "SELECT COUNT(*) FROM tracks WHERE presence_status = 'present'"
+            return int(self._database.scalar(query))
+        return int(
+            self._database.scalar(
+                "SELECT COUNT(*) FROM tracks WHERE source_id = ? AND presence_status = 'present'",
+                (source_id,),
+            )
+        )
+
+    def current(self, track_id: int) -> tuple[Any, ...] | None:
+        row = self._database.execute(
+            "SELECT title, artist, album_artist, album, track_number, disc_number, genre, "
+            "date, year, composer, comment, tag_bpm, tag_initial_key, grouping "
+            "FROM embedded_metadata WHERE track_id = ?",
+            (track_id,),
+        ).fetchone()
+        return cast(tuple[Any, ...] | None, row)
+
+    def upsert(
+        self, track: Track, values: tuple[Any, ...], *, extracted_at: str,
+        extractor_version: str, normalization_version: str
+    ) -> None:
+        self._database.execute(
+            """
+            INSERT INTO embedded_metadata (
+                track_id, title, artist, album_artist, album, track_number, disc_number, genre,
+                date, year, composer, comment, tag_bpm, tag_initial_key, grouping,
+                metadata_extracted_at, extractor_version, input_size_bytes, input_mtime_ns,
+                normalization_version
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(track_id) DO UPDATE SET
+                title=excluded.title, artist=excluded.artist, album_artist=excluded.album_artist,
+                album=excluded.album, track_number=excluded.track_number,
+                disc_number=excluded.disc_number, genre=excluded.genre, date=excluded.date,
+                year=excluded.year, composer=excluded.composer, comment=excluded.comment,
+                tag_bpm=excluded.tag_bpm, tag_initial_key=excluded.tag_initial_key,
+                grouping=excluded.grouping, metadata_extracted_at=excluded.metadata_extracted_at,
+                extractor_version=excluded.extractor_version,
+                input_size_bytes=excluded.input_size_bytes, input_mtime_ns=excluded.input_mtime_ns,
+                normalization_version=excluded.normalization_version
+            """,
+            (track.id, *values, extracted_at, extractor_version, track.size_bytes, track.mtime_ns,
+             normalization_version),
         )
 
 
