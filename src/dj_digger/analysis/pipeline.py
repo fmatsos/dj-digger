@@ -8,13 +8,13 @@ from typing import Any
 
 from dj_digger.analysis.config import AnalysisIdentity
 from dj_digger.analysis.eligibility import AnalysisEligibility
-from dj_digger.analysis.extractor import AnalysisExtractionError, Stage
+from dj_digger.analysis.extractor import AnalysisExtractionError, AnalysisExtractionResult, Stage
 from dj_digger.analysis.persistence import AnalysisOutcome, AnalysisPersistence
 from dj_digger.catalog.database import Database
 from dj_digger.catalog.models import Track
 from dj_digger.catalog.repositories import TrackRepository
 
-AnalysisExtractor = Callable[[Track], Mapping[str, Any]]
+AnalysisExtractor = Callable[[Track], AnalysisExtractionResult | Mapping[str, Any]]
 _STAGES = frozenset(
     {
         "decode", "technical", "rhythm", "spectrum", "windows", "segmentation", "semantics",

@@ -1,12 +1,12 @@
 """V1B acceptance: Curator availability comes only from canonical tracks.tsv."""
 
 import csv
-from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
+from analysis_fixture import analysis_fixture
+
 from dj_digger.application import WorkspaceApplication
-from dj_digger.catalog.models import Track
 from dj_digger.config import WorkspaceConfig
 from dj_digger.metadata.exiftool import MetadataRunResult, MetadataService
 
@@ -65,8 +65,7 @@ def _write_v1b_config(tmp_path: Path, djing: Path, music: Path) -> Path:
     return config
 
 
-def _analysis(track: Track) -> Mapping[str, object]:
-    return {"path": track.relative_path}
+_analysis = analysis_fixture
 
 
 def test_v1b_refresh_resolves_known_curator_set_without_legacy_inventory(
@@ -86,6 +85,10 @@ def test_v1b_refresh_resolves_known_curator_set_without_legacy_inventory(
     refresh = WorkspaceApplication(config, analysis_extractor=_analysis).refresh()
 
     assert refresh["status"] == "succeeded"
+    assert all(
+        (config.exports / name).is_file()
+        for name in ("dj-analysis.tsv", "dj-sections.jsonl", "dj-analysis-run.json")
+    )
     assert not (config.exports / "djing-files.tsv").exists()
     assert not (config.exports / "music-files.tsv").exists()
     assert _generate_known_set(config.exports / "tracks.tsv") == (

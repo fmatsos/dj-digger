@@ -167,6 +167,11 @@ class AnalysisExporter:
                     "analysis_confidence": confidence,
                 }
             )
+            # Minimal/failed attempts have no window facts; represent each
+            # unavailable window explicitly while keeping all other facts null.
+            for key, value in row.items():
+                if key.endswith("_available") and value is None:
+                    row[key] = False
             result.append(row)
         return result
 

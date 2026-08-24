@@ -32,6 +32,8 @@ def _run(config_path: Path, action: Any) -> None:
     typer.echo(json.dumps(diagnostic, ensure_ascii=False, sort_keys=True, separators=(",", ":")))
     if diagnostic.get("status") == "failed":
         raise typer.Exit(1)
+    if diagnostic.get("status") == "partial":
+        raise typer.Exit(2)
 
 
 @app.command()
@@ -56,14 +58,11 @@ def metadata(
     force: Annotated[bool, typer.Option()] = False,
 ) -> None:
     """Refresh embedded metadata for current tracks."""
-    _run(
-        config,
-        lambda service: {
-            "event": "metadata",
-            "status": "succeeded",
-            **service.metadata(source, path_prefix=path, force=force).__dict__,
-        },
-    )
+    def action(service: WorkspaceApplication) -> dict[str, Any]:
+        result = service.metadata(source, path_prefix=path, force=force)
+        return {"event": "metadata", "status": _result_status(result), **result.__dict__}
+
+    _run(config, action)
 
 
 @app.command()
@@ -76,16 +75,13 @@ def analyze(
     workers: Annotated[int, typer.Option()] = 1,
 ) -> None:
     """Analyze selected tracks with bounded worker concurrency."""
-    _run(
-        config,
-        lambda service: {
-            "event": "analyze",
-            "status": "succeeded",
-            **service.analyze(
-                source, path_prefix=path, limit=limit, force=force, workers=workers
-            ).__dict__,
-        },
-    )
+    def action(service: WorkspaceApplication) -> dict[str, Any]:
+        result = service.analyze(
+            source, path_prefix=path, limit=limit, force=force, workers=workers
+        )
+        return {"event": "analyze", "status": _result_status(result), **result.__dict__}
+
+    _run(config, action)
 
 
 @app.command()
@@ -140,6 +136,15 @@ def refresh(config: ConfigOption) -> None:
 def main() -> None:
     """Run the DJ Digger command-line application."""
     app()
+
+
+def _result_status(result: Any) -> str:
+    status = getattr(result, "status", None)
+    if isinstance(status, str) and status in {"succeeded", "partial", "failed"}:
+        return status
+    failed = int(getattr(result, "failed", 0))
+    analyzed = int(getattr(result, "analyzed", 0))
+    return "failed" if failed and not analyzed else ("partial" if failed else "succeeded")
 
 
 if __name__ == "__main__":
