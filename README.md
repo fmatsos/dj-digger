@@ -15,6 +15,10 @@ The `v2` in the archive name means **planning bundle revision 2**. The implement
 
 `docs/migrations/` explains the contract changes from the previous plan. `references/export-music-audit.sh` is included only as a parity reference and is not part of the target runtime architecture.
 
+## Implementation workflow
+
+Use [`docs/implementation-workflow.md`](docs/implementation-workflow.md) to resume or extend the implementation with the token-conscious multi-agent workflow, risk-based reviews, real RED/GREEN evidence, and the 30% context handoff rule.
+
 ## Canonical target
 
 ```text
