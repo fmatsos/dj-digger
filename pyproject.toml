@@ -10,6 +10,9 @@ readme = "README.md"
 requires-python = ">=3.12"
 dependencies = ["typer>=0.15,<1.0", "jsonschema>=4.25,<5", "numpy>=2,<3"]
 
+[project.optional-dependencies]
+analysis = ["essentia==2.1b6.dev1389"]
+
 [project.scripts]
 dj-digger = "dj_digger.cli:app"
 
@@ -18,6 +21,7 @@ packages = ["src/dj_digger"]
 
 [tool.hatch.build.targets.wheel.force-include]
 "schema-bundle.json" = "dj_digger/schema-bundle.json"
+"config/analysis.toml" = "dj_digger/analysis.toml"
 "schemas/tracks.schema.json" = "dj_digger/schemas/tracks.schema.json"
 "schemas/library-artifacts.schema.json" = "dj_digger/schemas/library-artifacts.schema.json"
 "schemas/snapshot-manifest.schema.json" = "dj_digger/schemas/snapshot-manifest.schema.json"

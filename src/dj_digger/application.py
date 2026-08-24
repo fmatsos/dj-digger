@@ -1,5 +1,6 @@
 """Application-level orchestration for the DJ Digger command line."""
 
+import importlib.util
 import shutil
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -195,9 +196,23 @@ class WorkspaceApplication:
         for source in self.config.sources:
             if not source.path.is_dir():
                 issues.append(f"source root unavailable: {source.id} ({source.path})")
-        for binary in ("exiftool", "ffprobe", "ffmpeg"):
+        for binary in ("exiftool",):
             if shutil.which(binary) is None:
                 issues.append(f"required binary unavailable: {binary}")
+        analysis_enabled = any(source.enabled and source.analyze for source in self.config.sources)
+        if analysis_enabled:
+            for binary in ("ffprobe", "ffmpeg"):
+                if shutil.which(binary) is None:
+                    issues.append(f"required binary unavailable: {binary}")
+            if importlib.util.find_spec("essentia") is None:
+                issues.append("required dependency unavailable: essentia")
+            if self.config.dsp_path is not None:
+                try:
+                    from dj_digger.config import DspConfig
+
+                    DspConfig.load(self.config.dsp_path)
+                except (OSError, ValueError) as error:
+                    issues.append(f"DSP configuration invalid: {error}")
         version = int(self.database.scalar("PRAGMA user_version") or 0)
         expected = MIGRATIONS[-1][0]
         if version != expected:
