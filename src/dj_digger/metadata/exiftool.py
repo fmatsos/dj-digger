@@ -198,6 +198,14 @@ class MetadataRunResult:
     failed: int
     skipped: int
 
+    @property
+    def status(self) -> str:
+        if self.failed == 0:
+            return "succeeded"
+        if self.failed > 0 and self.extracted == 0:
+            return "failed"
+        return "partial"
+
 
 class MetadataService:
     """Incrementally persist normalized embedded metadata for present tracks."""

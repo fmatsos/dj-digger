@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from dj_digger.config import WorkspaceConfig
+from dj_digger.config import DspConfig, WorkspaceConfig
 
 FIXTURES = Path(__file__).parent / "fixtures"
 
@@ -52,3 +52,32 @@ def test_allows_disabling_legacy_compatibility_and_records_are_immutable() -> No
     assert config.export.legacy_compatibility is False
     with pytest.raises(FrozenInstanceError):
         config.sources[0].enabled = False
+
+
+def test_loads_versioned_dsp_configuration_for_active_analysis() -> None:
+    config = WorkspaceConfig.load(Path("config/dj-digger.example.toml"))
+
+    assert config.dsp.version == 1
+    assert config.dsp.sample_rate == 48_000
+    assert config.dsp.channels == 1
+    assert config.dsp.fft_window_size == 4096
+    assert config.dsp.semantic_min_confidence == 0.80
+    assert config.dsp.bands["sub"] == (20.0, 60.0)
+
+
+def test_dsp_configuration_rejects_missing_required_sections(tmp_path: Path) -> None:
+    path = tmp_path / "invalid-analysis.toml"
+    path.write_text("[audio]\nsample_rate = 48000\n", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="DSP configuration requires"):
+        DspConfig.load(path)
+
+
+def test_dsp_config_hash_changes_when_a_canonical_value_changes(tmp_path: Path) -> None:
+    source = Path("config/analysis.toml").read_text(encoding="utf-8")
+    changed = tmp_path / "analysis.toml"
+    changed.write_text(
+        source.replace("min_confidence = 0.80", "min_confidence = 0.81"), encoding="utf-8"
+    )
+
+    assert DspConfig.load(changed).config_hash != DspConfig.canonical().config_hash

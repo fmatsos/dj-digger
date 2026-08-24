@@ -57,21 +57,117 @@ def test_wheel_migrates_without_the_checkout_schema(tmp_path: Path) -> None:
     assert result.returncode == 0, result.stderr
 
 
+def test_wheel_contains_valid_analysis_schemas_outside_checkout(tmp_path: Path) -> None:
+    distribution = tmp_path / "dist"
+    subprocess.run(
+        ["uv", "build", "--wheel", "--out-dir", str(distribution)],
+        check=True,
+        cwd=Path(__file__).parents[1],
+    )
+    wheel = next(distribution.glob("*.whl"))
+    isolated = tmp_path / "installed"
+    with zipfile.ZipFile(wheel) as archive:
+        archive.extractall(isolated)
+    script = (
+        "import importlib.resources as r; "
+        "from jsonschema import Draft202012Validator; import json; "
+        "base=r.files('dj_digger').joinpath('schemas'); "
+        "[Draft202012Validator.check_schema(json.loads(base.joinpath(name).read_text())) "
+        "for name in "
+        "('dj-analysis.schema.json','dj-sections.schema.json','dj-analysis-run.schema.json')]"
+    )
+    result = subprocess.run(
+        [sys.executable, "-c", script], cwd=tmp_path, env={"PYTHONPATH": str(isolated)},
+        check=False, capture_output=True, text=True,
+    )
+    assert result.returncode == 0, result.stderr
+
+
 def test_catalog_migration_is_idempotent_after_reopening(tmp_path: Path) -> None:
     database_path = tmp_path / "catalog.sqlite"
     database = Database.open(database_path)
     database.migrate()
     database.migrate()
 
-    assert database.scalar("PRAGMA user_version") == 3
+    assert database.scalar("PRAGMA user_version") == 5
     assert database.scalar("PRAGMA foreign_keys") == 1
     assert database.table_exists("tracks")
     assert database.table_exists("track_events")
 
     reopened = Database.open(database_path)
     reopened.migrate()
-    assert reopened.scalar("PRAGMA user_version") == 3
+    assert reopened.scalar("PRAGMA user_version") == 5
     assert reopened.table_exists("library_sources")
+
+
+def test_v4_rebuild_does_not_leave_foreign_keys_referencing_old_analysis_table(
+    tmp_path: Path,
+) -> None:
+    database = Database.open(tmp_path / "catalog.sqlite")
+    database.migrate()
+    stale = database.execute(
+        "SELECT name, sql FROM sqlite_master WHERE sql LIKE '%audio_analysis_v4_old%'"
+    ).fetchall()
+    assert stale == []
+    foreign_keys = database.execute("PRAGMA foreign_key_list(track_sections)").fetchall()
+    assert {row[2] for row in foreign_keys} == {"audio_analysis"}
+
+
+def test_v5_repairs_existing_v4_sections_fk_and_preserves_rows(tmp_path: Path) -> None:
+    database_path = tmp_path / "catalog.sqlite"
+    database = Database.open(database_path)
+    database.migrate()
+    database._connection.close()
+    database = Database.open(database_path)
+    # Recreate the historical broken FK while retaining its data and v4 marker.
+    database.execute(
+        "INSERT INTO library_sources VALUES ('s', '/tmp', 1, 1, 1, 'now', 'now', NULL)"
+    )
+    database.execute(
+        "INSERT INTO scan_runs (source_id, started_at, status, scanner_version) "
+        "VALUES ('s', 'now', 'succeeded', 'test')"
+    )
+    database.execute(
+        "INSERT INTO tracks VALUES (1, 's', 'a.wav', 'a.wav', '.wav', 1, 1, 'present', "
+        "'now', 'now', NULL, NULL, 1, 1)"
+    )
+    database.execute(
+        "INSERT INTO analysis_runs VALUES (1, 'now', 'now', 'succeeded', 1, 1, 0, 0, 2, 'a', 'b')"
+    )
+    database.execute(
+        "INSERT INTO audio_analysis VALUES (1, 1, 1, 2, 'a', 'b', 1, 1, "
+        "'succeeded', NULL, '{}', 'now')"
+    )
+    database.execute("PRAGMA foreign_keys = OFF")
+    database.execute("ALTER TABLE track_sections RENAME TO track_sections_v4_old")
+    database.execute(
+        "CREATE TABLE track_sections (id INTEGER PRIMARY KEY, audio_analysis_id INTEGER NOT NULL "
+        "REFERENCES audio_analysis_v4_old(id) ON DELETE CASCADE, section_index INTEGER NOT NULL, "
+        "payload_json TEXT NOT NULL, UNIQUE(audio_analysis_id, section_index))"
+    )
+    database.execute("CREATE TABLE audio_analysis_v4_old (id INTEGER PRIMARY KEY)")
+    database.execute("INSERT INTO audio_analysis_v4_old VALUES (1)")
+    database.execute("INSERT INTO track_sections VALUES (1, 1, 7, '{}')")
+    database.execute("DROP TABLE track_sections_v4_old")
+    database.execute("PRAGMA user_version = 4")
+    database.commit()
+    database._connection.close()
+    database = Database.open(database_path)
+    database.migrate()
+    assert database.scalar("PRAGMA user_version") == 5
+    assert database.execute("SELECT section_index FROM track_sections").fetchone() == (7,)
+    assert (
+        database.execute("PRAGMA foreign_key_list(track_sections)").fetchone()[2]
+        == "audio_analysis"
+    )
+    database.execute("DROP TABLE audio_analysis_v4_old")
+    database.commit()
+    assert (
+        database.execute(
+            "SELECT sql FROM sqlite_master WHERE sql LIKE '%audio_analysis_v4_old%'"
+        ).fetchall()
+        == []
+    )
 
 
 def test_v3_adds_embedded_metadata_input_facts_and_normalization_version(tmp_path: Path) -> None:
@@ -82,7 +178,7 @@ def test_v3_adds_embedded_metadata_input_facts_and_normalization_version(tmp_pat
         row[1]: row for row in database.execute("PRAGMA table_info(embedded_metadata)").fetchall()
     }
 
-    assert database.scalar("PRAGMA user_version") == 3
+    assert database.scalar("PRAGMA user_version") == 5
     assert {"input_size_bytes", "input_mtime_ns", "normalization_version"} <= columns.keys()
     assert columns["input_size_bytes"][3] == 0
     assert columns["input_mtime_ns"][3] == 0
@@ -133,7 +229,7 @@ def test_v2_migrates_legacy_duplicate_running_scans_deterministically(tmp_path: 
     database = Database.open(database_path)
     database.migrate()
 
-    assert database.scalar("PRAGMA user_version") == 3
+    assert database.scalar("PRAGMA user_version") == 5
     migrated_runs = database.execute(
         "SELECT id, status, finished_at, error_stage, error_message FROM scan_runs "
         "WHERE source_id = 'djing' ORDER BY id"

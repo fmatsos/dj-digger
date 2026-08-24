@@ -4,4 +4,7 @@ services:
     volumes:
       - ./config:/config:ro
       - ./workspace:/workspace
+      - ${DJ_DIGGER_MUSIC_ROOT:-./music}:/music:ro
+    environment:
+      DJ_DIGGER_MUSIC_ROOT: /music
     command: ["--help"]

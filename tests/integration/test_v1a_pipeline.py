@@ -3,20 +3,16 @@
 import hashlib
 import json
 import tarfile
-from collections.abc import Mapping
 from pathlib import Path
 
+from analysis_fixture import analysis_fixture
 from jsonschema import Draft202012Validator, FormatChecker
 
 from dj_digger.application import WorkspaceApplication
-from dj_digger.catalog.models import Track
 from dj_digger.config import ExportConfig, LibrarySourceConfig, WorkspaceConfig
 from dj_digger.exports.snapshot import SnapshotResult
 
-
-def _analysis(track: Track) -> Mapping[str, object]:
-    """A deterministic substitute for the production audio analyzer."""
-    return {"path": track.relative_path, "size_bytes": track.size_bytes}
+_analysis = analysis_fixture
 
 
 def _workspace(tmp_path: Path, source: Path) -> WorkspaceConfig:
@@ -61,6 +57,10 @@ def test_v1a_refresh_reuses_analysis_and_publishes_an_archived_snapshot(tmp_path
 
     assert first["status"] == "succeeded"
     assert first["analysis"]["analyzed"] == 1
+    assert all(
+        (application.config.exports / name).is_file()
+        for name in ("dj-analysis.tsv", "dj-sections.jsonl", "dj-analysis-run.json")
+    )
     assert second.eligible == 1
     assert second.reused == second.eligible
     assert snapshot.archive is not None
