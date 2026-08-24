@@ -1,7 +1,8 @@
 """SQLite database boundary for the catalog."""
 
 import sqlite3
-from collections.abc import Sequence
+from collections.abc import Iterator, Sequence
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
@@ -46,3 +47,15 @@ class Database:
     def commit(self) -> None:
         """Commit a repository operation."""
         self._connection.commit()
+
+    @contextmanager
+    def transaction(self) -> Iterator[None]:
+        """Execute a group of catalog mutations atomically."""
+        self._connection.execute("BEGIN")
+        try:
+            yield
+        except BaseException:
+            self._connection.rollback()
+            raise
+        else:
+            self._connection.commit()

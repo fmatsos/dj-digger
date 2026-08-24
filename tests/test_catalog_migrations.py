@@ -2,6 +2,7 @@ import sqlite3
 import subprocess
 import sys
 import zipfile
+from datetime import datetime
 from pathlib import Path
 
 import pytest
@@ -48,15 +49,91 @@ def test_catalog_migration_is_idempotent_after_reopening(tmp_path: Path) -> None
     database.migrate()
     database.migrate()
 
-    assert database.scalar("PRAGMA user_version") == 1
+    assert database.scalar("PRAGMA user_version") == 2
     assert database.scalar("PRAGMA foreign_keys") == 1
     assert database.table_exists("tracks")
     assert database.table_exists("track_events")
 
     reopened = Database.open(database_path)
     reopened.migrate()
-    assert reopened.scalar("PRAGMA user_version") == 1
+    assert reopened.scalar("PRAGMA user_version") == 2
     assert reopened.table_exists("library_sources")
+
+
+def test_v2_enforces_one_running_scan_per_source(tmp_path: Path) -> None:
+    database = Database.open(tmp_path / "catalog.sqlite")
+    database.migrate()
+    sources = SourceRepository(database)
+    sources.upsert("djing", Path("/mnt/djing"), set_eligible=True, analyze=True, enabled=True)
+    sources.upsert("music", Path("/mnt/music"), set_eligible=True, analyze=True, enabled=True)
+    runs = ScanRunRepository(database)
+    first = runs.start("djing", scanner_version="test")
+
+    with pytest.raises(sqlite3.IntegrityError, match="UNIQUE"):
+        runs.start("djing", scanner_version="test")
+    runs.start("music", scanner_version="test")
+    database.execute("UPDATE scan_runs SET status = 'failed' WHERE id = ?", (first,))
+    database.commit()
+
+    assert runs.start("djing", scanner_version="test") != first
+
+
+def test_v2_migrates_legacy_duplicate_running_scans_deterministically(tmp_path: Path) -> None:
+    database_path = tmp_path / "catalog.sqlite"
+    connection = sqlite3.connect(database_path)
+    v1_schema = Path(__file__).parents[1] / "src/dj_digger/catalog/sql/catalog-v1.sql"
+    connection.executescript(v1_schema.read_text(encoding="utf-8") + "\nPRAGMA user_version = 1;")
+    connection.executemany(
+        """
+        INSERT INTO library_sources (
+            source_id, root_path, set_eligible, analyze, enabled, created_at, updated_at
+        ) VALUES (?, ?, 1, 1, 1, 'created', 'updated')
+        """,
+        [("djing", "/mnt/djing"), ("music", "/mnt/music")],
+    )
+    connection.executemany(
+        """
+        INSERT INTO scan_runs (source_id, started_at, status, scanner_version)
+        VALUES (?, '2026-08-24T00:00:00+00:00', 'running', 'v1')
+        """,
+        [("djing",), ("djing",), ("music",)],
+    )
+    connection.commit()
+    connection.close()
+
+    database = Database.open(database_path)
+    database.migrate()
+
+    assert database.scalar("PRAGMA user_version") == 2
+    migrated_runs = database.execute(
+        "SELECT id, status, finished_at, error_stage, error_message FROM scan_runs "
+        "WHERE source_id = 'djing' ORDER BY id"
+    ).fetchall()
+    assert migrated_runs == [
+        (
+            1,
+            "failed",
+            migrated_runs[0][2],
+            "migration",
+            "superseded by V2 single-running invariant",
+        ),
+        (2, "running", None, None, None),
+    ]
+    finished_at = migrated_runs[0][2]
+    assert isinstance(finished_at, str)
+    assert datetime.fromisoformat(finished_at).tzinfo is not None
+    assert database.execute(
+        "SELECT status FROM scan_runs WHERE source_id = 'music'"
+    ).fetchone() == ("running",)
+    assert database.scalar(
+        "SELECT 1 FROM sqlite_master WHERE type = 'index' "
+        "AND name = 'scan_runs_one_running_per_source'"
+    ) == 1
+    with pytest.raises(sqlite3.IntegrityError, match="UNIQUE"):
+        database.execute(
+            "INSERT INTO scan_runs (source_id, started_at, status, scanner_version) "
+            "VALUES ('djing', 'later', 'running', 'v2')"
+        )
 
 
 def test_source_root_relocation_preserves_track_identity(tmp_path: Path) -> None:
