@@ -25,6 +25,9 @@ packages = ["src/dj_digger"]
 "schemas/tracks.schema.json" = "dj_digger/schemas/tracks.schema.json"
 "schemas/library-artifacts.schema.json" = "dj_digger/schemas/library-artifacts.schema.json"
 "schemas/snapshot-manifest.schema.json" = "dj_digger/schemas/snapshot-manifest.schema.json"
+"schemas/dj-analysis.schema.json" = "dj_digger/schemas/dj-analysis.schema.json"
+"schemas/dj-sections.schema.json" = "dj_digger/schemas/dj-sections.schema.json"
+"schemas/dj-analysis-run.schema.json" = "dj_digger/schemas/dj-analysis-run.schema.json"
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]

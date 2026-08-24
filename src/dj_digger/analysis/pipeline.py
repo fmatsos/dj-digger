@@ -6,14 +6,21 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
 
-from dj_digger.analysis.aggregation import canonical_json
 from dj_digger.analysis.config import AnalysisIdentity
 from dj_digger.analysis.eligibility import AnalysisEligibility
+from dj_digger.analysis.extractor import AnalysisExtractionError, Stage
+from dj_digger.analysis.persistence import AnalysisOutcome, AnalysisPersistence
 from dj_digger.catalog.database import Database
 from dj_digger.catalog.models import Track
 from dj_digger.catalog.repositories import TrackRepository
 
 AnalysisExtractor = Callable[[Track], Mapping[str, Any]]
+_STAGES = frozenset(
+    {
+        "decode", "technical", "rhythm", "spectrum", "windows", "segmentation", "semantics",
+        "aggregation",
+    }
+)
 
 
 @dataclass(frozen=True)
@@ -25,6 +32,7 @@ class AnalysisRunResult:
     analyzed: int
     reused: int
     failed: int
+    status: str = "succeeded"
 
 
 class AnalysisPipeline:
@@ -37,6 +45,7 @@ class AnalysisPipeline:
         self._identity = identity
         self._extract = extract
         self._tracks = TrackRepository(database)
+        self._persistence = AnalysisPersistence(database)
 
     def run(
         self,
@@ -66,19 +75,16 @@ class AnalysisPipeline:
         pending = [track for track in selected if track not in reusable]
         outcomes = self._extract_all(pending, workers)
         finished = _now()
-        analyzed = sum(error is None for _, _, error in outcomes)
-        failed = len(outcomes) - analyzed
-
-        with self._database.transaction():
-            run_id = self._start_run(
-                started, finished, len(selected), analyzed, len(reusable), failed
-            )
-            for track, payload, error in outcomes:
-                if error is None:
-                    self._store_success(track, run_id, payload, finished)
-                else:
-                    self._store_failure(track, run_id, error, finished)
-        return AnalysisRunResult(run_id, len(selected), analyzed, len(reusable), failed)
+        run_id, analyzed, failed = self._persistence.persist_run(
+            self._identity,
+            outcomes,
+            eligible=len(selected),
+            reused=len(reusable),
+            started_at=started,
+            finished_at=finished,
+        )
+        status = "succeeded" if failed == 0 else ("failed" if analyzed == 0 else "partial")
+        return AnalysisRunResult(run_id, len(selected), analyzed, len(reusable), failed, status)
 
     def _all_eligible(self, source_id: str | None, path_prefix: str | None) -> list[Track]:
         query = """
@@ -119,105 +125,18 @@ class AnalysisPipeline:
 
     def _extract_all(
         self, tracks: list[Track], workers: int
-    ) -> list[tuple[Track, Mapping[str, Any], str | None]]:
-        def extract(track: Track) -> tuple[Track, Mapping[str, Any], str | None]:
+    ) -> list[AnalysisOutcome]:
+        def extract(track: Track) -> AnalysisOutcome:
             try:
-                return track, self._extract(track), None
+                return AnalysisOutcome(track, self._extract(track), None, "aggregation")
             except Exception as error:
-                return track, {}, str(error)
+                stage: Stage = "aggregation"
+                if isinstance(error, AnalysisExtractionError) and error.stage in _STAGES:
+                    stage = error.stage
+                return AnalysisOutcome(track, {}, str(error), stage)
 
         with ThreadPoolExecutor(max_workers=workers) as executor:
             return list(executor.map(extract, tracks))
-
-    def _start_run(
-        self, started: str, finished: str, eligible: int, analyzed: int, reused: int, failed: int
-    ) -> int:
-        cursor = self._database.execute(
-            """
-            INSERT INTO analysis_runs (
-                started_at, finished_at, status, eligible, analyzed, reused, failed,
-                analysis_schema_version, analyzer_version, config_hash
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                started,
-                finished,
-                "failed" if failed else "succeeded",
-                eligible,
-                analyzed,
-                reused,
-                failed,
-                self._identity.schema_version,
-                self._identity.analyzer_version,
-                self._identity.config_hash,
-            ),
-        )
-        if cursor.lastrowid is None:
-            raise RuntimeError("SQLite did not return an analysis run id")
-        return int(cursor.lastrowid)
-
-    def _store_success(
-        self, track: Track, run_id: int, payload: Mapping[str, Any], now: str
-    ) -> None:
-        cursor = self._database.execute(
-            """
-            INSERT INTO audio_analysis (
-                track_id, analysis_run_id, analysis_schema_version, analyzer_version, config_hash,
-                input_size_bytes, input_mtime_ns, analysis_status, payload_json, created_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, 'succeeded', ?, ?)
-            """,
-            (
-                track.id,
-                run_id,
-                self._identity.schema_version,
-                self._identity.analyzer_version,
-                self._identity.config_hash,
-                track.size_bytes,
-                track.mtime_ns,
-                canonical_json(payload),
-                now,
-            ),
-        )
-        if cursor.lastrowid is None:
-            raise RuntimeError("SQLite did not return an analysis id")
-        self._event(
-            track.id, run_id, "analysis_completed", {"analysis_id": int(cursor.lastrowid)}, now
-        )
-
-    def _store_failure(self, track: Track, run_id: int, error: str, now: str) -> None:
-        self._database.execute(
-            """
-            INSERT OR IGNORE INTO audio_analysis (
-                track_id, analysis_run_id, analysis_schema_version, analyzer_version, config_hash,
-                input_size_bytes, input_mtime_ns, analysis_status, payload_json, created_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, 'failed', ?, ?)
-            """,
-            (
-                track.id,
-                run_id,
-                self._identity.schema_version,
-                self._identity.analyzer_version,
-                self._identity.config_hash,
-                track.size_bytes,
-                track.mtime_ns,
-                canonical_json({"error": error}),
-                now,
-            ),
-        )
-        self._event(track.id, run_id, "analysis_failed", {"error": error}, now)
-
-    def _event(
-        self, track_id: int, run_id: int, event: str, payload: Mapping[str, Any], now: str
-    ) -> None:
-        self._database.execute(
-            """
-            INSERT INTO track_events (
-                track_id, occurred_at, analysis_run_id, event_type, payload_json
-            ) VALUES (?, ?, ?, ?, ?)
-            """,
-            (track_id, now, run_id, event, canonical_json(payload)),
-        )
-
 
 def _now() -> str:
     return datetime.now(UTC).isoformat()

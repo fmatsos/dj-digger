@@ -57,20 +57,46 @@ def test_wheel_migrates_without_the_checkout_schema(tmp_path: Path) -> None:
     assert result.returncode == 0, result.stderr
 
 
+def test_wheel_contains_valid_analysis_schemas_outside_checkout(tmp_path: Path) -> None:
+    distribution = tmp_path / "dist"
+    subprocess.run(
+        ["uv", "build", "--wheel", "--out-dir", str(distribution)],
+        check=True,
+        cwd=Path(__file__).parents[1],
+    )
+    wheel = next(distribution.glob("*.whl"))
+    isolated = tmp_path / "installed"
+    with zipfile.ZipFile(wheel) as archive:
+        archive.extractall(isolated)
+    script = (
+        "import importlib.resources as r; "
+        "from jsonschema import Draft202012Validator; import json; "
+        "base=r.files('dj_digger').joinpath('schemas'); "
+        "[Draft202012Validator.check_schema(json.loads(base.joinpath(name).read_text())) "
+        "for name in "
+        "('dj-analysis.schema.json','dj-sections.schema.json','dj-analysis-run.schema.json')]"
+    )
+    result = subprocess.run(
+        [sys.executable, "-c", script], cwd=tmp_path, env={"PYTHONPATH": str(isolated)},
+        check=False, capture_output=True, text=True,
+    )
+    assert result.returncode == 0, result.stderr
+
+
 def test_catalog_migration_is_idempotent_after_reopening(tmp_path: Path) -> None:
     database_path = tmp_path / "catalog.sqlite"
     database = Database.open(database_path)
     database.migrate()
     database.migrate()
 
-    assert database.scalar("PRAGMA user_version") == 3
+    assert database.scalar("PRAGMA user_version") == 4
     assert database.scalar("PRAGMA foreign_keys") == 1
     assert database.table_exists("tracks")
     assert database.table_exists("track_events")
 
     reopened = Database.open(database_path)
     reopened.migrate()
-    assert reopened.scalar("PRAGMA user_version") == 3
+    assert reopened.scalar("PRAGMA user_version") == 4
     assert reopened.table_exists("library_sources")
 
 
@@ -82,7 +108,7 @@ def test_v3_adds_embedded_metadata_input_facts_and_normalization_version(tmp_pat
         row[1]: row for row in database.execute("PRAGMA table_info(embedded_metadata)").fetchall()
     }
 
-    assert database.scalar("PRAGMA user_version") == 3
+    assert database.scalar("PRAGMA user_version") == 4
     assert {"input_size_bytes", "input_mtime_ns", "normalization_version"} <= columns.keys()
     assert columns["input_size_bytes"][3] == 0
     assert columns["input_mtime_ns"][3] == 0
@@ -133,7 +159,7 @@ def test_v2_migrates_legacy_duplicate_running_scans_deterministically(tmp_path: 
     database = Database.open(database_path)
     database.migrate()
 
-    assert database.scalar("PRAGMA user_version") == 3
+    assert database.scalar("PRAGMA user_version") == 4
     migrated_runs = database.execute(
         "SELECT id, status, finished_at, error_stage, error_message FROM scan_runs "
         "WHERE source_id = 'djing' ORDER BY id"
