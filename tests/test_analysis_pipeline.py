@@ -6,6 +6,8 @@ from typing import Any
 import pytest
 
 from dj_digger.analysis.config import AnalysisIdentity
+from dj_digger.analysis.extractor import AnalysisExtractionError
+from dj_digger.analysis.pipeline import AnalysisPipeline
 from dj_digger.catalog.database import Database
 from dj_digger.catalog.models import Track
 from dj_digger.catalog.repositories import ScanRunRepository, SourceRepository, TrackRepository
@@ -92,6 +94,32 @@ def test_pipeline_force_selects_reusable_tracks_without_duplicate_persistence(
     assert result.analyzed == result.failed == 0
     assert calls == ["House/A.flac"]
     assert database.scalar("SELECT COUNT(*) FROM audio_analysis") == 1
+
+
+def test_pipeline_force_reports_partial_when_reuse_and_pending_failure_coexist(
+    tmp_path: Path,
+) -> None:
+    database = Database.open(tmp_path / "catalog.sqlite")
+    database.migrate()
+    _track(database, "one", "House/reusable.flac")
+    _track(database, "one", "House/failing.flac")
+    calls: list[str] = []
+
+    def extract(track: Track) -> Mapping[str, object]:
+        calls.append(track.relative_path)
+        if track.relative_path.endswith("failing.flac") and len(calls) > 2:
+            raise AnalysisExtractionError("spectrum", "controlled failure")
+        return {"path": track.relative_path}
+
+    pipeline = AnalysisPipeline(database, IDENTITY, extract)
+    pipeline.run()
+    failing_id = database.scalar("SELECT id FROM tracks WHERE relative_path = 'House/failing.flac'")
+    database.execute("DELETE FROM audio_analysis WHERE track_id = ?", (failing_id,))
+    database.commit()
+    result = pipeline.run(force=True)
+    assert result.reused == 1
+    assert result.failed == 1
+    assert result.status == "partial"
 
 
 @pytest.mark.parametrize(

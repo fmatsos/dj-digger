@@ -8,6 +8,7 @@ MIGRATIONS = (
     (2, "catalog-v2.sql"),
     (3, "catalog-v3.sql"),
     (4, "catalog-v4.sql"),
+    (5, "catalog-v5.sql"),
 )
 
 

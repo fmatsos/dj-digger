@@ -17,7 +17,7 @@ from dj_digger.application import WorkspaceApplication
 from dj_digger.config import ExportConfig, LibrarySourceConfig, WorkspaceConfig
 
 ROOT = Path(__file__).resolve().parents[2]
-PILOT = ROOT / "scripts" / "acceptance_cifs_pilot.py"
+PILOT = ROOT / "scripts" / "acceptance_library_pilot.py"
 
 
 def _typed_row(row: dict[str, str], schema: dict[str, object]) -> dict[str, object]:
@@ -27,13 +27,20 @@ def _typed_row(row: dict[str, str], schema: dict[str, object]) -> dict[str, obje
     for key, value in row.items():
         definition = properties.get(key, {})
         kind = definition.get("type") if isinstance(definition, dict) else None
+        kinds = {kind} if isinstance(kind, str) else set(kind or ())
         if value == "":
             typed[key] = None
-        elif kind == "integer":
+        elif isinstance(definition, dict) and "const" in definition:
+            constant = definition["const"]
+            if isinstance(constant, bool):
+                typed[key] = value.lower() == "true"
+            else:
+                typed[key] = type(constant)(value)
+        elif "integer" in kinds:
             typed[key] = int(value)
-        elif kind == "number":
+        elif "number" in kinds:
             typed[key] = float(value)
-        elif kind == "boolean":
+        elif "boolean" in kinds:
             typed[key] = value.lower() == "true"
         else:
             typed[key] = value
@@ -70,7 +77,7 @@ def test_real_v1a_composition_metadata_analysis_reuse_export_snapshot(tmp_path: 
     metadata = application.metadata()
     assert metadata.extracted == 1
     first = application.analyze()
-    second = application.analyze()
+    second = application.analyze(force=True)
     assert first.analyzed == 1 and first.failed == 0
     assert second.analyzed == 0 and second.reused == 1
     published = application.export("all")
@@ -102,19 +109,19 @@ def test_real_v1a_composition_metadata_analysis_reuse_export_snapshot(tmp_path: 
     )
 
 
-def test_cifs_pilot_is_manual_bounded_and_skips_without_environment(tmp_path: Path) -> None:
+def test_library_pilot_is_manual_bounded_and_skips_without_environment(tmp_path: Path) -> None:
     assert PILOT.is_file()
     result = subprocess.run(["python3", str(PILOT)], text=True, capture_output=True)
     assert result.returncode in {0, 1}
     assert json.loads(result.stdout)["status"] == "skipped"
 
-    library = tmp_path / "mounted"
+    library = tmp_path / "library"
     library.mkdir()
     for index in range(12):
         (library / f"{index:02d}.wav").write_bytes(b"fixture")
     result = subprocess.run(
         ["python3", str(PILOT)],
-        env=os.environ | {"DJ_DIGGER_CIFS_LIBRARY": str(library)},
+        env=os.environ | {"DJ_DIGGER_LIBRARY_ROOT": str(library)},
         text=True,
         capture_output=True,
     )
@@ -122,8 +129,12 @@ def test_cifs_pilot_is_manual_bounded_and_skips_without_environment(tmp_path: Pa
     report = json.loads(result.stdout)
     assert report["status"] in {"accepted", "blocked", "skipped"}
     assert report["bounded_tracks"] <= 10
+    assert isinstance(report.get("analysis_error_stages", {}), dict)
+    assert isinstance(report.get("cli_error_categories", {}), dict)
+    if report["status"] != "skipped":
+        assert isinstance(report.get("analysis_runs"), int)
+        assert isinstance(report.get("analysis_attempts"), int)
     assert "library" not in result.stdout
-    assert "mounted" not in result.stdout
 
 
 def test_validated_curator_m3u8_is_consumed_by_copy_set(tmp_path: Path) -> None:

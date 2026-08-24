@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Manual, bounded CIFS acceptance probe.
+"""Manual, bounded local-library acceptance probe.
 
-The mounted path is supplied by ``DJ_DIGGER_CIFS_LIBRARY``.  This probe never
+The library path is supplied by ``DJ_DIGGER_LIBRARY_ROOT``.  This probe never
 writes below that path and deliberately emits only aggregate, path-redacted
 evidence suitable for a manual gate.
 """
@@ -13,19 +13,46 @@ import importlib.util
 import json
 import os
 import shutil
+import sqlite3
 import subprocess
 import tempfile
 from pathlib import Path
 
 
+def _error_category(payload: dict[str, object]) -> str | None:
+    """Classify CLI failures without exposing their messages or paths."""
+    if payload.get("status") != "failed":
+        return None
+    raw = str(payload.get("error", "")).lower()
+    if "transaction" in raw or "database" in raw or "sqlite" in raw:
+        return "database_transaction"
+    if any(token in raw for token in ("ffmpeg", "ffprobe", "exiftool", "essentia", "decoder")):
+        return "dependency"
+    if "schema" in raw or "validation" in raw or "export" in raw:
+        return "export_validation"
+    if any(token in raw for token in ("nan", "infinite", "inf", "out of range", "non-finite")):
+        return "non_finite_analysis"
+    if any(token in raw for token in ("json", "serializ", "not serializable")):
+        return "serialization"
+    if "section" in raw:
+        return "section_persistence"
+    if any(token in raw for token in ("foreign key", "unique", "not null", "check constraint")):
+        return "constraint"
+    if any(token in raw for token in ("mapping", "tuple", "object", "typeerror", "type error")):
+        return "empty_payload/type_error"
+    if "config" in raw or "toml" in raw:
+        return "config"
+    return "unknown"
+
+
 def main() -> int:
-    raw = os.environ.get("DJ_DIGGER_CIFS_LIBRARY")
+    raw = os.environ.get("DJ_DIGGER_LIBRARY_ROOT")
     if not raw:
         print(
             json.dumps(
                 {
                     "status": "skipped",
-                    "reason": "DJ_DIGGER_CIFS_LIBRARY is unset",
+                    "reason": "DJ_DIGGER_LIBRARY_ROOT is unset",
                     "archive_created": False,
                 }
             )
@@ -43,11 +70,6 @@ def main() -> int:
             )
         )
         return 1
-    mount_proven = False
-    try:
-        mount_proven = bool(os.statvfs(library).f_flag & os.ST_RDONLY)
-    except OSError:
-        mount_proven = False
     if (
         any(shutil.which(binary) is None for binary in ("exiftool", "ffmpeg", "ffprobe"))
         or importlib.util.find_spec("essentia") is None
@@ -96,17 +118,20 @@ def main() -> int:
         return digest.hexdigest()
 
     before = fingerprint()
-    with tempfile.TemporaryDirectory(prefix="dj-digger-cifs-") as workspace:
+    with tempfile.TemporaryDirectory(prefix="dj-digger-library-") as workspace:
         staging = Path(workspace) / "staging"
         staging.mkdir()
+        # The scanner intentionally does not follow file symlinks.  Stage
+        # private copies in the writable temp workspace so the source remains
+        # untouched while production discovery sees audio files.
         for index, source in enumerate(selected):
-            (staging / f"{index:02d}{source.suffix}").symlink_to(source)
+            shutil.copy2(source, staging / f"{index:02d}{source.suffix}")
         (staging / "invalid.wav").write_bytes(b"not-audio")
         config = Path(workspace) / "workspace.toml"
         config.write_text(
             "[workspace]\ndatabase = 'catalog.sqlite'\nexports = 'exports'\n\n"
             "[export]\nlegacy_compatibility = false\n\n"
-            "[[library.sources]]\nid = 'cifs'\npath = " + repr(str(staging)) + "\n"
+            "[[library.sources]]\nid = 'library'\npath = " + repr(str(staging)) + "\n"
             "set_eligible = true\nanalyze = true\n",
             encoding="utf-8",
         )
@@ -124,22 +149,50 @@ def main() -> int:
                 payload = {}
             return result.returncode, payload
 
-        scan_exit, _ = cli("scan")
-        metadata_exit, _ = cli("metadata")
-        first_exit, first = cli("analyze", "--limit", "10")
-        second_exit, second = cli("analyze", "--limit", "10")
-        export_exit, _ = cli("export")
-        snapshot_exit, _ = cli(
+        cli_error_categories: dict[str, int] = {}
+
+        def run_cli(*args: str) -> tuple[int, dict[str, object]]:
+            exit_code, payload = cli(*args)
+            category = _error_category(payload)
+            if category is not None:
+                cli_error_categories[category] = cli_error_categories.get(category, 0) + 1
+            return exit_code, payload
+
+        scan_exit, _ = run_cli("scan")
+        metadata_exit, _ = run_cli("metadata")
+        first_exit, first = run_cli("analyze", "--limit", "10")
+        # Force a complete second selection: successful tracks are otherwise
+        # filtered as non-pending before the reuse check can observe them.
+        second_exit, second = run_cli("analyze", "--limit", "10", "--force")
+        export_exit, _ = run_cli("export")
+        snapshot_exit, _ = run_cli(
             "snapshot", "--output", str(Path(workspace) / "snapshot"), "--archive"
         )
         archive_created = (Path(workspace) / "snapshot.tar.gz").is_file()
+        analysis_error_stages: dict[str, int] = {}
+        database_path = Path(workspace) / "catalog.sqlite"
+        with sqlite3.connect(database_path) as database:
+            rows = database.execute(
+                "SELECT payload_json FROM audio_analysis WHERE analysis_status = 'failed'"
+            ).fetchall()
+            analysis_runs = int(
+                database.execute("SELECT COUNT(*) FROM analysis_runs").fetchone()[0]
+            )
+            analysis_attempts = int(
+                database.execute("SELECT COUNT(*) FROM audio_analysis").fetchone()[0]
+            )
+        for (payload,) in rows:
+            try:
+                stage = str(json.loads(payload).get("stage", "unknown"))
+            except (TypeError, ValueError):
+                stage = "unknown"
+            analysis_error_stages[stage] = analysis_error_stages.get(stage, 0) + 1
     unchanged = before == fingerprint()
     partial = first.get("status") == "partial" and second.get("status") == "partial"
     report = {
         "status": (
             "accepted"
-            if mount_proven
-            and all(
+            if all(
                 exit_code == 0
                 for exit_code in (scan_exit, metadata_exit, export_exit, snapshot_exit)
             )
@@ -163,7 +216,10 @@ def main() -> int:
         "snapshot_succeeded": snapshot_exit == 0,
         "archive_created": archive_created,
         "source_unchanged": unchanged,
-        "readonly_mount_proven": mount_proven,
+        "analysis_error_stages": analysis_error_stages,
+        "cli_error_categories": cli_error_categories,
+        "analysis_runs": analysis_runs,
+        "analysis_attempts": analysis_attempts,
     }
     print(json.dumps(report, sort_keys=True))
     return 0 if report["status"] == "accepted" else 1

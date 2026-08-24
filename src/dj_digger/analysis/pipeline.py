@@ -83,7 +83,8 @@ class AnalysisPipeline:
             started_at=started,
             finished_at=finished,
         )
-        status = "succeeded" if failed == 0 else ("failed" if analyzed == 0 else "partial")
+        completed = analyzed + len(reusable)
+        status = "succeeded" if failed == 0 else ("partial" if completed > 0 else "failed")
         return AnalysisRunResult(run_id, len(selected), analyzed, len(reusable), failed, status)
 
     def _all_eligible(self, source_id: str | None, path_prefix: str | None) -> list[Track]:
