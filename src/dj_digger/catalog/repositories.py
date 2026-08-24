@@ -127,6 +127,26 @@ class TrackRepository:
     def __init__(self, database: Database) -> None:
         self._database = database
 
+    def export_rows(self) -> list[tuple[Any, ...]]:
+        """Return present tracks with their current public metadata projection."""
+        return self._database.execute(
+            """
+            SELECT t.id, t.source_id, t.relative_path, t.filename, t.extension,
+                   t.size_bytes, t.mtime_ns, s.set_eligible,
+                   e.title, e.artist, e.album_artist, e.album, e.track_number,
+                   e.disc_number, e.genre, e.date, e.year, e.composer, e.comment,
+                   e.tag_bpm, e.tag_initial_key, e.grouping,
+                   a.duration_seconds, a.sample_rate, a.channels, a.codec,
+                   a.container, a.bitrate, a.lossless
+            FROM tracks t
+            JOIN library_sources s ON s.source_id = t.source_id
+            LEFT JOIN embedded_metadata e ON e.track_id = t.id
+            LEFT JOIN technical_audio_metadata a ON a.track_id = t.id
+            WHERE t.presence_status = 'present'
+            ORDER BY t.source_id, t.relative_path, t.id
+            """
+        ).fetchall()
+
     def insert(
         self,
         *,
@@ -427,8 +447,13 @@ class EmbeddedMetadataRepository:
         return cast(tuple[Any, ...] | None, row)
 
     def upsert(
-        self, track: Track, values: tuple[Any, ...], *, extracted_at: str,
-        extractor_version: str, normalization_version: str
+        self,
+        track: Track,
+        values: tuple[Any, ...],
+        *,
+        extracted_at: str,
+        extractor_version: str,
+        normalization_version: str,
     ) -> None:
         self._database.execute(
             """
@@ -449,8 +474,15 @@ class EmbeddedMetadataRepository:
                 input_size_bytes=excluded.input_size_bytes, input_mtime_ns=excluded.input_mtime_ns,
                 normalization_version=excluded.normalization_version
             """,
-            (track.id, *values, extracted_at, extractor_version, track.size_bytes, track.mtime_ns,
-             normalization_version),
+            (
+                track.id,
+                *values,
+                extracted_at,
+                extractor_version,
+                track.size_bytes,
+                track.mtime_ns,
+                normalization_version,
+            ),
         )
 
 
