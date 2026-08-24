@@ -1,0 +1,2 @@
+source_id	track_id	path	absolute_path	filename	extension	size_bytes	mtime	set_eligible	title	artist	album_artist	album	track_number	disc_number	genre	date	year	composer	comment	tag_bpm	tag_initial_key	grouping	duration_seconds	sample_rate	channels	codec	container	bitrate	lossless
+djing	1	Techno/Fixture.flac	/music/djing/Techno/Fixture.flac	Fixture.flac	.flac	123456	2024-08-24T00:00:00	true	Fixture
