@@ -5,6 +5,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, cast
 
+from dj_digger.analysis.audio import TechnicalAudioMetadata
 from dj_digger.catalog.database import Database
 from dj_digger.catalog.models import Track
 
@@ -224,6 +225,54 @@ class TrackRepository:
             (source_id,),
         ).fetchall()
         return [_track_from_row(row) for row in rows]
+
+    def pending_analysis(
+        self,
+        *,
+        schema_version: int,
+        analyzer_version: str,
+        config_hash: str,
+        source_id: str | None = None,
+        path_prefix: str | None = None,
+    ) -> list[Track]:
+        """Return tracks without a successful result for their current input facts."""
+        query = """
+            SELECT t.id, t.source_id, t.relative_path, t.filename, t.extension, t.size_bytes,
+                   t.mtime_ns, t.presence_status
+            FROM tracks t
+            JOIN library_sources s ON s.source_id = t.source_id
+            LEFT JOIN audio_analysis a ON a.track_id = t.id
+              AND a.input_size_bytes = t.size_bytes
+              AND a.input_mtime_ns = t.mtime_ns
+              AND a.analysis_schema_version = ?
+              AND a.analyzer_version = ?
+              AND a.config_hash = ?
+              AND a.analysis_status = 'succeeded'
+            WHERE t.presence_status = 'present' AND s.enabled = 1 AND s.analyze = 1
+              AND a.id IS NULL
+        """
+        parameters: list[Any] = [schema_version, analyzer_version, config_hash]
+        if source_id is not None:
+            query += " AND t.source_id = ?"
+            parameters.append(source_id)
+        if path_prefix is not None:
+            escaped_prefix = (
+                path_prefix.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+            )
+            query += " AND t.relative_path LIKE ? ESCAPE '\\'"
+            parameters.append(f"{escaped_prefix}%")
+        query += " ORDER BY t.source_id, t.relative_path, t.id"
+        rows = self._database.execute(query, parameters).fetchall()
+        return [_track_from_row(row) for row in rows]
+
+    def analysis_history(self, track_id: int) -> list[tuple[Any, ...]]:
+        """Return all retained analysis rows for a track, newest first."""
+        return self._database.execute(
+            "SELECT id, analysis_status, input_size_bytes, input_mtime_ns, "
+            "analysis_schema_version, analyzer_version, config_hash "
+            "FROM audio_analysis WHERE track_id = ? ORDER BY id DESC",
+            (track_id,),
+        ).fetchall()
 
     def observe(
         self,
@@ -540,6 +589,47 @@ class EmbeddedMetadataRepository:
                 normalization_version,
             ),
         )
+
+
+class TechnicalAudioMetadataRepository:
+    """Current normalized FFmpeg-owned technical metadata."""
+
+    def __init__(self, database: Database) -> None:
+        self._database = database
+
+    def upsert(self, track: Track, metadata: TechnicalAudioMetadata, probe_version: str) -> None:
+        """Replace the current probe result for one immutable track identity."""
+        self._database.execute(
+            """
+            INSERT INTO technical_audio_metadata (
+                track_id, duration_seconds, sample_rate, channels, codec, container, bitrate,
+                lossless, loudness_lufs, true_peak_db, dynamic_range, probe_version, probed_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(track_id) DO UPDATE SET
+                duration_seconds=excluded.duration_seconds, sample_rate=excluded.sample_rate,
+                channels=excluded.channels, codec=excluded.codec, container=excluded.container,
+                bitrate=excluded.bitrate, lossless=excluded.lossless,
+                loudness_lufs=excluded.loudness_lufs, true_peak_db=excluded.true_peak_db,
+                dynamic_range=excluded.dynamic_range, probe_version=excluded.probe_version,
+                probed_at=excluded.probed_at
+            """,
+            (
+                track.id,
+                metadata.duration_seconds,
+                metadata.sample_rate,
+                metadata.channels,
+                metadata.codec,
+                metadata.container,
+                metadata.bitrate,
+                metadata.lossless,
+                metadata.loudness_lufs,
+                metadata.true_peak_db,
+                metadata.dynamic_range,
+                probe_version,
+                _now(),
+            ),
+        )
+        self._database.commit()
 
 
 @dataclass(frozen=True)

@@ -67,6 +67,28 @@ def metadata(
 
 
 @app.command()
+def analyze(
+    config: ConfigOption,
+    source: Annotated[str | None, typer.Option()] = None,
+    path: Annotated[str | None, typer.Option()] = None,
+    limit: Annotated[int | None, typer.Option()] = None,
+    force: Annotated[bool, typer.Option()] = False,
+    workers: Annotated[int, typer.Option()] = 1,
+) -> None:
+    """Analyze selected tracks with bounded worker concurrency."""
+    _run(
+        config,
+        lambda service: {
+            "event": "analyze",
+            "status": "succeeded",
+            **service.analyze(
+                source, path_prefix=path, limit=limit, force=force, workers=workers
+            ).__dict__,
+        },
+    )
+
+
+@app.command()
 def export(config: ConfigOption, facet: Annotated[str | None, typer.Option()] = None) -> None:
     """Publish canonical catalog facets."""
     _run(
