@@ -12,6 +12,37 @@ readability. Before publishing an artifact, references from transitions and
 alternative entry/rejoin links must resolve to exactly one selected track path.
 An identical path in separate sources is therefore not silently chosen.
 
+## M3U8 set-copy contract
+
+An M3U8 is a set-copy list, not an inventory export. Emit each selected track's
+exact source-relative `path` verbatim: never convert it to an absolute path and
+never prefix it with `source_id`.
+
+The default M3U8 mode is single-source. If selected tracks span sources, the
+caller must supply an explicitly resolvable `common_library_root`.
+That root authorizes the external set-copy workflow but is not written into the
+playlist; the M3U8 still contains only exact relative paths.
+
+```python playlist-emission
+from collections.abc import Iterable, Mapping
+
+
+class AmbiguousLibraryRoot(ValueError):
+    def __init__(self, source_ids: set[str]) -> None:
+        self.source_ids = source_ids
+        super().__init__(f"M3U8 spans source ids without a common library root: {sorted(source_ids)}")
+
+
+def emit_m3u8(
+    tracks: Iterable[Mapping[str, str]], common_library_root: str | None = None
+) -> str:
+    selected_tracks = list(tracks)
+    source_ids = {track["source_id"] for track in selected_tracks}
+    if len(source_ids) != 1 and common_library_root is None:
+        raise AmbiguousLibraryRoot(source_ids)
+    return "#EXTM3U\n" + "\n".join(track["path"] for track in selected_tracks) + "\n"
+```
+
 ```python set-validation
 from collections import defaultdict
 
