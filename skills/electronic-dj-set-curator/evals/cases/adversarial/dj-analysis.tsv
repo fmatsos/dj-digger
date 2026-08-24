@@ -1,0 +1,5 @@
+source_id	track_id	path	bpm	key	duration_seconds	analysis_status
+djing	7	Partial/Unknown.flac				partial
+archive	8	Partial/Unknown.flac	140	Cm	500	complete
+backup	9	Partial/Unknown.flac	140	Cm	500	complete
+djing	10	Safe/Fallback.flac				partial
