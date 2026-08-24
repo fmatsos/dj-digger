@@ -1,0 +1,26 @@
+{
+  "schema_bundle_version": 2,
+  "json_schema_draft": "2020-12",
+  "catalog_schema_version": 1,
+  "tracks_export_schema_version": 1,
+  "library_artifacts_export_schema_version": 1,
+  "analysis_schema_version": 2,
+  "set_schema_version": 2,
+  "schemas": {
+    "tracks.tsv": "schemas/tracks.schema.json",
+    "library-artifacts.tsv": "schemas/library-artifacts.schema.json",
+    "dj-analysis.tsv": "schemas/dj-analysis.schema.json",
+    "dj-sections.jsonl": "schemas/dj-sections.schema.json",
+    "dj-analysis-run.json": "schemas/dj-analysis-run.schema.json",
+    "<set>.set.json": "schemas/dj-set.schema.json",
+    "snapshot-manifest.json": "schemas/snapshot-manifest.schema.json",
+    "catalog": "schemas/catalog-v1.sql"
+  },
+  "validation_policy": {
+    "producer": "MUST validate structured artifacts before atomic publication",
+    "consumer": "MUST reject unsupported schema versions and MUST NOT silently accept unknown properties",
+    "unknown_properties": "rejected",
+    "semantic_label_min_confidence": 0.8,
+    "current_inventory": "tracks.tsv contains present tracks only by default"
+  }
+}

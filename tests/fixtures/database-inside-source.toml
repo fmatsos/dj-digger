@@ -1,0 +1,9 @@
+[workspace]
+database = "./library/djing/.dj-digger.sqlite"
+exports = "./workspace/exports"
+
+[[library.sources]]
+id = "djing"
+path = "./library/djing"
+set_eligible = true
+analyze = true
