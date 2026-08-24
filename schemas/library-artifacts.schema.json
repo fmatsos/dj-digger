@@ -1,0 +1,94 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dj-digger.local/schemas/v1a/library-artifacts.schema.json",
+  "title": "DJ Digger library artifact row",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "source_id",
+    "path",
+    "absolute_path",
+    "artifact_type",
+    "size_bytes",
+    "mtime",
+    "present",
+    "first_seen_at",
+    "last_seen_at",
+    "missing_since"
+  ],
+  "properties": {
+    "source_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "path": {
+      "type": "string",
+      "minLength": 1
+    },
+    "absolute_path": {
+      "type": "string",
+      "minLength": 1
+    },
+    "artifact_type": {
+      "type": "string",
+      "enum": [
+        "traktor_nml",
+        "traktor_tsi",
+        "playlist_m3u",
+        "playlist_m3u8",
+        "playlist_pls",
+        "cue",
+        "xml",
+        "database",
+        "serato_crate",
+        "serato_smart_crate",
+        "serato_session",
+        "serato_internal"
+      ]
+    },
+    "size_bytes": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "mtime": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}$"
+    },
+    "present": {
+      "type": "boolean"
+    },
+    "first_seen_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "last_seen_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "missing_since": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "date-time"
+    }
+  },
+  "x-tabular": {
+    "format": "TSV",
+    "encoding": "UTF-8",
+    "header": true,
+    "columns": [
+      "source_id",
+      "path",
+      "absolute_path",
+      "artifact_type",
+      "size_bytes",
+      "mtime",
+      "present",
+      "first_seen_at",
+      "last_seen_at",
+      "missing_since"
+    ],
+    "null_serialization": ""
+  }
+}

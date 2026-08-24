@@ -4,6 +4,7 @@ import csv
 import json
 from dataclasses import dataclass
 from datetime import datetime
+from importlib.resources import files
 from pathlib import Path
 from typing import Any, cast
 
@@ -56,12 +57,20 @@ class PublishedFacet:
 class TracksExporter:
     def __init__(self, database: Database, *, schema_path: Path | None = None) -> None:
         self._database = database
-        self._schema_path = schema_path or (
-            Path(__file__).resolve().parents[3] / "schemas/tracks.schema.json"
-        )
+        self._schema_path = schema_path
 
     def export(self, destination: Path) -> PublishedFacet:
-        schema = json.loads(self._schema_path.read_text(encoding="utf-8"))
+        packaged_schema = files("dj_digger").joinpath("schemas/tracks.schema.json")
+        schema_text = (
+            self._schema_path.read_text(encoding="utf-8")
+            if self._schema_path is not None
+            else packaged_schema.read_text("utf-8")
+            if packaged_schema.is_file()
+            else (Path(__file__).resolve().parents[3] / "schemas/tracks.schema.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        schema = json.loads(schema_text)
         Draft202012Validator.check_schema(schema)
         validator = Draft202012Validator(schema)
         columns = cast(list[str], schema["x-tabular"]["columns"])

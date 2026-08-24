@@ -39,9 +39,13 @@ def test_wheel_migrates_without_the_checkout_schema(tmp_path: Path) -> None:
             "-c",
             "from pathlib import Path; "
             "from dj_digger.catalog.database import Database; "
+            "from dj_digger.exports.audit import AuditExporter; "
+            "from dj_digger.exports.tracks import TracksExporter; "
             "database = Database.open(Path('catalog.sqlite')); "
             "database.migrate(); "
-            "assert database.table_exists('tracks')",
+            "assert database.table_exists('tracks'); "
+            "TracksExporter(database).export(Path('tracks.tsv')); "
+            "AuditExporter(database).export(Path('audit'), legacy_compatibility=False)",
         ],
         check=False,
         cwd=tmp_path,
@@ -75,8 +79,7 @@ def test_v3_adds_embedded_metadata_input_facts_and_normalization_version(tmp_pat
     database.migrate()
 
     columns = {
-        row[1]: row
-        for row in database.execute("PRAGMA table_info(embedded_metadata)").fetchall()
+        row[1]: row for row in database.execute("PRAGMA table_info(embedded_metadata)").fetchall()
     }
 
     assert database.scalar("PRAGMA user_version") == 3
@@ -151,10 +154,13 @@ def test_v2_migrates_legacy_duplicate_running_scans_deterministically(tmp_path: 
     assert database.execute(
         "SELECT status FROM scan_runs WHERE source_id = 'music'"
     ).fetchone() == ("running",)
-    assert database.scalar(
-        "SELECT 1 FROM sqlite_master WHERE type = 'index' "
-        "AND name = 'scan_runs_one_running_per_source'"
-    ) == 1
+    assert (
+        database.scalar(
+            "SELECT 1 FROM sqlite_master WHERE type = 'index' "
+            "AND name = 'scan_runs_one_running_per_source'"
+        )
+        == 1
+    )
     with pytest.raises(sqlite3.IntegrityError, match="UNIQUE"):
         database.execute(
             "INSERT INTO scan_runs (source_id, started_at, status, scanner_version) "
