@@ -32,6 +32,7 @@ class SectionFacts:
     low_mid_energy: float
     onset_energy: float
     spectral_energy: float
+    spectral_centroid: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -99,6 +100,7 @@ class Segmenter:
             low_mid_energy=_mean(frame.spectrum.low_mid for frame in frames),
             onset_energy=_mean(frame.spectrum.onset for frame in frames),
             spectral_energy=_mean(frame.spectrum.spectral for frame in frames),
+            spectral_centroid=_mean(frame.spectrum.spectral_centroid for frame in frames),
         )
         energies = tuple(
             frame.spectrum.sub + frame.spectrum.low + frame.spectrum.bass for frame in frames

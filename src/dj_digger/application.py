@@ -1,15 +1,18 @@
 """Application-level orchestration for the DJ Digger command line."""
 
+import importlib.util
 import shutil
-from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 from dj_digger.analysis.config import AnalysisIdentity
+from dj_digger.analysis.exporters import AnalysisExporter
+from dj_digger.analysis.extractor import AnalysisExtractionResult, CompositeAudioExtractor
 from dj_digger.analysis.pipeline import AnalysisExtractor, AnalysisPipeline, AnalysisRunResult
 from dj_digger.catalog.database import Database
 from dj_digger.catalog.migrations import MIGRATIONS
+from dj_digger.catalog.models import Track
 from dj_digger.catalog.repositories import SourceRepository
 from dj_digger.config import LibrarySourceConfig, WorkspaceConfig
 from dj_digger.exports.audit import AuditExporter
@@ -38,7 +41,30 @@ class WorkspaceApplication:
         self.database = Database.open(config.database)
         self.database.migrate()
         self._sources = SourceRepository(self.database)
-        self._analysis_extractor = analysis_extractor or _unconfigured_analysis_extractor
+        self._analysis_extractor: AnalysisExtractor
+        if analysis_extractor is None:
+            composite = CompositeAudioExtractor(config.dsp)
+            self._analysis_identity = composite.identity
+
+            def extract(track: Track) -> AnalysisExtractionResult:
+                source = next(source for source in config.sources if source.id == track.source_id)
+                path = (source.path / track.relative_path).resolve()
+                result = composite.extract(
+                    path,
+                    source_id=track.source_id,
+                    track_id=track.id,
+                    relative_path=track.relative_path,
+                )
+                return result
+
+            self._analysis_extractor = extract
+        else:
+            self._analysis_extractor = analysis_extractor
+            self._analysis_identity = getattr(
+                analysis_extractor,
+                "identity",
+                AnalysisIdentity(2, "dj-digger-analysis/2", config.dsp.config_hash),
+            )
         for source in config.sources:
             self._sources.upsert(
                 source.id,
@@ -94,7 +120,7 @@ class WorkspaceApplication:
             self._selected_sources(source_id, enabled_only=True)
         return AnalysisPipeline(
             self.database,
-            AnalysisIdentity(2, "dj-digger-analysis/1", "0" * 64),
+            self._analysis_identity,
             self._analysis_extractor,
         ).run(
             source_id=source_id,
@@ -107,9 +133,15 @@ class WorkspaceApplication:
     def export(self, facet: str | None = None) -> list[str]:
         destination = self.config.exports
         destination.mkdir(parents=True, exist_ok=True)
-        if facet not in {None, "all", "tracks", "artifacts"}:
+        if facet not in {None, "all", "tracks", "artifacts", "analysis"}:
             raise ValueError(f"unknown export facet: {facet}")
         published: list[str] = []
+        # Validate/publish the atomic analysis group first: if it fails, no
+        # legacy facets have been replaced yet.
+        if facet in {"all", "analysis"} or facet is None:
+            published.extend(
+                str(item.path) for item in AnalysisExporter(self.database).export(destination)
+            )
         if facet in {None, "all", "tracks"}:
             tracks = TracksExporter(self.database).export(destination / "tracks.tsv")
             published.append(str(tracks.path))
@@ -140,14 +172,28 @@ class WorkspaceApplication:
             }
         metadata = self.metadata()
         analysis = self.analyze()
+        status = _worst_status(
+            "succeeded" if all(result.succeeded for result in scans) else "partial",
+            metadata.status,
+            analysis.status,
+        )
+        try:
+            exports = self.export()
+        except Exception as error:
+            return {
+                "event": "refresh", "status": "failed", "published": False,
+                "error": str(error),
+                "scans": [result.__dict__ for result in scans],
+                "metadata": metadata.__dict__, "analysis": analysis.__dict__,
+            }
         return {
             "event": "refresh",
-            "status": "succeeded",
+            "status": status,
             "published": True,
             "scans": [result.__dict__ for result in scans],
             "metadata": metadata.__dict__,
             "analysis": analysis.__dict__,
-            "exports": self.export(),
+            "exports": exports,
         }
 
     def status(self) -> dict[str, Any]:
@@ -178,16 +224,39 @@ class WorkspaceApplication:
                 }
             )
         analysis = self.database.execute(
-            "SELECT id, status, finished_at FROM analysis_runs ORDER BY id DESC LIMIT 1"
+            "SELECT id, status, finished_at, analysis_schema_version, "
+            "analyzer_version, config_hash "
+            "FROM analysis_runs ORDER BY id DESC LIMIT 1"
         ).fetchone()
+        analysis_identity = (
+            None
+            if analysis is None
+            else {
+                "schema_version": analysis[3],
+                "analyzer_version": analysis[4],
+                "config_hash": analysis[5],
+            }
+        )
+        analysis_facets = {
+            name: (self.config.exports / name).is_file()
+            for name in ("dj-analysis.tsv", "dj-sections.jsonl", "dj-analysis-run.json")
+        }
         return {
             "event": "status",
             "status": "succeeded",
             "sources": sources,
             "latest_analysis": None
             if analysis is None
-            else {"id": analysis[0], "status": analysis[1], "finished_at": analysis[2]},
-            "exports": {"tracks": (self.config.exports / "tracks.tsv").is_file()},
+            else {
+                "id": analysis[0],
+                "status": analysis[1],
+                "finished_at": analysis[2],
+                "identity": analysis_identity,
+            },
+            "exports": {
+                "tracks": (self.config.exports / "tracks.tsv").is_file(),
+                "analysis": analysis_facets,
+            },
         }
 
     def doctor(self) -> dict[str, Any]:
@@ -195,9 +264,23 @@ class WorkspaceApplication:
         for source in self.config.sources:
             if not source.path.is_dir():
                 issues.append(f"source root unavailable: {source.id} ({source.path})")
-        for binary in ("exiftool", "ffprobe", "ffmpeg"):
+        for binary in ("exiftool",):
             if shutil.which(binary) is None:
                 issues.append(f"required binary unavailable: {binary}")
+        analysis_enabled = any(source.enabled and source.analyze for source in self.config.sources)
+        if analysis_enabled:
+            for binary in ("ffprobe", "ffmpeg"):
+                if shutil.which(binary) is None:
+                    issues.append(f"required binary unavailable: {binary}")
+            if importlib.util.find_spec("essentia") is None:
+                issues.append("required dependency unavailable: essentia")
+            if self.config.dsp_path is not None:
+                try:
+                    from dj_digger.config import DspConfig
+
+                    DspConfig.load(self.config.dsp_path)
+                except (OSError, ValueError) as error:
+                    issues.append(f"DSP configuration invalid: {error}")
         version = int(self.database.scalar("PRAGMA user_version") or 0)
         expected = MIGRATIONS[-1][0]
         if version != expected:
@@ -224,6 +307,6 @@ class WorkspaceApplication:
         return selected
 
 
-def _unconfigured_analysis_extractor(_: object) -> Mapping[str, Any]:
-    """Make production configuration explicit until a concrete extractor is wired in."""
-    raise RuntimeError("audio analysis extractor is not configured")
+def _worst_status(*statuses: str) -> str:
+    order = {"succeeded": 0, "partial": 1, "failed": 2}
+    return max(statuses, key=lambda status: order.get(status, 2))

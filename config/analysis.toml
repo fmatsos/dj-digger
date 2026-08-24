@@ -1,3 +1,21 @@
+[meta]
+version = 1
+
+[audio]
+sample_rate = 48000
+channels = 1
+
+[fft]
+window_size = 4096
+hop_size = 2048
+
+[segmentation]
+min_seconds = 8.0
+max_seconds = 64.0
+
+[semantics]
+min_confidence = 0.80
+
 [normalization]
 minimum = 0.0
 maximum = 100.0

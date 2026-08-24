@@ -72,3 +72,39 @@ def test_store_failure_after_success_keeps_success_and_emits_failed_event(databa
     ).fetchone()
     assert event[:2] == (track.id, 2)
     assert json.loads(event[2]) == {"error": "decoder unavailable"}
+
+
+def test_identical_failed_attempts_are_append_only(database, track) -> None:
+    from dj_digger.analysis.persistence import AnalysisPersistence
+
+    persistence = AnalysisPersistence(database)
+    ident = identity("a" * 64)
+    persistence.store_failure(track, ident, "decoder unavailable")
+    persistence.store_failure(track, ident, "decoder unavailable")
+
+    assert database.execute(
+        "SELECT analysis_status FROM audio_analysis WHERE track_id = ? ORDER BY id", (track.id,)
+    ).fetchall() == [("failed",), ("failed",)]
+    assert TrackRepository(database).analysis_history(track.id) == [
+        (2, "failed", 10, 20, 2, "1.0.0", "a" * 64),
+        (1, "failed", 10, 20, 2, "1.0.0", "a" * 64),
+    ]
+
+
+def test_persist_run_rolls_back_run_attempt_sections_and_events_on_invalid_section(
+    database, track
+) -> None:
+    from dj_digger.analysis.extractor import AnalysisExtractionResult
+    from dj_digger.analysis.persistence import AnalysisOutcome, AnalysisPersistence
+
+    extraction = AnalysisExtractionResult(
+        {"bpm": 128.0}, {"sections": ["not an object"]}, None, "succeeded"
+    )
+    with pytest.raises(ValueError, match="analysis section must be an object"):
+        AnalysisPersistence(database).persist_run(
+            identity("c" * 64), [AnalysisOutcome(track, extraction, None, "aggregation")],
+            eligible=1, reused=0, started_at="start", finished_at="finish",
+        )
+
+    for table in ("analysis_runs", "audio_analysis", "track_sections", "track_events"):
+        assert database.scalar(f"SELECT COUNT(*) FROM {table}") == 0

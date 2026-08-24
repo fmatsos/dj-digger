@@ -6,12 +6,8 @@ from collections import Counter
 from datetime import datetime
 from pathlib import Path
 
-from dj_digger.catalog.database import Database
-from dj_digger.catalog.repositories import SourceRepository
-from dj_digger.config import LibrarySourceConfig
-from dj_digger.exports.audit import AuditExporter
-from dj_digger.scanning.lifecycle import ScanLifecycle
-from dj_digger.scanning.scanner import SourceScanner
+from dj_digger.application import WorkspaceApplication
+from dj_digger.config import ExportConfig, LibrarySourceConfig, WorkspaceConfig
 
 PARITY_LIBRARY = Path(__file__).resolve().parents[1] / "fixtures" / "parity-library"
 EXPECTED = {
@@ -167,24 +163,21 @@ def normalized_legacy_rows(rows: list[dict[str, str]]) -> list[tuple[str, str, s
 
 def test_catalog_audit_facets_match_historical_exporter_contract(tmp_path: Path) -> None:
     """Parity against the reference shell exporter without requiring ExifTool."""
-    database = Database.open(tmp_path / "catalog.sqlite")
-    database.migrate()
-    sources = (
-        LibrarySourceConfig(id="djing", path=tmp_path / "djing", set_eligible=True, analyze=True),
-        LibrarySourceConfig(id="music", path=PARITY_LIBRARY, set_eligible=True, analyze=True),
+    config = WorkspaceConfig(
+        database=tmp_path / "catalog.sqlite",
+        exports=tmp_path / "audit",
+        export=ExportConfig(True),
+        sources=(
+            LibrarySourceConfig("djing", tmp_path / "djing", True, True),
+            LibrarySourceConfig("music", PARITY_LIBRARY, True, True),
+        ),
     )
     (tmp_path / "djing").mkdir()
-    for source in sources:
-        SourceRepository(database).upsert(
-            source.id, source.path, set_eligible=True, analyze=True, enabled=True
-        )
-        lifecycle = ScanLifecycle(database)
-        run_id = lifecycle.begin(source.id)
-        lifecycle.observe(run_id, SourceScanner().scan(source, run_id))
-        lifecycle.succeed(run_id)
+    application = WorkspaceApplication(config)
+    assert all(result.succeeded for result in application.scan())
 
-    output = tmp_path / "audit"
-    AuditExporter(database).export(output)
+    output = config.exports
+    application.export("artifacts")
 
     old_rows = _old_inventory_rows(PARITY_LIBRARY)
     new_rows = _read_tsv(output / "music-files.tsv")

@@ -51,3 +51,24 @@ def test_doctor_reports_unavailable_source_root(tmp_path: Path) -> None:
     assert result.exit_code != 0
     assert '"event":"doctor"' in result.output
     assert "source root unavailable" in result.output
+
+
+def test_doctor_checks_dsp_runtime_only_for_active_analysis_source(
+    tmp_path: Path, monkeypatch
+) -> None:
+    source = tmp_path / "music"
+    source.mkdir()
+    config = write_config(tmp_path, source=source, exports=tmp_path / "exports")
+    config.write_text(
+        config.read_text(encoding="utf-8").replace("analyze = false", "analyze = true"),
+        encoding="utf-8",
+    )
+
+    monkeypatch.setattr("dj_digger.application.shutil.which", lambda _: "/usr/bin/tool")
+    monkeypatch.setattr("dj_digger.application.importlib.util.find_spec", lambda name: None)
+
+    result = CliRunner().invoke(app, ["doctor", "--config", str(config)])
+
+    assert result.exit_code != 0
+    assert "dependency unavailable: essentia" in result.output
+    assert "DSP configuration" not in result.output

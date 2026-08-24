@@ -1,0 +1,5 @@
+source_id	track_id	path	set_eligible	source_quality
+djing	7	Partial/Unknown.flac	true	unknown
+archive	8	Partial/Unknown.flac	false	lossless
+backup	9	Partial/Unknown.flac	true	lossless
+djing	10	Safe/Fallback.flac	true	unknown

@@ -1,6 +1,9 @@
 import csv
 import json
+import os
 from pathlib import Path
+
+import pytest
 
 from dj_digger.catalog.database import Database
 from dj_digger.catalog.repositories import ScanRunRepository, SourceRepository, TrackRepository
@@ -95,3 +98,65 @@ def test_export_publishes_source_aware_validated_analysis_facets(tmp_path: Path)
         "dj-sections.jsonl",
         "dj-analysis-run.json",
     ]
+
+
+def test_export_rolls_back_all_previous_facets_when_second_publish_replace_fails(
+    tmp_path: Path, monkeypatch
+) -> None:
+    from dj_digger.analysis.exporters import AnalysisExporter
+
+    database = Database.open(tmp_path / "catalog.sqlite")
+    database.migrate()
+    SourceRepository(database).upsert(
+        "djing", tmp_path / "music", set_eligible=True, analyze=True, enabled=True
+    )
+    scan_id = ScanRunRepository(database).start("djing", scanner_version="test")
+    track = TrackRepository(database).insert(
+        source_id="djing", relative_path="A.flac", filename="A.flac", extension=".flac",
+        size_bytes=10, mtime_ns=20, scan_id=scan_id,
+    )
+    run = database.execute(
+        """
+        INSERT INTO analysis_runs (
+            started_at, finished_at, status, eligible, analyzed, reused, failed,
+            analysis_schema_version, analyzer_version, config_hash
+        ) VALUES ('s', 'f', 'succeeded', 1, 1, 0, 0, 2, 'test', ?)
+        """,
+        (HASH,),
+    )
+    database.execute(
+        """
+        INSERT INTO audio_analysis (
+            track_id, analysis_run_id, analysis_schema_version, analyzer_version,
+            config_hash, input_size_bytes, input_mtime_ns, analysis_status,
+            analysis_confidence, payload_json, created_at
+        ) VALUES (?, ?, 2, 'test', ?, 10, 20, 'succeeded', 1.0, ?, 'now')
+        """,
+        (track.id, run.lastrowid, HASH, json.dumps(_payload())),
+    )
+    database.commit()
+    destination = tmp_path / "export"
+    destination.mkdir()
+    originals = {
+        "dj-analysis.tsv": b"old-analysis",
+        "dj-sections.jsonl": b"old-sections",
+        "dj-analysis-run.json": b"old-run",
+    }
+    for name, content in originals.items():
+        (destination / name).write_bytes(content)
+    real_replace = os.replace
+    staged_replacements = 0
+
+    def replace(source: str | os.PathLike[str], target: str | os.PathLike[str]) -> None:
+        nonlocal staged_replacements
+        if Path(source).parent.name.startswith(".analysis-publish-"):
+            staged_replacements += 1
+            if staged_replacements == 2:
+                raise OSError("controlled publication failure")
+        real_replace(source, target)
+
+    monkeypatch.setattr(os, "replace", replace)
+    with pytest.raises(OSError, match="controlled publication failure"):
+        AnalysisExporter(database).export(destination)
+    assert {name: (destination / name).read_bytes() for name in originals} == originals
+    assert not list(destination.glob("*.bak"))

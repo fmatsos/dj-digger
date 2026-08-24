@@ -2,15 +2,17 @@
 
 import csv
 import json
+import os
+import tempfile
 from collections.abc import Mapping
 from dataclasses import dataclass
+from importlib import resources
 from pathlib import Path
 from typing import Any, cast
 
 from jsonschema import Draft202012Validator, FormatChecker  # type: ignore[import-untyped]
 
 from dj_digger.catalog.database import Database
-from dj_digger.exports.atomic import publish_atomic
 from dj_digger.exports.tracks import PublishedFacet
 
 
@@ -27,6 +29,10 @@ class AnalysisExporter:
     def __init__(self, database: Database, *, schemas_directory: Path | None = None) -> None:
         self._database = database
         directory = schemas_directory or Path(__file__).resolve().parents[3] / "schemas"
+        if not directory.exists():
+            package_schemas = resources.files("dj_digger").joinpath("schemas")
+            # Materialize package resources only when a filesystem path is needed.
+            directory = Path(str(package_schemas))
         self._schemas = _Schemas(
             **{
                 name: cast(dict[str, Any], json.loads((directory / filename).read_text("utf-8")))
@@ -62,9 +68,36 @@ class AnalysisExporter:
         analysis_path = destination / "dj-analysis.tsv"
         sections_path = destination / "dj-sections.jsonl"
         run_path = destination / "dj-analysis-run.json"
-        publish_atomic(analysis_path, lambda path: self._write_tsv(path, analyses))
-        publish_atomic(sections_path, lambda path: self._write_jsonl(path, sections))
-        publish_atomic(run_path, lambda path: self._write_json(path, run))
+        # Stage all three writers first.  Existing facets remain untouched if any
+        # writer fails; replacements happen only after every artifact is complete.
+        destination.mkdir(parents=True, exist_ok=True)
+        with tempfile.TemporaryDirectory(prefix=".analysis-publish-", dir=destination) as tmp:
+            staged = [Path(tmp) / path.name for path in (analysis_path, sections_path, run_path)]
+            self._write_tsv(staged[0], analyses)
+            self._write_jsonl(staged[1], sections)
+            self._write_json(staged[2], run)
+            for path in staged:
+                with path.open("rb") as handle:
+                    os.fsync(handle.fileno())
+            targets = (analysis_path, sections_path, run_path)
+            backups: list[tuple[Path, Path]] = []
+            replaced: list[Path] = []
+            try:
+                for target in targets:
+                    if target.exists():
+                        backup = Path(tmp) / (target.name + ".bak")
+                        os.replace(target, backup)
+                        backups.append((target, backup))
+                for source, target in zip(staged, targets):
+                    os.replace(source, target)
+                    replaced.append(target)
+            except BaseException:
+                for target in replaced:
+                    target.unlink(missing_ok=True)
+                for target, backup in backups:
+                    if backup.exists():
+                        os.replace(backup, target)
+                raise
         return [
             PublishedFacet(analysis_path, len(analyses)),
             PublishedFacet(sections_path, len(sections)),
@@ -134,6 +167,11 @@ class AnalysisExporter:
                     "analysis_confidence": confidence,
                 }
             )
+            # Minimal/failed attempts have no window facts; represent each
+            # unavailable window explicitly while keeping all other facts null.
+            for key, value in row.items():
+                if key.endswith("_available") and value is None:
+                    row[key] = False
             result.append(row)
         return result
 
@@ -220,7 +258,7 @@ class AnalysisExporter:
                     "source_id": str(source_id),
                     "track_id": int(track_id),
                     "path": str(path),
-                    "stage": "persist",
+                    "stage": str(_object(raw).get("stage", "persist")),
                     "error": str(_object(raw).get("error", "analysis failed")),
                 }
                 for source_id, track_id, path, raw in failures
