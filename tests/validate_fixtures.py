@@ -47,6 +47,24 @@ def _decode_tsv_row(row: dict[str, str | None], schema: dict[str, object]) -> di
 
 
 def main() -> None:
+    tracks_path = FIXTURES / "tracks.tsv"
+    assert tracks_path.is_file(), f"missing fixture: {tracks_path.relative_to(ROOT)}"
+    with tracks_path.open(encoding="utf-8", newline="") as handle:
+        tracks_reader = csv.DictReader(handle, delimiter="\t")
+        tracks_columns = tracks_reader.fieldnames or []
+        tracks_rows = list(tracks_reader)
+    assert tracks_rows, "tracks.tsv must contain a deterministic first row"
+    tracks_schema = json.loads(
+        (ROOT / "schemas" / "tracks.schema.json").read_text(encoding="utf-8")
+    )
+    assert tracks_columns == tracks_schema["x-tabular"]["columns"]
+    tracks_validator = Draft202012Validator(tracks_schema)
+    for row in tracks_rows:
+        tracks_validator.validate(_decode_tsv_row(row, tracks_schema))
+    assert tracks_rows[0]["source_id"] == "djing"
+    assert tracks_rows[0]["set_eligible"] == "true"
+    assert tracks_rows[0]["path"] == "Techno/Fixture.flac"
+
     columns, rows = _read_analysis()
     assert rows, "dj-analysis.tsv must contain a deterministic first row"
     first = rows[0]
@@ -73,13 +91,27 @@ def main() -> None:
     assert sections[0]["track_id"] > 0
     assert run["analysis_schema_version"] == 2
 
-    source_contracts = (
-        ROOT / "skills" / "electronic-dj-set-curator" / "references" / "source-contracts.md"
-    ).read_text(encoding="utf-8")
+    contract_paths = (
+        ROOT / "PROJECT_INSTRUCTIONS.md",
+        ROOT / "skills" / "electronic-dj-set-curator" / "SKILL.md",
+        ROOT / "skills" / "electronic-dj-set-curator" / "references" / "source-contracts.md",
+    )
+    contract_texts = []
+    for path in contract_paths:
+        assert path.is_file(), f"missing curator contract: {path.relative_to(ROOT)}"
+        text = path.read_text(encoding="utf-8")
+        contract_texts.append(text)
+        for token in ("tracks.tsv", "set_eligible", "source_id", "exact path"):
+            assert token in text, f"{path.relative_to(ROOT)} must mention {token}"
+        assert "djing-files.tsv: existence" not in text
+
+    source_contracts = contract_texts[-1]
     expected_precedence = [
-        "1. `djing-files.tsv` for V1A availability.",
-        "2. `dj-analysis.tsv` and `dj-sections.jsonl` for source-aware analysis.",
-        "3. `dj-analysis-run.json` for the analysis-run audit.",
+        "1. `tracks.tsv` — current availability + `source_id` + `set_eligible` + exact path",
+        "2. `dj-analysis.tsv` — track/global/window technical facts",
+        "3. `dj-sections.jsonl` — structural facts",
+        "4. `dj-analysis-run.json` — audit/staleness signal",
+        "5. external context — classification/context only, never availability",
     ]
     assert all(item in source_contracts for item in expected_precedence)
 

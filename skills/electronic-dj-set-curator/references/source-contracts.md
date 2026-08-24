@@ -1,14 +1,17 @@
 # Curator source contracts
 
-V1A set availability remains explicitly sourced from `djing-files.tsv`; analysis
-does not alter that availability decision.
+V1B availability is explicitly sourced from `tracks.tsv`. A candidate must be
+a member of that export and have `set_eligible=true` before it enters
+optimization. Analysis never makes an unavailable track available.
 
-Analysis facts are source-aware and identify every track by the tuple
-`source_id`, `track_id`, and source-relative `path`. Curator consumers must use
-these identities rather than a path alone.
+Track facts are source-aware and identify every track by `source_id`, `track_id`,
+and the source-relative exact path from `tracks.tsv`. Curator consumers must use
+those identities rather than a path alone.
 
-When artifacts overlap, resolve contracts in this order:
+When artifacts overlap, resolve contracts in this exact order:
 
-1. `djing-files.tsv` for V1A availability.
-2. `dj-analysis.tsv` and `dj-sections.jsonl` for source-aware analysis.
-3. `dj-analysis-run.json` for the analysis-run audit.
+1. `tracks.tsv` — current availability + `source_id` + `set_eligible` + exact path
+2. `dj-analysis.tsv` — track/global/window technical facts
+3. `dj-sections.jsonl` — structural facts
+4. `dj-analysis-run.json` — audit/staleness signal
+5. external context — classification/context only, never availability
