@@ -1,0 +1,408 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dj-digger.local/schemas/v1b/dj-set.schema.json",
+  "title": "DJ Digger generated electronic DJ set (source-aware)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "identity",
+    "series",
+    "set_name",
+    "brief",
+    "tracks",
+    "transitions",
+    "alternatives",
+    "validation"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": 2
+    },
+    "identity": {
+      "type": "string",
+      "minLength": 1
+    },
+    "series": {
+      "type": "string",
+      "minLength": 1
+    },
+    "set_name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "brief": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "target_duration_minutes",
+        "hard",
+        "mixability",
+        "narrative"
+      ],
+      "properties": {
+        "target_duration_minutes": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "exclusiveMinimum": 0
+        },
+        "hard": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "mixability": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "narrative": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "tracks": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "position",
+          "source_id",
+          "track_id",
+          "path",
+          "role",
+          "source_quality",
+          "analysis_confidence",
+          "mixability_status"
+        ],
+        "properties": {
+          "position": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "source_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "track_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "path": {
+            "type": "string",
+            "minLength": 1
+          },
+          "role": {
+            "type": "string",
+            "minLength": 1
+          },
+          "source_quality": {
+            "type": "string",
+            "enum": [
+              "lossless",
+              "lossy",
+              "unknown"
+            ]
+          },
+          "analysis_confidence": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "minimum": 0,
+            "maximum": 1
+          },
+          "mixability_status": {
+            "type": "string",
+            "enum": [
+              "verified",
+              "unverified"
+            ]
+          }
+        }
+      }
+    },
+    "transitions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "from_path",
+          "to_path",
+          "compatibility",
+          "confidence",
+          "strategy",
+          "overlap_bars",
+          "outgoing_region",
+          "incoming_region",
+          "target_bpm",
+          "from_pitch_percent",
+          "to_pitch_percent",
+          "bass_handoff",
+          "reasons"
+        ],
+        "properties": {
+          "from_path": {
+            "type": "string",
+            "minLength": 1
+          },
+          "to_path": {
+            "type": "string",
+            "minLength": 1
+          },
+          "compatibility": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "minimum": 0,
+            "maximum": 1
+          },
+          "confidence": {
+            "type": "string",
+            "enum": [
+              "LOW",
+              "MEDIUM",
+              "HIGH"
+            ]
+          },
+          "strategy": {
+            "type": "string",
+            "enum": [
+              "LONG_BLEND",
+              "STANDARD_BLEND",
+              "LATE_BASS_HANDOFF",
+              "SHORT_HANDOFF",
+              "STRUCTURAL_SWAP",
+              "BREAK_TRANSITION",
+              "CUT_OR_ECHO"
+            ]
+          },
+          "overlap_bars": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "enum": [
+              8,
+              16,
+              32,
+              64,
+              null
+            ]
+          },
+          "outgoing_region": {
+            "type": "string",
+            "minLength": 1
+          },
+          "incoming_region": {
+            "type": "string",
+            "minLength": 1
+          },
+          "target_bpm": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "exclusiveMinimum": 0
+          },
+          "from_pitch_percent": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "to_pitch_percent": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "bass_handoff": {
+            "type": "string",
+            "minLength": 1
+          },
+          "reasons": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "alternatives": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "source_id",
+          "track_id",
+          "path",
+          "role",
+          "replace_position",
+          "entry_from_path",
+          "entry_compatibility",
+          "entry_strategy",
+          "rejoin_to_path",
+          "exit_compatibility",
+          "exit_strategy"
+        ],
+        "properties": {
+          "source_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "track_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "path": {
+            "type": "string",
+            "minLength": 1
+          },
+          "role": {
+            "type": "string",
+            "minLength": 1
+          },
+          "replace_position": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "entry_from_path": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "entry_compatibility": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "minimum": 0,
+            "maximum": 1
+          },
+          "entry_strategy": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "LONG_BLEND",
+              "STANDARD_BLEND",
+              "LATE_BASS_HANDOFF",
+              "SHORT_HANDOFF",
+              "STRUCTURAL_SWAP",
+              "BREAK_TRANSITION",
+              "CUT_OR_ECHO",
+              null
+            ]
+          },
+          "rejoin_to_path": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "exit_compatibility": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "minimum": 0,
+            "maximum": 1
+          },
+          "exit_strategy": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "LONG_BLEND",
+              "STANDARD_BLEND",
+              "LATE_BASS_HANDOFF",
+              "SHORT_HANDOFF",
+              "STRUCTURAL_SWAP",
+              "BREAK_TRANSITION",
+              "CUT_OR_ECHO",
+              null
+            ]
+          }
+        }
+      }
+    },
+    "validation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "core_tracks",
+        "alternative_tracks",
+        "availability_verified",
+        "analysis_available",
+        "lossless_tracks",
+        "core_transitions_validated",
+        "lowest_transition_compatibility",
+        "unverified_transitions",
+        "hard_constraints_violated"
+      ],
+      "properties": {
+        "core_tracks": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "alternative_tracks": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "availability_verified": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "analysis_available": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "lossless_tracks": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "core_transitions_validated": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "lowest_transition_compatibility": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 1
+        },
+        "unverified_transitions": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "hard_constraints_violated": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    }
+  }
+}
