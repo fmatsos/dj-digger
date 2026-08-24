@@ -1,0 +1,14 @@
+{
+  "analysis_schema_version": 2,
+  "analyzed": 1,
+  "analyzer_version": "fixture-1",
+  "catalog_schema_version": 1,
+  "config_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "eligible": 1,
+  "failed": 0,
+  "failures": [],
+  "finished_at": "2026-08-24T12:01:00+00:00",
+  "reused": 0,
+  "started_at": "2026-08-24T12:00:00+00:00",
+  "status": "succeeded"
+}
