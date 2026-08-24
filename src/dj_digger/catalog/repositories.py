@@ -268,7 +268,8 @@ class TrackRepository:
     def analysis_history(self, track_id: int) -> list[tuple[Any, ...]]:
         """Return all retained analysis rows for a track, newest first."""
         return self._database.execute(
-            "SELECT id, analysis_status, input_size_bytes, input_mtime_ns "
+            "SELECT id, analysis_status, input_size_bytes, input_mtime_ns, "
+            "analysis_schema_version, analyzer_version, config_hash "
             "FROM audio_analysis WHERE track_id = ? ORDER BY id DESC",
             (track_id,),
         ).fetchall()
