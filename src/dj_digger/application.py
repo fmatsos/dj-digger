@@ -1,10 +1,13 @@
 """Application-level orchestration for the DJ Digger command line."""
 
 import shutil
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from dj_digger.analysis.config import AnalysisIdentity
+from dj_digger.analysis.pipeline import AnalysisExtractor, AnalysisPipeline, AnalysisRunResult
 from dj_digger.catalog.database import Database
 from dj_digger.catalog.migrations import MIGRATIONS
 from dj_digger.catalog.repositories import SourceRepository
@@ -26,13 +29,16 @@ class ScanResult:
 
 
 class WorkspaceApplication:
-    """Coordinate existing catalog services without adding analysis orchestration."""
+    """Coordinate catalog scanning, metadata, analysis, and publication."""
 
-    def __init__(self, config: WorkspaceConfig) -> None:
+    def __init__(
+        self, config: WorkspaceConfig, *, analysis_extractor: AnalysisExtractor | None = None
+    ) -> None:
         self.config = config
         self.database = Database.open(config.database)
         self.database.migrate()
         self._sources = SourceRepository(self.database)
+        self._analysis_extractor = analysis_extractor or _unconfigured_analysis_extractor
         for source in config.sources:
             self._sources.upsert(
                 source.id,
@@ -74,6 +80,30 @@ class WorkspaceApplication:
             source_id, force=force, path_prefix=path_prefix
         )
 
+    def analyze(
+        self,
+        source_id: str | None = None,
+        *,
+        path_prefix: str | None = None,
+        limit: int | None = None,
+        force: bool = False,
+        workers: int = 1,
+    ) -> AnalysisRunResult:
+        """Run the configured injectable audio analysis extractor."""
+        if source_id is not None:
+            self._selected_sources(source_id, enabled_only=True)
+        return AnalysisPipeline(
+            self.database,
+            AnalysisIdentity(2, "dj-digger-analysis/1", "0" * 64),
+            self._analysis_extractor,
+        ).run(
+            source_id=source_id,
+            path_prefix=path_prefix,
+            limit=limit,
+            force=force,
+            workers=workers,
+        )
+
     def export(self, facet: str | None = None) -> list[str]:
         destination = self.config.exports
         destination.mkdir(parents=True, exist_ok=True)
@@ -109,12 +139,14 @@ class WorkspaceApplication:
                 "scans": [result.__dict__ for result in scans],
             }
         metadata = self.metadata()
+        analysis = self.analyze()
         return {
             "event": "refresh",
             "status": "succeeded",
             "published": True,
             "scans": [result.__dict__ for result in scans],
             "metadata": metadata.__dict__,
+            "analysis": analysis.__dict__,
             "exports": self.export(),
         }
 
@@ -190,3 +222,8 @@ class WorkspaceApplication:
         if not selected:
             raise ValueError(f"unknown or disabled source: {source_id}")
         return selected
+
+
+def _unconfigured_analysis_extractor(_: object) -> Mapping[str, Any]:
+    """Make production configuration explicit until a concrete extractor is wired in."""
+    raise RuntimeError("audio analysis extractor is not configured")

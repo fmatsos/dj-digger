@@ -8,7 +8,7 @@ version = "0.1.0"
 description = "Catalog and export DJ music libraries."
 readme = "README.md"
 requires-python = ">=3.12"
-dependencies = ["typer>=0.15,<1.0", "jsonschema>=4.25,<5"]
+dependencies = ["typer>=0.15,<1.0", "jsonschema>=4.25,<5", "numpy>=2,<3"]
 
 [project.scripts]
 dj-digger = "dj_digger.cli:app"
