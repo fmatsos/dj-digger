@@ -9,6 +9,8 @@ from math import isfinite
 from pathlib import Path
 from typing import Protocol
 
+import numpy as np
+
 FACT_NAMES = ("sub", "low", "low_mid", "kick", "bass", "onset", "spectral")
 
 
@@ -21,6 +23,7 @@ class SpectrumFacts:
     bass: float
     onset: float
     spectral: float
+    spectral_centroid: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -55,7 +58,9 @@ class SpectrumConfig:
 
 
 class SpectrumAdapter(Protocol):
-    def extract(self, samples: Sequence[float], sample_rate: int) -> Mapping[str, float]: ...
+    def extract(
+        self, samples: Sequence[float] | np.ndarray, sample_rate: int
+    ) -> Mapping[str, float]: ...
 
 
 class SpectrumAnalyzer:
@@ -63,9 +68,15 @@ class SpectrumAnalyzer:
         self._adapter = adapter
         self._config = config
 
-    def analyze(self, samples: Sequence[float], sample_rate: int) -> SpectrumFacts:
+    def analyze(
+        self, samples: Sequence[float] | np.ndarray, sample_rate: int
+    ) -> SpectrumFacts:
         extracted = self._adapter.extract(samples, sample_rate)
         normalized = {name: self._normalize(extracted.get(name)) for name in FACT_NAMES}
+        centroid = extracted.get("spectral_centroid")
+        if not isinstance(centroid, int | float) or not isfinite(centroid):
+            centroid = 0.0
+        normalized["spectral_centroid"] = float(centroid)
         return SpectrumFacts(**normalized)
 
     def _normalize(self, value: object) -> float:

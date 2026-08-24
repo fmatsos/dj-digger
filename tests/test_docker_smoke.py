@@ -67,3 +67,19 @@ def test_docker_image_reads_synthetic_audio_from_read_only_music_mount(tmp_path:
     assert '"event":"metadata"' in metadata.stdout
     assert '"extracted":1' in metadata.stdout
     assert audio.read_bytes() == initial_bytes
+
+    analysis = subprocess.run(
+        [
+            "docker", "compose", "run", "--rm", "--no-deps", "--entrypoint", "python",
+            "-v", f"{tmp_path}:/smoke:ro", "-v", f"{music}:/music:ro",
+            "-v", f"{Path(__file__).parents[1]}:/repo:ro", "dj-digger",
+            "/repo/tests/docker_analysis_smoke.py", "/smoke/music/tone.wav", "/repo",
+        ],
+        check=False,
+        cwd=Path(__file__).parents[1],
+        capture_output=True,
+        text=True,
+    )
+    assert analysis.returncode == 0, analysis.stderr
+    assert '"status": "succeeded"' in analysis.stdout
+    assert audio.read_bytes() == initial_bytes
