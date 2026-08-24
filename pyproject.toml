@@ -20,6 +20,7 @@ packages = ["src/dj_digger"]
 "schema-bundle.json" = "dj_digger/schema-bundle.json"
 "schemas/tracks.schema.json" = "dj_digger/schemas/tracks.schema.json"
 "schemas/library-artifacts.schema.json" = "dj_digger/schemas/library-artifacts.schema.json"
+"schemas/snapshot-manifest.schema.json" = "dj_digger/schemas/snapshot-manifest.schema.json"
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]

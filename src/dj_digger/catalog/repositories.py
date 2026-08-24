@@ -63,6 +63,17 @@ class SourceRepository:
         ).fetchall()
         return {str(source_id): Path(root_path) for source_id, root_path in rows}
 
+    def all(self) -> list[tuple[str, str, int | None]]:
+        """Return stable source freshness facts for a snapshot manifest."""
+        rows = self._database.execute(
+            "SELECT source_id, root_path, last_successful_scan_id "
+            "FROM library_sources ORDER BY source_id"
+        ).fetchall()
+        return [
+            (str(source_id), str(root_path), None if run_id is None else int(run_id))
+            for source_id, root_path, run_id in rows
+        ]
+
 
 class ScanRunRepository:
     """Minimal scan-run creation required by track foreign keys."""

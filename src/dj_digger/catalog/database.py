@@ -59,3 +59,12 @@ class Database:
             raise
         else:
             self._connection.commit()
+
+    @contextmanager
+    def read_transaction(self) -> Iterator[None]:
+        """Keep related export queries on one consistent SQLite snapshot."""
+        self._connection.execute("BEGIN")
+        try:
+            yield
+        finally:
+            self._connection.rollback()
