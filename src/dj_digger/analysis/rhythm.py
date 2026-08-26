@@ -1,13 +1,14 @@
 from __future__ import annotations
 
+import importlib
 from dataclasses import dataclass
 from math import isfinite, sqrt
-from typing import Protocol
+from typing import Any, Protocol
 
 import numpy as np
 from numpy.typing import NDArray
 
-Samples = NDArray[np.float64]
+Samples = NDArray[np.float32]
 
 
 @dataclass(frozen=True)
@@ -30,32 +31,108 @@ class KeyAdapter(Protocol):
     def extract(self, samples: Samples, sample_rate: int) -> tuple[str, str, float]: ...
 
 
+class TempoAdapter(Protocol):
+    def extract(self, samples: Samples, sample_rate: int) -> float: ...
+
+
+class BeatGridAdapter(Protocol):
+    def extract(
+        self, samples: Samples, sample_rate: int, bpm: float
+    ) -> tuple[tuple[float, ...], float, tuple[float, ...]]: ...
+
+
+class EssentiaTempoAdapter:
+    def extract(self, samples: Samples, sample_rate: int) -> float:
+        try:
+            es = _load_essentia_standard()
+        except ImportError as error:
+            raise RuntimeError("Essentia is required for tempo analysis") from error
+
+        return float(es.PercivalBpmEstimator(sampleRate=sample_rate)(samples))
+
+
+class EssentiaBeatGridAdapter:
+    _FRAME_SIZE = 1024
+    _HOP_SIZE = 512
+
+    def extract(
+        self, samples: Samples, sample_rate: int, bpm: float
+    ) -> tuple[tuple[float, ...], float, tuple[float, ...]]:
+        try:
+            es = _load_essentia_standard()
+        except ImportError as error:
+            raise RuntimeError("Essentia is required for beat-grid analysis") from error
+
+        window = es.Windowing(type="hann")
+        fft = es.FFT()
+        cartesian_to_polar = es.CartesianToPolar()
+        onset = es.OnsetDetection(method="complex")
+        novelty = []
+        for frame in es.FrameGenerator(
+            samples, frameSize=self._FRAME_SIZE, hopSize=self._HOP_SIZE
+        ):
+            magnitude, phase = cartesian_to_polar(fft(window(frame)))
+            novelty.append(float(onset(magnitude, phase)))
+
+        outputs = es.BpmHistogram(
+            frameRate=sample_rate / self._HOP_SIZE,
+            bpm=bpm,
+            constantTempo=True,
+            minBpm=50,
+            maxBpm=210,
+        )(np.asarray(novelty, dtype=np.float32))
+        beats = tuple(float(position) for position in outputs[5])
+        intervals = tuple(right - left for left, right in zip(beats, beats[1:], strict=False))
+        return beats, _beat_stability(intervals), intervals
+
+
 class EssentiaRhythmAdapter:
+    def __init__(
+        self,
+        tempo_adapter: TempoAdapter | None = None,
+        beat_grid_adapter: BeatGridAdapter | None = None,
+    ) -> None:
+        self._tempo_adapter = tempo_adapter or EssentiaTempoAdapter()
+        self._beat_grid_adapter = beat_grid_adapter or EssentiaBeatGridAdapter()
+
     def extract(
         self, samples: Samples, sample_rate: int
     ) -> tuple[float, tuple[float, ...], float, tuple[float, ...]]:
-        try:
-            import essentia.standard as es  # type: ignore[import-not-found]
-        except ImportError as error:
-            raise RuntimeError("Essentia is required for rhythm analysis") from error
-
-        bpm, beats, confidence, _estimates, intervals = es.RhythmExtractor2013(
-            method="multifeature"
-        )(samples)
-        return float(bpm), tuple(float(beat) for beat in beats), float(confidence), tuple(
-            float(interval) for interval in intervals
+        bpm = self._tempo_adapter.extract(samples, sample_rate)
+        beats, confidence, intervals = self._beat_grid_adapter.extract(
+            samples, sample_rate, bpm
         )
+        return bpm, beats, confidence, intervals
 
 
 class EssentiaKeyAdapter:
     def extract(self, samples: Samples, sample_rate: int) -> tuple[str, str, float]:
         try:
-            import essentia.standard as es
+            es = _load_essentia_standard()
         except ImportError as error:
             raise RuntimeError("Essentia is required for key analysis") from error
 
         key, scale, confidence = es.KeyExtractor(sampleRate=sample_rate)(samples)
         return str(key), str(scale), float(confidence)
+
+
+def _disable_essentia_native_info_warning(essentia: object) -> None:
+    """Keep native errors while silencing Essentia's noisy info/warning stream."""
+    log = getattr(essentia, "log", None)
+    if log is None or not all(
+        hasattr(log, name) for name in ("infoActive", "warningActive", "errorActive")
+    ):
+        raise RuntimeError("Essentia logging controls are unavailable")
+    log.infoActive = False
+    log.warningActive = False
+    log.errorActive = True
+
+
+def _load_essentia_standard() -> Any:
+    """Configure native logging before loading Essentia's standard algorithms."""
+    essentia = importlib.import_module("essentia")
+    _disable_essentia_native_info_warning(essentia)
+    return importlib.import_module("essentia.standard")
 
 
 class RhythmAnalyzer:

@@ -130,7 +130,6 @@ def main() -> int:
         config = Path(workspace) / "workspace.toml"
         config.write_text(
             "[workspace]\ndatabase = 'catalog.sqlite'\nexports = 'exports'\n\n"
-            "[export]\nlegacy_compatibility = false\n\n"
             "[[library.sources]]\nid = 'library'\npath = " + repr(str(staging)) + "\n"
             "set_eligible = true\nanalyze = true\n",
             encoding="utf-8",

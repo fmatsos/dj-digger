@@ -58,10 +58,10 @@ def main() -> None:
         assert path.is_file(), f"missing first-party consumer: {path.relative_to(ROOT)}"
         text = path.read_text(encoding="utf-8")
         assert "djing-files.tsv" not in text, (
-            f"legacy inventory dependency: {path.relative_to(ROOT)}"
+            f"deprecated inventory dependency: {path.relative_to(ROOT)}"
         )
         assert "music-files.tsv" not in text, (
-            f"legacy inventory dependency: {path.relative_to(ROOT)}"
+            f"deprecated inventory dependency: {path.relative_to(ROOT)}"
         )
 
     tracks_path = FIXTURES / "tracks.tsv"

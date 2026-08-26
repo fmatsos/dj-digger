@@ -3,7 +3,12 @@ from dataclasses import asdict
 import numpy as np
 import pytest
 
-from dj_digger.analysis.rhythm import RhythmAnalyzer
+from dj_digger.analysis.rhythm import (
+    EssentiaRhythmAdapter,
+    RhythmAnalyzer,
+    _disable_essentia_native_info_warning,
+    _load_essentia_standard,
+)
 
 
 class FixedRhythmAdapter:
@@ -22,6 +27,25 @@ class FixedKeyAdapter:
         return "c", "minor", 0.91
 
 
+class FixedTempoAdapter:
+    def extract(self, samples: np.ndarray, sample_rate: int) -> float:
+        assert samples.shape == (2048,)
+        assert sample_rate == 48_000
+        return 140.0
+
+
+class PercivalAlignedBeatGridAdapter:
+    def extract(
+        self, samples: np.ndarray, sample_rate: int, bpm: float
+    ) -> tuple[tuple[float, ...], float, tuple[float, ...]]:
+        assert samples.shape == (2048,)
+        assert sample_rate == 48_000
+        assert bpm == 140.0
+        interval = 60.0 / bpm
+        beats = tuple(index * interval for index in range(4))
+        return beats, 0.95, (interval, interval, interval)
+
+
 def analyzer() -> RhythmAnalyzer:
     return RhythmAnalyzer(rhythm_adapter=FixedRhythmAdapter(), key_adapter=FixedKeyAdapter())
 
@@ -35,6 +59,24 @@ def test_rhythm_facts_are_within_bpm_tolerance_and_bounded() -> None:
     assert 0.0 <= facts.beat_stability <= 1.0
     assert facts.key == "C minor"
     assert facts.key_confidence == pytest.approx(0.91)
+
+
+def test_percival_tempo_drives_bpm_and_beat_grid() -> None:
+    rhythm_adapter = EssentiaRhythmAdapter(
+        tempo_adapter=FixedTempoAdapter(),
+        beat_grid_adapter=PercivalAlignedBeatGridAdapter(),
+    )
+
+    facts = RhythmAnalyzer(
+        rhythm_adapter=rhythm_adapter, key_adapter=FixedKeyAdapter()
+    ).analyze(np.zeros(2048), 48_000)
+
+    assert facts.bpm == 140.0
+    assert facts.bpm_confidence == pytest.approx(0.95)
+    assert facts.beat_positions == pytest.approx(
+        (0.0, 60.0 / 140.0, 120.0 / 140.0, 180.0 / 140.0)
+    )
+    assert facts.beat_stability == pytest.approx(1.0)
 
 
 def test_rhythm_analysis_is_repeatably_deterministic() -> None:
@@ -84,3 +126,41 @@ def test_rhythm_facts_do_not_produce_semantic_labels() -> None:
         "key",
         "key_confidence",
     }
+
+
+def test_essentia_native_info_and_warning_are_disabled_but_errors_remain_enabled() -> None:
+    class Log:
+        infoActive = True
+        warningActive = True
+        errorActive = False
+
+    class Essentia:
+        log = Log()
+
+    _disable_essentia_native_info_warning(Essentia)
+
+    assert Essentia.log.infoActive is False
+    assert Essentia.log.warningActive is False
+    assert Essentia.log.errorActive is True
+
+
+def test_essentia_logging_is_suppressed_before_standard_module_load(monkeypatch) -> None:
+    events: list[str] = []
+
+    class Log:
+        infoActive = True
+        warningActive = True
+        errorActive = False
+
+    essentia = type("Essentia", (), {"log": Log()})
+    standard = object()
+
+    def fake_import(name: str):
+        if name == "essentia":
+            return essentia
+        events.append(f"standard:{essentia.log.infoActive}:{essentia.log.warningActive}:{essentia.log.errorActive}")
+        return standard
+
+    monkeypatch.setattr("dj_digger.analysis.rhythm.importlib.import_module", fake_import)
+    assert _load_essentia_standard() is standard
+    assert events == ["standard:False:False:True"]

@@ -1,6 +1,6 @@
 # Registre de requalification de l’implémentation v1
 
-**Version :** 1.1 — 25 août 2026
+**Version :** 1.2 — 25 août 2026
 **Tranche :** 8 (QA et requalification)
 **Objet :** requalifier l’état démontré par le code, les tests et les essais disponibles, sans modifier ni réinterpréter les plans historiques.
 
@@ -51,8 +51,8 @@ Les tests à doubles établissent des contrats isolés ; ils ne valent pas, seul
 
 ### Catalogue et analyse
 
-- `tests/integration/test_audit_parity.py` couvre les catégories historiques et les facettes publiques.
-- `tests/integration/test_tranche5_acceptance.py` et `tests/integration/test_v1a_pipeline.py` vérifient la composition publique, la réutilisation, le snapshot et les schémas.
+- `tests/test_strict_current_contracts.py` vérifie le schéma catalogue consolidé courant, le rejet explicite des catalogues anciens, la configuration stricte et la publication canonique.
+- `tests/integration/test_v1a_pipeline.py` vérifie la composition publique, la réutilisation, le snapshot et les schémas.
 - `tests/test_analysis_eligibility.py`, `test_ffmpeg.py`, `test_rhythm.py`, `test_spectrum.py`, `test_windows.py`, `test_segmentation.py`, `test_semantics.py`, `test_analysis_persistence.py` et `test_analysis_exporters.py` couvrent les contrats des tâches 11–17.
 - Le pilote réel local `scripts/acceptance_library_pilot.py` a été exécuté via l’environnement Python 3.12 avec l’extra d’analyse. Le rapport agrégé est `accepted` : 9 pistes bornées, scan/metadata/export/snapshot/archive réussis, deux analyses `partial` en sortie 2, réutilisation à la seconde analyse, source inchangée, deux échecs de décodage contrôlés sur les deux runs, 2 runs et 11 tentatives. Aucun chemin, nom de fichier ou identifiant privé n’est versionné ici.
 
@@ -64,8 +64,8 @@ Les tests à doubles établissent des contrats isolés ; ils ne valent pas, seul
 
 ### Intégration
 
-- Tâches 24–27 : fixtures de parité, historique de scan, pipeline V1A, snapshot et publication sont couverts par les tests d’intégration dédiés.
-- Tâche 29 : `tests/integration/test_v1b_cutover.py` prouve la consommation de `tracks.tsv` sans facettes d’inventaire legacy.
+- Tâches 24–27 : historique de scan, pipeline V1A, snapshot et publication sont couverts par les tests d’intégration dédiés.
+- Tâche 29 : `tests/integration/test_v1b_cutover.py` prouve la consommation directe de `tracks.tsv`.
 - Tâche 30 : `tests/integration/test_copy_set_compatibility.py` et `test_validated_curator_m3u8_is_consumed_by_copy_set` vérifient les chemins relatifs, le nombre de fichiers et l’immuabilité de la source.
 - Tâche 28 est **COMPLETE** : le pilote local borné traverse la composition réelle, publie les artefacts attendus, démontre l’analyse partielle et sa réutilisation, et confirme l’immuabilité de la source.
 
@@ -93,4 +93,4 @@ Le résultat détaillé et la présence éventuelle d’outils externes doivent 
 
 ## Historique honnête
 
-Les plans sous `docs/superpowers/plans/` et les spécifications sous `docs/superpowers/specs/` restent inchangés. Les anciennes observations de déconnexion de la composition et d’export d’analyse sont remplacées ici par les preuves des tranches 5–8 ; le pilote local réel est désormais accepté sur ses preuves agrégées, sans divulgation de données privées.
+Les plans sous `docs/superpowers/plans/` et les spécifications sous `docs/superpowers/specs/` restent inchangés. Les anciennes observations de déconnexion de la composition et d’export d’analyse sont remplacées ici par les preuves des tranches 6–8 ; le pilote local réel est désormais accepté sur ses preuves agrégées, sans divulgation de données privées.

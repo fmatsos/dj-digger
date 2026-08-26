@@ -36,75 +36,125 @@ def identity(config_hash: str) -> AnalysisIdentity:
     return AnalysisIdentity(schema_version=2, analyzer_version="1.0.0", config_hash=config_hash)
 
 
-def test_store_success_retains_versioned_history_and_emits_completed_event(database, track) -> None:
-    from dj_digger.analysis.persistence import AnalysisPersistence
-
-    persistence = AnalysisPersistence(database)
-    first_id = persistence.store_success(track, identity("a" * 64), {"bpm": 128.0})
-    second_id = persistence.store_success(track, identity("b" * 64), {"bpm": 130.0})
-
-    assert first_id != second_id
-    assert TrackRepository(database).analysis_history(track.id) == [
-        (second_id, "succeeded", 10, 20, 2, "1.0.0", "b" * 64),
-        (first_id, "succeeded", 10, 20, 2, "1.0.0", "a" * 64),
-    ]
-    event = database.execute(
-        "SELECT track_id, analysis_run_id, payload_json FROM track_events "
-        "WHERE event_type = 'analysis_completed' ORDER BY id DESC LIMIT 1"
-    ).fetchone()
-    assert event[:2] == (track.id, 2)
-    assert json.loads(event[2]) == {"analysis_id": second_id}
-
-
-def test_store_failure_after_success_keeps_success_and_emits_failed_event(database, track) -> None:
-    from dj_digger.analysis.persistence import AnalysisPersistence
-
-    persistence = AnalysisPersistence(database)
-    success_id = persistence.store_success(track, identity("a" * 64), {"bpm": 128.0})
-    persistence.store_failure(track, identity("b" * 64), "decoder unavailable")
-
-    assert database.execute(
-        "SELECT id, analysis_status FROM audio_analysis WHERE track_id = ? ORDER BY id", (track.id,)
-    ).fetchall() == [(success_id, "succeeded"), (success_id + 1, "failed")]
-    event = database.execute(
-        "SELECT track_id, analysis_run_id, payload_json FROM track_events "
-        "WHERE event_type = 'analysis_failed' ORDER BY id DESC LIMIT 1"
-    ).fetchone()
-    assert event[:2] == (track.id, 2)
-    assert json.loads(event[2]) == {"error": "decoder unavailable"}
-
-
-def test_identical_failed_attempts_are_append_only(database, track) -> None:
-    from dj_digger.analysis.persistence import AnalysisPersistence
-
-    persistence = AnalysisPersistence(database)
-    ident = identity("a" * 64)
-    persistence.store_failure(track, ident, "decoder unavailable")
-    persistence.store_failure(track, ident, "decoder unavailable")
-
-    assert database.execute(
-        "SELECT analysis_status FROM audio_analysis WHERE track_id = ? ORDER BY id", (track.id,)
-    ).fetchall() == [("failed",), ("failed",)]
-    assert TrackRepository(database).analysis_history(track.id) == [
-        (2, "failed", 10, 20, 2, "1.0.0", "a" * 64),
-        (1, "failed", 10, 20, 2, "1.0.0", "a" * 64),
-    ]
-
-
-def test_persist_run_rolls_back_run_attempt_sections_and_events_on_invalid_section(
+def test_incremental_lifecycle_persists_outcome_and_derives_interrupted_status(
     database, track
 ) -> None:
     from dj_digger.analysis.extractor import AnalysisExtractionResult
     from dj_digger.analysis.persistence import AnalysisOutcome, AnalysisPersistence
 
+    persistence = AnalysisPersistence(database)
+    ident = identity("d" * 64)
+    run_id = persistence.start_run(ident, eligible=2, reused=0, started_at="start")
+    extraction = AnalysisExtractionResult(
+        {"bpm": 128.0}, {"sections": [{"start": 0.0, "end": 8.0}]}, 0.75, "succeeded"
+    )
+
+    assert persistence.persist_outcome(
+        run_id,
+        ident,
+        AnalysisOutcome(track, extraction, None, "aggregation"),
+        occurred_at="one",
+    ) == (1, 0)
+    assert database.execute(
+        "SELECT started_at, finished_at, status, eligible, analyzed, reused, failed "
+        "FROM analysis_runs WHERE id = ?",
+        (run_id,),
+    ).fetchone() == ("start", None, "running", 2, 1, 0, 0)
+    attempt = database.execute(
+        "SELECT analysis_status, analysis_confidence, payload_json, created_at "
+        "FROM audio_analysis WHERE analysis_run_id = ?",
+        (run_id,),
+    ).fetchone()
+    assert attempt[:2] == ("succeeded", 0.75)
+    assert json.loads(attempt[2]) == {"bpm": 128.0}
+    assert attempt[3] == "one"
+    assert json.loads(database.scalar("SELECT payload_json FROM track_sections")) == {
+        "end": 8.0,
+        "start": 0.0,
+    }
+    event = database.execute(
+        "SELECT event_type, occurred_at, payload_json FROM track_events"
+    ).fetchone()
+    assert event[:2] == ("analysis_completed", "one")
+    assert json.loads(event[2]) == {"analysis_id": 1}
+
+    assert persistence.finish_run(run_id, finished_at="finish") == ("partial", 1, 0)
+    assert database.execute(
+        "SELECT finished_at, status, analyzed, failed FROM analysis_runs WHERE id = ?",
+        (run_id,),
+    ).fetchone() == ("finish", "partial", 1, 0)
+
+
+def test_incremental_outcome_rolls_back_attempt_sections_event_and_counter(
+    database, track
+) -> None:
+    from dj_digger.analysis.extractor import AnalysisExtractionResult
+    from dj_digger.analysis.persistence import AnalysisOutcome, AnalysisPersistence
+
+    persistence = AnalysisPersistence(database)
+    ident = identity("e" * 64)
+    run_id = persistence.start_run(ident, eligible=1, reused=0, started_at="start")
     extraction = AnalysisExtractionResult(
         {"bpm": 128.0}, {"sections": ["not an object"]}, None, "succeeded"
     )
+
     with pytest.raises(ValueError, match="analysis section must be an object"):
-        AnalysisPersistence(database).persist_run(
-            identity("c" * 64), [AnalysisOutcome(track, extraction, None, "aggregation")],
-            eligible=1, reused=0, started_at="start", finished_at="finish",
+        persistence.persist_outcome(
+            run_id,
+            ident,
+            AnalysisOutcome(track, extraction, None, "aggregation"),
+            occurred_at="one",
         )
 
-    for table in ("analysis_runs", "audio_analysis", "track_sections", "track_events"):
+    assert database.execute(
+        "SELECT status, analyzed, failed FROM analysis_runs WHERE id = ?", (run_id,)
+    ).fetchone() == ("running", 0, 0)
+    for table in ("audio_analysis", "track_sections", "track_events"):
         assert database.scalar(f"SELECT COUNT(*) FROM {table}") == 0
+
+
+@pytest.mark.parametrize(
+    ("eligible", "reused", "outcome_kind", "expected"),
+    [
+        (1, 0, "success", ("succeeded", 1, 0)),
+        (2, 0, "success", ("partial", 1, 0)),
+        (2, 1, "failure", ("partial", 0, 1)),
+        (2, 0, "failure", ("failed", 0, 1)),
+    ],
+    ids=["complete-success", "success-unaccounted", "reuse-failure", "failure-only"],
+)
+def test_reconcile_running_run_refreshes_attempt_counters_without_new_history(
+    database, track, eligible: int, reused: int, outcome_kind: str, expected: tuple[str, int, int]
+) -> None:
+    from dj_digger.analysis.persistence import AnalysisOutcome, AnalysisPersistence
+
+    persistence = AnalysisPersistence(database)
+    ident = identity("f" * 64)
+    run_id = persistence.start_run(
+        ident, eligible=eligible, reused=reused, started_at="start"
+    )
+    if outcome_kind == "success":
+        outcome = AnalysisOutcome(track, {"bpm": 128.0}, None, "aggregation")
+    else:
+        outcome = AnalysisOutcome(track, {}, "controlled failure", "decode")
+    persistence.persist_outcome(run_id, ident, outcome, occurred_at="one")
+    database.execute(
+        "UPDATE analysis_runs SET analyzed = 99, failed = 98 WHERE id = ?", (run_id,)
+    )
+    database.commit()
+    attempts_before = database.scalar("SELECT COUNT(*) FROM audio_analysis")
+    events_before = database.scalar("SELECT COUNT(*) FROM track_events")
+
+    assert persistence.reconcile_running_runs(finished_at="interrupted") == 1
+    assert database.execute(
+        "SELECT status, analyzed, failed, reused, finished_at FROM analysis_runs WHERE id = ?",
+        (run_id,),
+    ).fetchone() == (*expected, reused, "interrupted")
+    assert database.scalar("SELECT COUNT(*) FROM audio_analysis") == attempts_before
+    assert database.scalar("SELECT COUNT(*) FROM track_events") == events_before
+
+    assert persistence.reconcile_running_runs(finished_at="later") == 0
+    assert database.execute(
+        "SELECT status, analyzed, failed, reused, finished_at FROM analysis_runs WHERE id = ?",
+        (run_id,),
+    ).fetchone() == (*expected, reused, "interrupted")

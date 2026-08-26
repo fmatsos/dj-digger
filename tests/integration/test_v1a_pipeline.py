@@ -9,7 +9,7 @@ from analysis_fixture import analysis_fixture
 from jsonschema import Draft202012Validator, FormatChecker
 
 from dj_digger.application import WorkspaceApplication
-from dj_digger.config import ExportConfig, LibrarySourceConfig, WorkspaceConfig
+from dj_digger.config import LibrarySourceConfig, WorkspaceConfig
 from dj_digger.exports.snapshot import SnapshotResult
 
 _analysis = analysis_fixture
@@ -19,7 +19,6 @@ def _workspace(tmp_path: Path, source: Path) -> WorkspaceConfig:
     return WorkspaceConfig(
         database=tmp_path / "catalog.sqlite",
         exports=tmp_path / "exports",
-        export=ExportConfig(),
         sources=(
             LibrarySourceConfig(
                 id="subset", path=source, set_eligible=True, analyze=True, enabled=True

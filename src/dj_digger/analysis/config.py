@@ -2,6 +2,8 @@
 
 from dataclasses import dataclass
 
+CURRENT_ANALYZER_VERSION = "dj-digger-analysis/3"
+
 
 @dataclass(frozen=True)
 class AnalysisIdentity:

@@ -21,13 +21,6 @@ class LibrarySourceConfig:
 
 
 @dataclass(frozen=True)
-class ExportConfig:
-    """Export compatibility options."""
-
-    legacy_compatibility: bool = True
-
-
-@dataclass(frozen=True)
 class DspConfig:
     """Versioned, canonical DSP runtime contract."""
 
@@ -121,7 +114,6 @@ class WorkspaceConfig:
 
     database: Path
     exports: Path
-    export: ExportConfig
     sources: tuple[LibrarySourceConfig, ...]
     dsp: DspConfig = field(default_factory=DspConfig.canonical)
     dsp_path: Path | None = None
@@ -138,10 +130,8 @@ class WorkspaceConfig:
         database = _resolve_path(workspace.get("database"), config_directory, "workspace.database")
         exports = _resolve_path(workspace.get("exports"), config_directory, "workspace.exports")
 
-        export = _mapping(raw_config.get("export", {}), "export")
-        legacy_compatibility = _boolean(
-            export.get("legacy_compatibility", True), "export.legacy_compatibility"
-        )
+        if "export" in raw_config:
+            raise ValueError("[export] is no longer supported; remove this legacy table")
 
         library = _mapping(raw_config.get("library"), "library")
         raw_sources = library.get("sources")
@@ -183,7 +173,6 @@ class WorkspaceConfig:
         return cls(
             database,
             exports,
-            ExportConfig(legacy_compatibility),
             tuple(sources),
             dsp,
             configured_dsp,

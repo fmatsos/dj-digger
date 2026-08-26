@@ -43,9 +43,6 @@ def _write_v1b_config(tmp_path: Path, djing: Path, music: Path) -> Path:
                 'database = "catalog.sqlite"',
                 'exports = "exports"',
                 "",
-                "[export]",
-                "legacy_compatibility = false",
-                "",
                 "[[library.sources]]",
                 'id = "djing"',
                 f'path = "{djing}"',
@@ -68,7 +65,7 @@ def _write_v1b_config(tmp_path: Path, djing: Path, music: Path) -> Path:
 _analysis = analysis_fixture
 
 
-def test_v1b_refresh_resolves_known_curator_set_without_legacy_inventory(
+def test_v1b_refresh_resolves_known_curator_set_from_canonical_inventory(
     tmp_path: Path, monkeypatch
 ) -> None:
     djing = tmp_path / "fixture-library" / "djing" / "Techno"
@@ -89,8 +86,6 @@ def test_v1b_refresh_resolves_known_curator_set_without_legacy_inventory(
         (config.exports / name).is_file()
         for name in ("dj-analysis.tsv", "dj-sections.jsonl", "dj-analysis-run.json")
     )
-    assert not (config.exports / "djing-files.tsv").exists()
-    assert not (config.exports / "music-files.tsv").exists()
     assert _generate_known_set(config.exports / "tracks.tsv") == (
         CuratorCandidate(source_id="djing", track_id=1, path="Techno/Known.flac"),
     )

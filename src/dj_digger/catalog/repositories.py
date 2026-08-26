@@ -435,37 +435,6 @@ class ArtifactRepository:
         ).fetchall()
 
 
-class LegacyExportRepository:
-    """Read-only projections used by compatibility exports."""
-
-    def __init__(self, database: Database) -> None:
-        self._database = database
-
-    def tracks(self, source_id: str) -> list[tuple[Any, ...]]:
-        return self._database.execute(
-            """
-            SELECT t.relative_path, t.filename, t.extension, t.size_bytes, t.mtime_ns,
-                   e.title, e.artist, e.album_artist, e.album, e.track_number, e.disc_number,
-                   e.genre, e.date, e.year, e.composer, e.comment, e.tag_bpm,
-                   e.tag_initial_key, e.grouping, a.duration_seconds, a.bitrate, a.sample_rate
-            FROM tracks t
-            LEFT JOIN embedded_metadata e ON e.track_id = t.id
-            LEFT JOIN technical_audio_metadata a ON a.track_id = t.id
-            WHERE t.source_id = ? AND t.presence_status = 'present'
-            ORDER BY t.relative_path
-            """,
-            (source_id,),
-        ).fetchall()
-
-    def directories(self, source_id: str) -> list[str]:
-        rows = self._database.execute(
-            "SELECT relative_path FROM directories WHERE source_id = ? "
-            "AND presence_status = 'present' ORDER BY relative_path",
-            (source_id,),
-        ).fetchall()
-        return [str(row[0]) for row in rows]
-
-
 class EventRepository:
     """Append-only track lifecycle events."""
 

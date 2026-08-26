@@ -14,7 +14,6 @@ def test_loads_multiple_sources_with_stable_ids() -> None:
     assert [source.id for source in config.sources] == ["djing", "music"]
     assert config.sources[0].set_eligible is True
     assert config.sources[1].analyze is False
-    assert config.export.legacy_compatibility is True
 
 
 def test_resolves_workspace_and_source_paths_from_config_directory() -> None:
@@ -46,10 +45,9 @@ def test_rejects_workspace_state_inside_a_source_root(fixture_name: str) -> None
         WorkspaceConfig.load(FIXTURES / fixture_name)
 
 
-def test_allows_disabling_legacy_compatibility_and_records_are_immutable() -> None:
-    config = WorkspaceConfig.load(FIXTURES / "legacy-disabled.toml")
+def test_configuration_records_are_immutable() -> None:
+    config = WorkspaceConfig.load(FIXTURES / "dj-digger.toml")
 
-    assert config.export.legacy_compatibility is False
     with pytest.raises(FrozenInstanceError):
         config.sources[0].enabled = False
 
