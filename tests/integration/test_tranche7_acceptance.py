@@ -14,7 +14,7 @@ import pytest
 from jsonschema import Draft202012Validator
 
 from dj_digger.application import WorkspaceApplication
-from dj_digger.config import ExportConfig, LibrarySourceConfig, WorkspaceConfig
+from dj_digger.config import LibrarySourceConfig, WorkspaceConfig
 
 ROOT = Path(__file__).resolve().parents[2]
 PILOT = ROOT / "scripts" / "acceptance_library_pilot.py"
@@ -50,11 +50,10 @@ def _typed_row(row: dict[str, str], schema: dict[str, object]) -> dict[str, obje
 COPY_SET = ROOT / "references" / "copy-set.sh"
 
 
-def _real_workspace(tmp_path: Path, source: Path, *, legacy: bool = False) -> WorkspaceConfig:
+def _real_workspace(tmp_path: Path, source: Path) -> WorkspaceConfig:
     return WorkspaceConfig(
         database=tmp_path / "catalog.sqlite",
         exports=tmp_path / "exports",
-        export=ExportConfig(legacy),
         sources=(LibrarySourceConfig("music", source, True, True, True),),
     )
 
@@ -219,7 +218,7 @@ def test_v1b_refresh_emits_schema_valid_facts_only_set(tmp_path: Path) -> None:
         ["ffmpeg", "-v", "error", "-f", "lavfi", "-i", "sine=frequency=440:duration=2", str(audio)],
         check=True,
     )
-    config = _real_workspace(tmp_path, source, legacy=False)
+    config = _real_workspace(tmp_path, source)
     refresh = WorkspaceApplication(config).refresh()
     assert refresh["published"] is True
     assert all(

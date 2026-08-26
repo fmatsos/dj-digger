@@ -3,10 +3,35 @@
 import os
 import shutil
 import subprocess
+import sys
 import wave
+from array import array
+from math import exp, pi, sin
 from pathlib import Path
 
 import pytest
+
+
+def _write_periodic_smoke_audio(path: Path) -> None:
+    """Write an onset-rich 120 BPM signal suitable for the rhythm smoke gate."""
+    sample_rate = 48_000
+    beat_samples = sample_rate // 2
+    click_samples = sample_rate // 20
+    samples = array("h")
+    for index in range(sample_rate * 16):
+        beat_offset = index % beat_samples
+        value = 0
+        if beat_offset < click_samples:
+            envelope = exp(-beat_offset / 500)
+            value = int(28_000 * envelope * sin(2 * pi * 100 * beat_offset / sample_rate))
+        samples.append(value)
+    if sys.byteorder != "little":
+        samples.byteswap()
+    with wave.open(str(path), "wb") as stream:
+        stream.setnchannels(1)
+        stream.setsampwidth(2)
+        stream.setframerate(sample_rate)
+        stream.writeframes(samples.tobytes())
 
 
 @pytest.mark.skipif(
@@ -17,11 +42,7 @@ def test_docker_image_reads_synthetic_audio_from_read_only_music_mount(tmp_path:
     music = tmp_path / "music"
     music.mkdir()
     audio = music / "tone.wav"
-    with wave.open(str(audio), "wb") as stream:
-        stream.setnchannels(1)
-        stream.setsampwidth(2)
-        stream.setframerate(48_000)
-        stream.writeframes(b"\0\0" * 48_000)
+    _write_periodic_smoke_audio(audio)
     config = tmp_path / "config.toml"
     config.write_text(
         "[workspace]\n"

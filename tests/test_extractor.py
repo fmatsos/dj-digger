@@ -1,3 +1,5 @@
+import weakref
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 
 import numpy as np
@@ -13,6 +15,16 @@ from dj_digger.analysis.extractor import (
 from dj_digger.analysis.rhythm import RhythmFacts
 from dj_digger.analysis.spectrum import SpectrumFacts
 from dj_digger.analysis.windows import IntroOutroWindows
+
+SPECTRUM_BANDS = {
+    "sub": (20.0, 60.0),
+    "low": (60.0, 250.0),
+    "low_mid": (250.0, 500.0),
+    "kick": (40.0, 120.0),
+    "bass": (40.0, 250.0),
+    "onset": (0.0, 100.0),
+    "spectral": (0.0, 24_000.0),
+}
 
 
 def test_extraction_result_has_only_public_status_fields() -> None:
@@ -42,6 +54,15 @@ class _Probe:
 class _Rhythm:
     def analyze(self, _samples: object, _rate: int) -> RhythmFacts:
         return RhythmFacts(120.0, 0.9, tuple(i * 0.5 for i in range(100)), 0.9, "C major", 0.9)
+
+
+class _CapturingRhythm(_Rhythm):
+    def __init__(self) -> None:
+        self.samples: object | None = None
+
+    def analyze(self, samples: object, rate: int) -> RhythmFacts:
+        self.samples = samples
+        return super().analyze(samples, rate)
 
 
 class _Spectrum:
@@ -128,14 +149,123 @@ def test_decoder_builds_float32_mono_48khz_without_tempfile(
     assert calls[0][3:] == ["-i", "track.mp3", "-f", "f32le", "-ac", "1", "-ar", "48000", "pipe:1"]
 
 
+def test_composite_passes_decoded_float32_buffer_to_rhythm_without_copy(
+    tmp_path: Path,
+) -> None:
+    from dj_digger.analysis.extractor import CompositeAudioExtractor
+
+    decoder = _Decoder()
+    decoded = decoder.decode(tmp_path / "track.wav")
+    decoder.decode = lambda _path: decoded  # type: ignore[method-assign]
+    rhythm = _CapturingRhythm()
+    path = tmp_path / "track.wav"
+    path.touch()
+
+    CompositeAudioExtractor(
+        decoder=decoder,
+        probe=_Probe(),
+        rhythm=rhythm,
+        spectrum=_Spectrum(),
+        planner=_Planner(),
+    ).extract(path)
+
+    assert rhythm.samples is decoded
+    assert isinstance(rhythm.samples, np.ndarray)
+    assert rhythm.samples.dtype == np.float32
+
+
+def test_composite_uses_new_analyzer_identity_for_percival_beat_grid() -> None:
+    from dj_digger.analysis.extractor import CompositeAudioExtractor
+
+    assert CompositeAudioExtractor().identity.analyzer_version == "dj-digger-analysis/3"
+
+
 def test_numpy_spectrum_adapter_extracts_bands_flux_and_centroid() -> None:
-    config = {"sub": (20.0, 60.0), "low": (60.0, 250.0), "low_mid": (250.0, 500.0),
-              "kick": (40.0, 120.0), "bass": (40.0, 250.0), "onset": (0.0, 100.0),
-              "spectral": (0.0, 24000.0)}
-    adapter = NumpySpectrumAdapter(config, window_size=8, hop_size=4)
+    adapter = NumpySpectrumAdapter(SPECTRUM_BANDS, window_size=8, hop_size=4)
     values = adapter.extract(np.sin(np.arange(32, dtype=np.float32)), 48_000)
-    assert set(values) == {*config, "spectral_centroid"}
+    assert set(values) == {*SPECTRUM_BANDS, "spectral_centroid"}
     assert values["spectral_centroid"] >= 0
+
+
+def _matrix_spectrum_reference(
+    samples: Sequence[float] | np.ndarray,
+    sample_rate: int,
+    bands: Mapping[str, tuple[float, float]],
+    window_size: int,
+    hop_size: int,
+) -> Mapping[str, float]:
+    values = np.asarray(samples, dtype=np.float64)
+    if values.size == 0:
+        return {name: 0.0 for name in (*bands, "spectral_centroid")}
+    if values.size < window_size:
+        values = np.pad(values, (0, window_size - values.size))
+    window = np.hanning(window_size)
+    spectra = [
+        np.abs(np.fft.rfft(values[start : start + window_size] * window))
+        for start in range(0, values.size - window_size + 1, hop_size)
+    ]
+    matrix = np.asarray(spectra)
+    frequencies = np.fft.rfftfreq(window_size, 1.0 / sample_rate)
+    power = matrix.mean(axis=0)
+    result = {}
+    for name, (lower, upper) in bands.items():
+        mask = (frequencies >= lower) & (frequencies <= upper)
+        result[name] = float(power[mask].mean()) if np.any(mask) else 0.0
+    positive_flux = np.maximum(np.diff(matrix, axis=0), 0.0)
+    result["onset"] = float(positive_flux.mean()) if positive_flux.size else 0.0
+    power_sum = np.sum(power)
+    result["spectral_centroid"] = (
+        float(np.sum(frequencies * power) / power_sum) if power_sum else 0.0
+    )
+    return result
+
+
+@pytest.mark.parametrize(
+    "samples",
+    (
+        np.sin(np.arange(32, dtype=np.float32)),
+        np.array([0.25, -0.5, 0.75], dtype=np.float32),
+        np.cos(np.arange(14, dtype=np.float32) / 3.0),
+        np.array([], dtype=np.float32),
+    ),
+    ids=("normal", "short", "unaligned", "empty"),
+)
+def test_numpy_spectrum_adapter_matches_matrix_reference(samples: np.ndarray) -> None:
+    actual = NumpySpectrumAdapter(SPECTRUM_BANDS, 8, 4).extract(samples, 48_000)
+    expected = _matrix_spectrum_reference(samples, 48_000, SPECTRUM_BANDS, 8, 4)
+
+    assert actual == pytest.approx(expected)
+
+
+def test_numpy_spectrum_adapter_does_not_retain_all_frame_magnitudes(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    live = 0
+    peak_live = 0
+    original_abs = np.abs
+
+    class TrackedMagnitude(np.ndarray):
+        pass
+
+    def track_abs(values: np.ndarray) -> np.ndarray:
+        nonlocal live, peak_live
+        magnitude = original_abs(values).view(TrackedMagnitude)
+        live += 1
+        peak_live = max(peak_live, live)
+
+        def released() -> None:
+            nonlocal live
+            live -= 1
+
+        weakref.finalize(magnitude, released)
+        return magnitude
+
+    monkeypatch.setattr("dj_digger.analysis.extractor.np.abs", track_abs)
+    samples = np.sin(np.arange(80, dtype=np.float32))
+
+    NumpySpectrumAdapter(SPECTRUM_BANDS, 8, 4).extract(samples, 48_000)
+
+    assert peak_live <= 2
 
 
 def test_decoder_wraps_ffmpeg_failures_with_decode_stage(monkeypatch: pytest.MonkeyPatch) -> None:

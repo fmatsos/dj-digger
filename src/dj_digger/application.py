@@ -6,19 +6,24 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from dj_digger.analysis.config import AnalysisIdentity
+from dj_digger.analysis.config import CURRENT_ANALYZER_VERSION, AnalysisIdentity
 from dj_digger.analysis.exporters import AnalysisExporter
-from dj_digger.analysis.extractor import AnalysisExtractionResult, CompositeAudioExtractor
-from dj_digger.analysis.pipeline import AnalysisExtractor, AnalysisPipeline, AnalysisRunResult
+from dj_digger.analysis.pipeline import (
+    AnalysisExtractor,
+    AnalysisPipeline,
+    AnalysisRunResult,
+    TimedAnalysisExtractor,
+)
+from dj_digger.analysis.worker_client import IsolatedAnalysisExtractor
 from dj_digger.catalog.database import Database
-from dj_digger.catalog.migrations import MIGRATIONS
-from dj_digger.catalog.models import Track
+from dj_digger.catalog.migrations import CURRENT_VERSION
 from dj_digger.catalog.repositories import SourceRepository
 from dj_digger.config import LibrarySourceConfig, WorkspaceConfig
 from dj_digger.exports.audit import AuditExporter
 from dj_digger.exports.snapshot import SnapshotExporter, SnapshotResult
 from dj_digger.exports.tracks import TracksExporter
 from dj_digger.metadata.exiftool import ExifToolExtractor, MetadataRunResult, MetadataService
+from dj_digger.progress import NullProgressReporter, ProgressReporter
 from dj_digger.scanning.lifecycle import ScanLifecycle
 from dj_digger.scanning.scanner import SourceScanner
 
@@ -41,29 +46,20 @@ class WorkspaceApplication:
         self.database = Database.open(config.database)
         self.database.migrate()
         self._sources = SourceRepository(self.database)
-        self._analysis_extractor: AnalysisExtractor
+        self._analysis_extractor: AnalysisExtractor | TimedAnalysisExtractor
         if analysis_extractor is None:
-            composite = CompositeAudioExtractor(config.dsp)
-            self._analysis_identity = composite.identity
-
-            def extract(track: Track) -> AnalysisExtractionResult:
-                source = next(source for source in config.sources if source.id == track.source_id)
-                path = (source.path / track.relative_path).resolve()
-                result = composite.extract(
-                    path,
-                    source_id=track.source_id,
-                    track_id=track.id,
-                    relative_path=track.relative_path,
-                )
-                return result
-
-            self._analysis_extractor = extract
+            self._analysis_identity = AnalysisIdentity(
+                2, CURRENT_ANALYZER_VERSION, config.dsp.config_hash
+            )
+            self._analysis_extractor = IsolatedAnalysisExtractor(
+                {source.id: source.path for source in config.sources}, config.dsp
+            )
         else:
             self._analysis_extractor = analysis_extractor
             self._analysis_identity = getattr(
                 analysis_extractor,
                 "identity",
-                AnalysisIdentity(2, "dj-digger-analysis/2", config.dsp.config_hash),
+                AnalysisIdentity(2, CURRENT_ANALYZER_VERSION, config.dsp.config_hash),
             )
         for source in config.sources:
             self._sources.upsert(
@@ -114,6 +110,8 @@ class WorkspaceApplication:
         limit: int | None = None,
         force: bool = False,
         workers: int = 1,
+        track_timeout: float = 1800.0,
+        progress: ProgressReporter | None = None,
     ) -> AnalysisRunResult:
         """Run the configured injectable audio analysis extractor."""
         if source_id is not None:
@@ -122,12 +120,14 @@ class WorkspaceApplication:
             self.database,
             self._analysis_identity,
             self._analysis_extractor,
+            progress=progress,
         ).run(
             source_id=source_id,
             path_prefix=path_prefix,
             limit=limit,
             force=force,
             workers=workers,
+            track_timeout=track_timeout,
         )
 
     def export(self, facet: str | None = None) -> list[str]:
@@ -136,8 +136,7 @@ class WorkspaceApplication:
         if facet not in {None, "all", "tracks", "artifacts", "analysis"}:
             raise ValueError(f"unknown export facet: {facet}")
         published: list[str] = []
-        # Validate/publish the atomic analysis group first: if it fails, no
-        # legacy facets have been replaced yet.
+        # Validate/publish the atomic analysis group first.
         if facet in {"all", "analysis"} or facet is None:
             published.extend(
                 str(item.path) for item in AnalysisExporter(self.database).export(destination)
@@ -148,17 +147,24 @@ class WorkspaceApplication:
         if facet in {None, "all", "artifacts"}:
             published.extend(
                 str(item.path)
-                for item in AuditExporter(self.database).export(
-                    destination, legacy_compatibility=self.config.export.legacy_compatibility
-                )
+                for item in AuditExporter(self.database).export(destination)
             )
         return published
 
     def snapshot(self, output: Path, archive: bool) -> SnapshotResult:
         return SnapshotExporter(self.database).create(output, archive)
 
-    def refresh(self) -> dict[str, Any]:
+    def refresh(
+        self,
+        *,
+        workers: int = 1,
+        track_timeout: float = 1800.0,
+        progress: ProgressReporter | None = None,
+    ) -> dict[str, Any]:
+        reporter = progress or NullProgressReporter()
+        reporter.phase_started("scan", 0, 4)
         scans = self.scan(enabled_only=True)
+        reporter.phase_finished("scan", 1, 4)
         eligible = {source.id for source in self.config.sources if source.set_eligible}
         required_failure = any(
             not result.succeeded and result.source_id in eligible for result in scans
@@ -170,22 +176,31 @@ class WorkspaceApplication:
                 "published": False,
                 "scans": [result.__dict__ for result in scans],
             }
+        reporter.phase_started("metadata", 1, 4)
         metadata = self.metadata()
-        analysis = self.analyze()
+        reporter.phase_finished("metadata", 2, 4)
+        reporter.phase_started("analysis", 2, 4)
+        analysis = self.analyze(
+            workers=workers, track_timeout=track_timeout, progress=reporter
+        )
+        reporter.phase_finished("analysis", 3, 4)
         status = _worst_status(
             "succeeded" if all(result.succeeded for result in scans) else "partial",
             metadata.status,
             analysis.status,
         )
+        reporter.phase_started("exports", 3, 4)
         try:
             exports = self.export()
         except Exception as error:
+            reporter.phase_finished("exports", 4, 4)
             return {
                 "event": "refresh", "status": "failed", "published": False,
                 "error": str(error),
                 "scans": [result.__dict__ for result in scans],
                 "metadata": metadata.__dict__, "analysis": analysis.__dict__,
             }
+        reporter.phase_finished("exports", 4, 4)
         return {
             "event": "refresh",
             "status": status,
@@ -282,7 +297,7 @@ class WorkspaceApplication:
                 except (OSError, ValueError) as error:
                     issues.append(f"DSP configuration invalid: {error}")
         version = int(self.database.scalar("PRAGMA user_version") or 0)
-        expected = MIGRATIONS[-1][0]
+        expected = CURRENT_VERSION
         if version != expected:
             issues.append(f"SQLite migration version is {version}, expected {expected}")
         return {

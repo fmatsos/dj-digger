@@ -2,9 +2,6 @@
 database = "/workspace/dj-digger.sqlite"
 exports = "/workspace/exports"
 
-[export]
-legacy_compatibility = true
-
 [[library.sources]]
 id = "djing"
 path = "/music/djing"

@@ -36,6 +36,7 @@ source = { editable = "." }
 dependencies = [
     { name = "jsonschema" },
     { name = "numpy" },
+    { name = "rich" },
     { name = "typer" },
 ]
 
@@ -49,6 +50,7 @@ requires-dist = [
     { name = "essentia", marker = "extra == 'analysis'", specifier = "==2.1b6.dev1389" },
     { name = "jsonschema", specifier = ">=4.25,<5" },
     { name = "numpy", specifier = ">=2,<3" },
+    { name = "rich", specifier = ">=14,<16" },
     { name = "typer", specifier = ">=0.15,<1.0" },
 ]
 provides-extras = ["analysis"]

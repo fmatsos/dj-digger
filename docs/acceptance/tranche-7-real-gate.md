@@ -24,7 +24,7 @@ paths, file count, byte integrity, and source immutability.
 
 The V1B gate uses no recorded evaluator case as input. When the real
 dependencies are installed it generates a short FFmpeg WAV, runs the default
-`WorkspaceApplication.refresh()` with `legacy_compatibility = false`, and
+`WorkspaceApplication.refresh()`, and
 passes the resulting `tracks.tsv` plus the three analysis facets to the
 facts-only acceptance adapter. The emitted JSON is validated against the
 current set schema; track identity and playlist paths must match the tracks

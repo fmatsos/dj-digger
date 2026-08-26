@@ -12,7 +12,7 @@ from typing import Literal, TypeVar
 import numpy as np
 
 from dj_digger.analysis.audio import TechnicalAudioMetadata
-from dj_digger.analysis.config import AnalysisIdentity
+from dj_digger.analysis.config import CURRENT_ANALYZER_VERSION, AnalysisIdentity
 from dj_digger.analysis.ffmpeg import FFmpegProbe
 from dj_digger.analysis.rhythm import RhythmAnalyzer, RhythmFacts
 from dj_digger.analysis.segmentation import AnalysisFrame, Segmenter, TrackSection
@@ -81,30 +81,42 @@ class NumpySpectrumAdapter:
         self._bands = bands
         self._window_size = window_size
         self._hop_size = hop_size
+        self._window = np.hanning(window_size)
 
     def extract(
         self, samples: Sequence[float] | np.ndarray, sample_rate: int
     ) -> Mapping[str, float]:
-        values = np.asarray(samples, dtype=np.float64)
+        values = np.asarray(samples, dtype=np.float32)
         if values.size == 0:
             return {name: 0.0 for name in (*FACT_NAMES, "spectral_centroid")}
         if values.size < self._window_size:
             values = np.pad(values, (0, self._window_size - values.size))
-        window = np.hanning(self._window_size)
-        spectra = []
+        magnitude_sum = np.zeros(self._window_size // 2 + 1, dtype=np.float64)
+        previous_magnitude: np.ndarray | None = None
+        flux_sum = 0.0
+        flux_count = 0
+        frame_count = 0
         for start in range(0, values.size - self._window_size + 1, self._hop_size):
-            spectra.append(np.abs(np.fft.rfft(values[start : start + self._window_size] * window)))
-        matrix = np.asarray(spectra)
+            magnitude = np.abs(
+                np.fft.rfft(values[start : start + self._window_size] * self._window)
+            )
+            magnitude_sum += magnitude
+            frame_count += 1
+            if previous_magnitude is not None:
+                positive_delta = np.maximum(magnitude - previous_magnitude, 0.0)
+                flux_sum += float(np.sum(positive_delta))
+                flux_count += positive_delta.size
+            previous_magnitude = magnitude
         frequencies = np.fft.rfftfreq(self._window_size, 1.0 / sample_rate)
-        power = matrix.mean(axis=0)
+        power = magnitude_sum / frame_count
         result: dict[str, float] = {}
         for name, (lower, upper) in self._bands.items():
             mask = (frequencies >= lower) & (frequencies <= upper)
             result[name] = float(power[mask].mean()) if np.any(mask) else 0.0
-        positive_flux = np.maximum(np.diff(matrix, axis=0), 0.0)
-        result["onset"] = float(positive_flux.mean()) if positive_flux.size else 0.0
+        result["onset"] = flux_sum / flux_count if flux_count else 0.0
+        power_sum = np.sum(power)
         result["spectral_centroid"] = (
-            float(np.sum(frequencies * power) / np.sum(power)) if np.sum(power) else 0.0
+            float(np.sum(frequencies * power) / power_sum) if power_sum else 0.0
         )
         return result
 
@@ -133,7 +145,7 @@ class CompositeAudioExtractor:
         semantics: SemanticClassifier | None = None,
     ) -> None:
         dsp = config if config is not None else DspConfig.canonical()
-        self.identity = AnalysisIdentity(2, "dj-digger-analysis/2", dsp.config_hash)
+        self.identity = AnalysisIdentity(2, CURRENT_ANALYZER_VERSION, dsp.config_hash)
         self._decoder = decoder or AudioDecoder()
         self._probe = probe or FFmpegProbe()
         self._rhythm = rhythm or RhythmAnalyzer()
@@ -153,7 +165,7 @@ class CompositeAudioExtractor:
             samples = self._stage("decode", lambda: self._decoder.decode(path))
             technical = self._stage("technical", lambda: self._probe.probe(path))
             rhythm = self._stage(
-                "rhythm", lambda: self._rhythm.analyze(samples.astype(np.float64), 48_000)
+                "rhythm", lambda: self._rhythm.analyze(samples, 48_000)
             )
             spectrum = self._stage("spectrum", lambda: self._spectrum.analyze(samples, 48_000))
             windows = self._stage("windows", lambda: self._planner.plan(rhythm.beat_positions))

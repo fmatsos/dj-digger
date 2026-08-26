@@ -1,4 +1,4 @@
-"""Canonical library-artifact export with optional legacy compatibility facets."""
+"""Canonical library-artifact export."""
 
 import csv
 import json
@@ -12,7 +12,6 @@ from jsonschema import Draft202012Validator  # type: ignore[import-untyped]
 from dj_digger.catalog.database import Database
 from dj_digger.catalog.repositories import ArtifactRepository, SourceRepository
 from dj_digger.exports.atomic import publish_atomic
-from dj_digger.exports.legacy import LegacyExporter
 from dj_digger.exports.tracks import PublishedFacet
 
 
@@ -34,7 +33,7 @@ class AuditExporter:
         self._validator = Draft202012Validator(schema)
         self._columns = cast(list[str], schema["x-tabular"]["columns"])
 
-    def export(self, destination: Path, legacy_compatibility: bool = True) -> list[PublishedFacet]:
+    def export(self, destination: Path) -> list[PublishedFacet]:
         roots = SourceRepository(self._database).roots()
         rows = self._rows(roots)
         canonical = destination / "library-artifacts.tsv"
@@ -50,10 +49,7 @@ class AuditExporter:
                     writer.writerow({key: _serialize(row[key]) for key in self._columns})
 
         publish_atomic(canonical, write)
-        facets = [PublishedFacet(canonical, len(rows))]
-        return facets + (
-            LegacyExporter(self._database).export(destination) if legacy_compatibility else []
-        )
+        return [PublishedFacet(canonical, len(rows))]
 
     def _rows(self, roots: dict[str, Path]) -> list[dict[str, Any]]:
         result = []

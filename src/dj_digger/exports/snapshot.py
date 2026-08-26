@@ -50,7 +50,7 @@ class SnapshotExporter:
             with self._database.read_transaction():
                 facets = [
                     TracksExporter(self._database).export(staging / "tracks.tsv"),
-                    *AuditExporter(self._database).export(staging, legacy_compatibility=False),
+                    *AuditExporter(self._database).export(staging),
                 ]
                 manifest = self._manifest(facets)
                 self._validator().validate(manifest)

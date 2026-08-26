@@ -5,13 +5,31 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from dj_digger.analysis.config import AnalysisIdentity
-from dj_digger.analysis.extractor import AnalysisExtractionResult
-from dj_digger.analysis.persistence import AnalysisPersistence
+from dj_digger.analysis.persistence import AnalysisOutcome, AnalysisPersistence
 from dj_digger.analysis.pipeline import AnalysisRunResult
 from dj_digger.application import WorkspaceApplication
-from dj_digger.catalog.models import Track
 from dj_digger.catalog.repositories import ScanRunRepository, TrackRepository
-from dj_digger.config import ExportConfig, LibrarySourceConfig, WorkspaceConfig
+from dj_digger.config import LibrarySourceConfig, WorkspaceConfig
+
+
+class RecordingProgress:
+    def __init__(self) -> None:
+        self.events: list[tuple[object, ...]] = []
+
+    def phase_started(self, name: str, completed: int, total: int) -> None:
+        self.events.append(("started", name, completed, total))
+
+    def phase_finished(self, name: str, completed: int, total: int) -> None:
+        self.events.append(("finished", name, completed, total))
+
+    def analysis_started(self, *, total: int, completed: int) -> None:
+        self.events.append(("analysis_started", total, completed))
+
+    def analysis_advanced(self) -> None:
+        self.events.append(("analysis_advanced",))
+
+    def analysis_finished(self) -> None:
+        self.events.append(("analysis_finished",))
 
 
 def _workspace(tmp_path: Path) -> WorkspaceConfig:
@@ -20,7 +38,6 @@ def _workspace(tmp_path: Path) -> WorkspaceConfig:
     return WorkspaceConfig(
         database=tmp_path / "catalog.sqlite",
         exports=tmp_path / "exports",
-        export=ExportConfig(),
         sources=(LibrarySourceConfig("source", source, True, True, True),),
     )
 
@@ -32,35 +49,34 @@ def _seed_failed_run(application: WorkspaceApplication) -> AnalysisRunResult:
         extension=".flac", size_bytes=10, mtime_ns=20, scan_id=scan_id,
     )
     identity = application._analysis_identity
-    run_id, analyzed, failed = AnalysisPersistence(application.database).persist_run(
-        identity, [(track, {}, "decoder unavailable", "decode")], eligible=1, reused=0,
-        started_at="2026-01-01T00:00:00+00:00", finished_at="2026-01-01T00:00:01+00:00",
+    persistence = AnalysisPersistence(application.database)
+    run_id = persistence.start_run(
+        identity, eligible=1, reused=0, started_at="2026-01-01T00:00:00+00:00"
     )
+    analyzed, failed = persistence.persist_outcome(
+        run_id,
+        identity,
+        AnalysisOutcome(track, {}, "decoder unavailable", "decode"),
+        occurred_at="2026-01-01T00:00:01+00:00",
+    )
+    persistence.finish_run(run_id, finished_at="2026-01-01T00:00:01+00:00")
     return AnalysisRunResult(run_id, 1, analyzed, 0, failed, "failed")
 
 
-def test_default_adapter_preserves_absolute_source_and_relative_identity(monkeypatch, tmp_path):
+def test_default_adapter_wires_isolated_source_root_and_identity(monkeypatch, tmp_path):
     calls = {}
 
-    class StubComposite:
-        identity = AnalysisIdentity(2, "dj-digger-analysis/2", "a" * 64)
+    class StubIsolated:
+        def __init__(self, source_roots, dsp):
+            calls.update(source_roots=source_roots, dsp=dsp)
 
-        def __init__(self, _config):
-            pass
-
-        def extract(self, path, **kwargs):
-            calls.update(path=path, **kwargs)
-            return AnalysisExtractionResult({}, {}, None, "succeeded")
-
-    monkeypatch.setattr("dj_digger.application.CompositeAudioExtractor", StubComposite)
+    monkeypatch.setattr("dj_digger.application.IsolatedAnalysisExtractor", StubIsolated)
     application = WorkspaceApplication(_workspace(tmp_path))
-    track = Track(7, "source", "Techno/track.flac", "track.flac", ".flac", 1, 2, "present")
-    application._analysis_extractor(track)
-    assert calls == {
-        "path": (tmp_path / "library/Techno/track.flac").resolve(),
-        "source_id": "source", "track_id": 7, "relative_path": "Techno/track.flac",
-    }
-    assert application._analysis_identity == StubComposite.identity
+    assert calls["source_roots"] == {"source": (tmp_path / "library").resolve()}
+    assert calls["dsp"] == application.config.dsp
+    assert application._analysis_identity == AnalysisIdentity(
+        2, "dj-digger-analysis/3", application.config.dsp.config_hash
+    )
 
 
 def test_refresh_metadata_partial_still_publishes(monkeypatch, tmp_path):
@@ -68,7 +84,7 @@ def test_refresh_metadata_partial_still_publishes(monkeypatch, tmp_path):
     scans = [SimpleNamespace(succeeded=True, source_id="source")]
     monkeypatch.setattr(application, "scan", lambda **_: scans)
     monkeypatch.setattr(application, "metadata", lambda: SimpleNamespace(status="partial"))
-    monkeypatch.setattr(application, "analyze", lambda: SimpleNamespace(status="succeeded"))
+    monkeypatch.setattr(application, "analyze", lambda **_: SimpleNamespace(status="succeeded"))
     published = []
     monkeypatch.setattr(application, "export", lambda: published.append(True) or ["tracks.tsv"])
     result = application.refresh()
@@ -81,7 +97,7 @@ def test_refresh_failed_analysis_still_publishes_failure_audit(monkeypatch, tmp_
     scans = [SimpleNamespace(succeeded=True, source_id="source")]
     monkeypatch.setattr(application, "scan", lambda **_: scans)
     monkeypatch.setattr(application, "metadata", lambda: SimpleNamespace(status="succeeded"))
-    monkeypatch.setattr(application, "analyze", lambda: failed)
+    monkeypatch.setattr(application, "analyze", lambda **_: failed)
 
     result = application.refresh()
 
@@ -109,7 +125,7 @@ def test_refresh_export_exception_preserves_existing_analysis_bytes(monkeypatch,
     scans = [SimpleNamespace(succeeded=True, source_id="source")]
     monkeypatch.setattr(application, "scan", lambda **_: scans)
     monkeypatch.setattr(application, "metadata", lambda: SimpleNamespace(status="succeeded"))
-    monkeypatch.setattr(application, "analyze", lambda: SimpleNamespace(status="succeeded"))
+    monkeypatch.setattr(application, "analyze", lambda **_: SimpleNamespace(status="succeeded"))
     def fail_export(*_args, **_kwargs):
         raise RuntimeError("publish failed")
 
@@ -120,6 +136,53 @@ def test_refresh_export_exception_preserves_existing_analysis_bytes(monkeypatch,
     assert result["status"] == "failed" and result["published"] is False
     assert "publish failed" in result["error"]
     assert {path: path.read_bytes() for path in paths} == before
+
+
+def test_refresh_reports_the_four_phases_in_order(monkeypatch, tmp_path: Path) -> None:
+    application = WorkspaceApplication(_workspace(tmp_path))
+    progress = RecordingProgress()
+    scans = [SimpleNamespace(succeeded=True, source_id="source")]
+    monkeypatch.setattr(application, "scan", lambda **_: scans)
+    monkeypatch.setattr(application, "metadata", lambda: SimpleNamespace(status="succeeded"))
+    monkeypatch.setattr(
+        application,
+        "analyze",
+        lambda **_: SimpleNamespace(status="succeeded"),
+    )
+    monkeypatch.setattr(application, "export", lambda: ["tracks.tsv"])
+
+    application.refresh(progress=progress)
+
+    assert progress.events == [
+        ("started", "scan", 0, 4),
+        ("finished", "scan", 1, 4),
+        ("started", "metadata", 1, 4),
+        ("finished", "metadata", 2, 4),
+        ("started", "analysis", 2, 4),
+        ("finished", "analysis", 3, 4),
+        ("started", "exports", 3, 4),
+        ("finished", "exports", 4, 4),
+    ]
+
+
+def test_refresh_stops_progress_after_a_required_scan_failure(
+    monkeypatch, tmp_path: Path
+) -> None:
+    application = WorkspaceApplication(_workspace(tmp_path))
+    progress = RecordingProgress()
+    monkeypatch.setattr(
+        application,
+        "scan",
+        lambda **_: [SimpleNamespace(succeeded=False, source_id="source")],
+    )
+
+    result = application.refresh(progress=progress)
+
+    assert result["published"] is False
+    assert progress.events == [
+        ("started", "scan", 0, 4),
+        ("finished", "scan", 1, 4),
+    ]
 
 
 def test_export_analysis_publishes_only_analysis_facets(tmp_path):
@@ -135,9 +198,8 @@ def test_export_analysis_publishes_only_analysis_facets(tmp_path):
     assert not (application.config.exports / "artifacts.jsonl").exists()
 
 
-def test_export_all_with_legacy_disabled_has_only_unified_facets(tmp_path):
+def test_export_all_has_only_canonical_facets(tmp_path):
     config = _workspace(tmp_path)
-    config = WorkspaceConfig(config.database, config.exports, ExportConfig(False), config.sources)
     application = WorkspaceApplication(config)
     _seed_failed_run(application)
 

@@ -22,7 +22,7 @@ def main() -> None:
     # Exercise each concrete dependency before the composite call as an explicit smoke gate.
     samples = decoder.decode(audio)
     probe.probe(audio)
-    rhythm.analyze(samples.astype("float64"), 48_000)
+    rhythm.analyze(samples, 48_000)
     result = CompositeAudioExtractor(decoder=decoder, probe=probe, rhythm=rhythm).extract(
         audio, relative_path="smoke/tone.wav"
     )

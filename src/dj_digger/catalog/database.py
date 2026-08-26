@@ -1,5 +1,7 @@
 """SQLite database boundary for the catalog."""
 
+import fcntl
+import os
 import sqlite3
 from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
@@ -47,6 +49,34 @@ class Database:
     def commit(self) -> None:
         """Commit a repository operation."""
         self._connection.commit()
+
+    @contextmanager
+    def advisory_lock(self, name: str) -> Iterator[None]:
+        """Hold a non-blocking process lock associated with the main database."""
+        database_file = next(
+            (
+                filename
+                for _, schema, filename in self._connection.execute("PRAGMA database_list")
+                if schema == "main" and filename
+            ),
+            None,
+        )
+        if database_file is None:
+            raise RuntimeError("advisory locks require a file-backed SQLite database")
+        database_path = Path(str(database_file)).resolve()
+        lock_path = database_path.with_name(f"{database_path.name}.{name}.lock")
+        descriptor = os.open(lock_path, os.O_CREAT | os.O_RDWR, 0o600)
+        try:
+            try:
+                fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError as error:
+                raise RuntimeError(f"advisory lock {name!r} is already held") from error
+            try:
+                yield
+            finally:
+                fcntl.flock(descriptor, fcntl.LOCK_UN)
+        finally:
+            os.close(descriptor)
 
     @contextmanager
     def transaction(self) -> Iterator[None]:
