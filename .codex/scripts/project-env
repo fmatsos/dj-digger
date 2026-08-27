@@ -1,0 +1,5 @@
+#!/bin/sh
+set -eu
+export UV_CACHE_DIR=/tmp/dj-digger-uv-cache
+export UV_TOOL_DIR=/tmp/dj-digger-uv-tools
+exec "$@"

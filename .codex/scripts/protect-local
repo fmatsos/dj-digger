@@ -1,0 +1,39 @@
+#!/bin/sh
+set -eu
+
+# Validate arguments
+if [ $# -ne 1 ] || { [ "$1" != "--changed" ] && [ "$1" != "--staged" ]; }; then
+  exit 2
+fi
+
+mode="$1"
+failed=0
+
+# Get the list of paths based on mode
+if [ "$mode" = "--staged" ]; then
+  paths=$(git diff --cached --name-only 2>/dev/null || true)
+else
+  paths=$( { git diff --name-only 2>/dev/null; git ls-files --others --exclude-standard 2>/dev/null; } || true)
+fi
+
+# Check each path
+while IFS= read -r path; do
+  [ -z "$path" ] && continue
+
+  case "$path" in
+    config/local.toml|workspace/*|sets/*|*.sqlite|*.sqlite-wal|*.sqlite-shm)
+      printf 'protected local path: %s\n' "$path" >&2
+      failed=1
+      ;;
+    docs/superpowers/specs/*)
+      if test "${DJ_DIGGER_ALLOW_SPEC_STAGE:-0}" != 1; then
+        printf 'spec staging requires DJ_DIGGER_ALLOW_SPEC_STAGE=1: %s\n' "$path" >&2
+        failed=1
+      fi
+      ;;
+  esac
+done <<EOF
+$paths
+EOF
+
+exit "$failed"

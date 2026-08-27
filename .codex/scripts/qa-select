@@ -1,0 +1,89 @@
+#!/bin/sh
+set -eu
+
+# Read paths from stdin and classify them into QA profiles
+# Returns exactly one of: docs, focused, subsystem, catalog, analysis, exports, runtime, full
+
+# Collect all categories found
+categories=""
+
+# Read each path and classify it
+while IFS= read -r path; do
+  [ -z "$path" ] && continue
+
+  category=""
+
+  # Check for documentation files
+  if [ "$path" = "README.md" ] || [ "$path" = "CHANGELOG.md" ] || \
+     [ "$path" = "docs/README.md" ] || printf '%s\n' "$path" | grep -q '^docs/'; then
+    category="docs"
+  # Check for instruction/harness files
+  elif [ "$path" = "Makefile" ] || [ "$path" = "conftest.py" ] || \
+       [ "$path" = "pytest.ini" ] || [ "$path" = "pyproject.toml" ] || \
+       [ "$path" = "setup.py" ] || [ "$path" = "setup.cfg" ] || \
+       [ "$path" = "tox.ini" ] || printf '%s\n' "$path" | grep -qE '^\.(codex|github)/|^(scripts|skills|tests)/'; then
+    category="focused"
+  # Check for production modules
+  elif printf '%s\n' "$path" | grep -q '^src/dj_digger/catalog/'; then
+    category="catalog"
+  elif printf '%s\n' "$path" | grep -q '^src/dj_digger/analysis/'; then
+    category="analysis"
+  elif printf '%s\n' "$path" | grep -q '^src/dj_digger/exports/'; then
+    category="exports"
+  elif printf '%s\n' "$path" | grep -q '^src/dj_digger/copying/'; then
+    category="subsystem"
+  elif printf '%s\n' "$path" | grep -q '^src/dj_digger/.*\.py$'; then
+    # Check if it's cli.py or another top-level Python file
+    if [ "$path" = "src/dj_digger/cli.py" ] || \
+       [ "$path" = "src/dj_digger/__main__.py" ] || \
+       [ "$path" = "src/dj_digger/__init__.py" ]; then
+      category="runtime"
+    else
+      # Check if it's in any other subsystem module
+      first_module=$(printf '%s\n' "$path" | sed 's|^src/dj_digger/||' | cut -d/ -f1 | sed 's/\.py$//')
+      case "$first_module" in
+        scanning|metadata|artifacts)
+          category="subsystem"
+          ;;
+        *)
+          # Default to subsystem for unknown modules
+          category="subsystem"
+          ;;
+      esac
+    fi
+  fi
+
+  # If we found a category, add it to the list
+  if [ -n "$category" ]; then
+    # Add to categories if not already present (avoid duplicates)
+    if ! printf '%s\n' "$categories" | grep -q "^$category$"; then
+      if [ -z "$categories" ]; then
+        categories="$category"
+      else
+        categories="$categories
+$category"
+      fi
+    fi
+  fi
+done
+
+# Count distinct production categories (not including focused or docs)
+production_count=$(printf '%s\n' "$categories" | grep -v '^focused$' | grep -v '^docs$' | grep -c . || true)
+
+# If no categories found, default to focused
+if [ -z "$categories" ]; then
+  printf '%s\n' "focused"
+elif [ "$production_count" = 0 ]; then
+  # Only focused and/or docs files found
+  if printf '%s\n' "$categories" | grep -q '^docs$'; then
+    printf '%s\n' "docs"
+  else
+    printf '%s\n' "focused"
+  fi
+elif [ "$production_count" -gt 1 ]; then
+  # Multiple production categories found
+  printf '%s\n' "full"
+else
+  # Single production category
+  printf '%s\n' "$categories" | grep -v '^focused$' | grep -v '^docs$'
+fi

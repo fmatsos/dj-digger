@@ -1,0 +1,43 @@
+#!/bin/sh
+set -eu
+
+# Validate that at least one allowed path is provided
+if [ $# -lt 1 ]; then
+  printf 'usage: staged-check <allowed-path> [allowed-path ...]\n' >&2
+  exit 2
+fi
+
+# Get list of allowed paths (sort them)
+allowed=$(printf '%s\n' "$@" | LC_ALL=C sort)
+
+# Get list of staged paths (sort them)
+staged=$(git diff --cached --name-only 2>/dev/null | LC_ALL=C sort || true)
+
+# Compare staged paths with allowed paths
+if [ "$staged" != "$allowed" ]; then
+  printf 'staged scope mismatch\nallowed:\n%s\nstaged:\n%s\n' "$allowed" "$staged" >&2
+  exit 1
+fi
+
+# Run protect-local validation using the same directory as this script
+script_dir="$(dirname "$0")"
+if ! "$script_dir/protect-local" --staged; then
+  exit 1
+fi
+
+# Check for conflict markers in staged content (only in added lines, anchored
+# to the real marker shapes to avoid false-positives on e.g. Markdown setext
+# underlines like "=======")
+if git diff --cached | grep -qE '^\+(<{7}( |$)|={7}$|>{7}( |$))'; then
+  printf 'conflict markers detected in staged content\n' >&2
+  exit 1
+fi
+
+# Run git diff --cached --check to detect other issues
+if ! git diff --cached --check; then
+  exit 1
+fi
+
+# All checks passed
+printf 'PASS staged scope\n'
+exit 0

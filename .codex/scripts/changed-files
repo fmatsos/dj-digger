@@ -1,0 +1,9 @@
+#!/bin/sh
+set -eu
+root=$(git rev-parse --show-toplevel)
+cd "$root"
+{
+  git diff --name-only
+  git diff --cached --name-only
+  git ls-files --others --exclude-standard
+} | sed '/^$/d' | LC_ALL=C sort -u
