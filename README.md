@@ -26,25 +26,8 @@ It can:
 - guide an LLM through source-aware, duration-aware DJ set curation;
 - create portable snapshots of the published catalog data.
 
-The canonical data flow is:
-
-```text
-Configured music sources
-        |
-        v
-File scan and metadata extraction
-        |
-        v
-Current SQLite catalog
-        |
-        +--> Audio analysis
-        |
-        v
-Validated exports and snapshots
-        |
-        v
-DJ set curation and other consumers
-```
+For the data flow, catalog model, processing boundaries, and SQLite lifecycle, see
+[Architecture](docs/ARCHITECTURE.md).
 
 Audio fingerprinting, automatic move or rename reconciliation, and duplicate
 detection are not part of the current scope.
@@ -149,10 +132,9 @@ ffprobe -version
 The SQLite database is written to `workspace/dj-digger.sqlite`. Published files are
 written to `workspace/exports/` with the example configuration.
 
-DJ Digger supports only the current catalog schema (v6). If the workspace contains a
-catalog created by an earlier release, keep it as a backup and move it out of the
-workspace before running the current version. DJ Digger will create a fresh v6 catalog;
-it does not migrate legacy catalogs.
+DJ Digger uses Catalog V7. It creates fresh V7 catalogs and upgrades V6 catalogs in
+place. Catalogs from V1 through V5 remain unsupported; preserve them as backups and
+move them out of the configured workspace before creating a fresh V7 catalog.
 
 ### Native Python installation
 
@@ -278,23 +260,10 @@ progress display.
 
 ### Analyze large libraries
 
-Audio analysis is designed for libraries containing many tracks:
-
-- each track is analyzed by a fresh Python child process, so a native Essentia crash
-  cannot stop the remaining queue;
-- child processes only read audio and return versioned JSON; the parent process alone
-  schedules work, updates SQLite, and renders Rich progress;
-- decoded audio stays in single precision (`float32`);
-- spectral facts are accumulated one FFT frame at a time instead of retaining a
-  whole-track spectrum matrix;
-- each completed track is committed to SQLite immediately;
-- only `--workers` tracks can be analyzed concurrently;
-- successful results are reused when the input file and analysis identity are unchanged.
-
-BPM detection uses Essentia's `PercivalBpmEstimator` to estimate the track's global
-tempo. DJ Digger then feeds that tempo into `BpmHistogram` with constant-tempo
-tracking over an onset novelty curve, producing the beat grid used by intro/outro
-windows and structural sections.
+Audio analysis supports bounded worker concurrency, per-track timeouts, resumable
+results, and source/path filters. The child-process isolation, parent-owned SQLite
+persistence, and DSP memory model are described in
+[Architecture](docs/ARCHITECTURE.md#isolated-audio-analysis).
 
 The default is one worker, which gives the lowest memory usage:
 
@@ -322,13 +291,8 @@ dj-digger analyze --config config/local.toml --limit 25 --workers 1
 dj-digger analyze --config config/local.toml --path "Techno" --workers 1
 ```
 
-An analysis run is recorded as `running` before extraction starts. If the process is
-stopped externally, every track committed before the interruption remains reusable. On
-the next invocation, DJ Digger automatically finalizes the abandoned run as `partial` or
-`failed`, then processes only remaining eligible work.
-
-Only one analysis command may use a catalog at a time. A second concurrent invocation
-fails immediately instead of modifying or duplicating the active run.
+Completed tracks remain reusable after an interruption. Only one analysis command may
+use a catalog at a time; a concurrent invocation fails immediately.
 
 ### Configure a ChatGPT or Claude project
 
@@ -507,9 +471,10 @@ immediately and will be reused after restarting the command.
 
 ### Why is my existing SQLite catalog rejected?
 
-DJ Digger supports only the consolidated v6 schema. Catalogs created with versions v1–v5
-are not upgraded. Preserve the old database as a backup, move it out of the configured
-workspace location, and rerun DJ Digger to create a fresh catalog.
+DJ Digger creates fresh V7 catalogs and upgrades V6 catalogs in place. Catalogs created
+with versions V1 through V5 are not upgraded. Preserve an unsupported database as a
+backup, move it out of the configured workspace location, and rerun DJ Digger to create
+a fresh V7 catalog.
 
 ### Why does `doctor` report missing programs?
 
@@ -558,42 +523,6 @@ not include the common root or source IDs.
 
 ## Architecture
 
-DJ Digger uses a layered Python architecture under `src/dj_digger/`:
-
-| Layer | Location | Responsibility |
-| --- | --- | --- |
-| Command line | `cli.py` | Defines Typer commands, JSON diagnostics, and exit codes. |
-| Orchestration | `application.py` | Coordinates scans, metadata, analysis, exports, snapshots, and health checks. |
-| Configuration | `config.py` | Loads and validates workspace, source, and DSP settings. |
-| Scanning | `scanning/` | Discovers supported files and records source scan lifecycles. |
-| Metadata | `metadata/` | Extracts and normalizes embedded tags with ExifTool. |
-| Catalog | `catalog/` | Owns SQLite access, current-schema initialization, models, and repositories. |
-| Analysis | `analysis/` | Runs audio decoding, DSP extraction, segmentation, semantics, and persistence. |
-| Exports | `exports/` | Validates and atomically publishes catalog, analysis, audit, and snapshot files. |
-| LLM curation | `skills/electronic-dj-set-curator/` | Turns eligible exports into a narrative DJ set with validated transitions and alternatives. |
-
-`WorkspaceApplication` is the main coordination boundary. It opens the SQLite
-database, validates or initializes its schema, registers configured sources, and
-calls the service for each CLI operation. The catalog is the durable source of truth;
-export files are generated views and can be recreated.
-
-The main pipeline is:
-
-1. `scan` observes configured source folders and reconciles successful observations.
-2. `metadata` selects new or changed tracks and stores normalized embedded tags.
-3. `analyze` selects eligible tracks and stores versioned technical and structural
-   results.
-4. `export` validates and publishes the current facets with atomic file replacement.
-5. `snapshot` packages validated exports for transfer or archival.
-
-The analysis identity includes its schema version, analyzer version, and DSP
-configuration hash. This makes stale analysis detectable when code or analysis
-settings change. JSON Schemas in `schemas/` define the public export contracts. The
-single schema in `src/dj_digger/catalog/sql/` initializes fresh catalogs; generated
-exports are never treated as primary storage.
-
-The LLM curator is a downstream consumer, not part of the catalog runtime. This
-separation keeps availability and technical facts deterministic while allowing the
-LLM to reason about musical narrative, energy progression, alternatives, and
-improvisation. Its outputs conform to `schemas/dj-set.schema.json`; they do not modify
-the SQLite catalog or the source music files.
+See [Architecture](docs/ARCHITECTURE.md) for the current Catalog V7 data model,
+migration path, connection and concurrency lifecycle, processing flows, publication
+contracts, maintenance commands, and extension invariants.

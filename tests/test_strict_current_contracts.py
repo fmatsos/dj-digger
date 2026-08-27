@@ -48,7 +48,7 @@ def test_fresh_catalog_initializes_consolidated_current_schema(tmp_path: Path) -
 
     database.migrate()
 
-    assert database.scalar("PRAGMA user_version") == 6
+    assert database.scalar("PRAGMA user_version") == 7
     assert database.table_exists("library_sources")
     assert database.table_exists("track_sections")
     assert {
@@ -61,16 +61,76 @@ def test_fresh_catalog_initializes_consolidated_current_schema(tmp_path: Path) -
     assert {
         row[2] for row in database.execute("PRAGMA foreign_key_list(track_sections)").fetchall()
     } == {"audio_analysis"}
+    assert {
+        row[1]
+        for row in database.execute("PRAGMA table_info(current_track_analysis)").fetchall()
+    } == {
+        "track_id",
+        "audio_analysis_id",
+        "analysis_schema_version",
+        "analyzer_version",
+        "config_hash",
+        "analysis_confidence",
+        "bpm",
+        "bpm_confidence",
+        "beat_stability",
+        "key",
+        "key_confidence",
+        "sub_energy",
+        "low_energy",
+        "low_mid_energy",
+        "updated_at",
+    }
+    projection_foreign_keys = database.execute(
+        "PRAGMA foreign_key_list(current_track_analysis)"
+    ).fetchall()
+    assert {(row[2], row[3], row[4], row[6]) for row in projection_foreign_keys} == {
+        ("tracks", "track_id", "id", "CASCADE"),
+        ("audio_analysis", "audio_analysis_id", "id", "NO ACTION"),
+    }
+    assert database.scalar(
+        "SELECT 1 FROM sqlite_master WHERE type = 'view' AND name = 'library_tracks'"
+    ) == 1
+    assert {
+        "set_eligible",
+        "analysis_enabled",
+        "relative_path",
+        "audio_analysis_id",
+        "key",
+        "low_mid_energy",
+    } <= {
+        row[1] for row in database.execute("PRAGMA table_info(library_tracks)").fetchall()
+    }
+    expected_indexes = {
+        "idx_audio_analysis_success_lookup",
+        "idx_audio_analysis_run_status",
+        "idx_audio_analysis_track_history",
+        "idx_track_events_analysis_run_type",
+        "idx_tracks_present_reconciliation",
+        "idx_directories_present_reconciliation",
+        "idx_library_artifacts_present_reconciliation",
+    }
+    assert expected_indexes <= {
+        row[0]
+        for row in database.execute(
+            "SELECT name FROM sqlite_master WHERE type = 'index'"
+        ).fetchall()
+    }
 
 
-def test_catalog_version_five_is_rejected_as_unsupported_legacy(tmp_path: Path) -> None:
+@pytest.mark.parametrize("version", range(1, 6))
+def test_catalog_versions_one_to_five_are_rejected_as_unsupported_legacy(
+    tmp_path: Path, version: int
+) -> None:
     path = tmp_path / "catalog.sqlite"
     connection = sqlite3.connect(path)
-    connection.execute("PRAGMA user_version = 5")
+    connection.execute(f"PRAGMA user_version = {version}")
     connection.close()
     database = Database.open(path)
 
-    with pytest.raises(RuntimeError, match="legacy catalog version 5 is unsupported.*recreate"):
+    with pytest.raises(
+        RuntimeError, match=rf"legacy catalog version {version} is unsupported.*recreate"
+    ):
         database.migrate()
 
 
@@ -95,7 +155,7 @@ def test_current_catalog_migration_is_a_no_op(tmp_path: Path) -> None:
 
     database.migrate()
 
-    assert database.scalar("PRAGMA user_version") == 6
+    assert database.scalar("PRAGMA user_version") == 7
     assert database.scalar("SELECT value FROM migration_sentinel") == "preserved"
 
 

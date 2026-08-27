@@ -1,14 +1,18 @@
 """Focused orchestration contracts for the unified analysis publication."""
 
 import json
+import sqlite3
 from pathlib import Path
 from types import SimpleNamespace
+
+import pytest
 
 from dj_digger.analysis.config import AnalysisIdentity
 from dj_digger.analysis.persistence import AnalysisOutcome, AnalysisPersistence
 from dj_digger.analysis.pipeline import AnalysisRunResult
 from dj_digger.application import WorkspaceApplication
-from dj_digger.catalog.repositories import ScanRunRepository, TrackRepository
+from dj_digger.catalog.database import Database
+from dj_digger.catalog.repositories import ScanRunRepository, SourceRepository, TrackRepository
 from dj_digger.config import LibrarySourceConfig, WorkspaceConfig
 
 
@@ -42,12 +46,81 @@ def _workspace(tmp_path: Path) -> WorkspaceConfig:
     )
 
 
+def test_configured_sources_are_synchronized_atomically(monkeypatch, tmp_path: Path) -> None:
+    first_root = tmp_path / "first"
+    second_root = tmp_path / "second"
+    first_root.mkdir()
+    second_root.mkdir()
+    config = WorkspaceConfig(
+        database=tmp_path / "catalog.sqlite",
+        exports=tmp_path / "exports",
+        sources=(
+            LibrarySourceConfig("first", first_root, True, True, True),
+            LibrarySourceConfig("second", second_root, True, True, True),
+        ),
+    )
+    original_upsert = SourceRepository.upsert
+    original_open = Database.open
+    opened_databases: list[Database] = []
+
+    def record_open(path: Path) -> Database:
+        database = original_open(path)
+        opened_databases.append(database)
+        return database
+
+    def fail_on_second(self, source_id, *args, **kwargs):
+        original_upsert(self, source_id, *args, **kwargs)
+        if source_id == "second":
+            raise RuntimeError("second source rejected")
+
+    monkeypatch.setattr("dj_digger.application.Database.open", record_open)
+    monkeypatch.setattr(SourceRepository, "upsert", fail_on_second)
+
+    with pytest.raises(RuntimeError, match="second source rejected"):
+        WorkspaceApplication(config)
+
+    assert len(opened_databases) == 1
+    with pytest.raises(sqlite3.ProgrammingError, match="closed database"):
+        opened_databases[0].scalar("SELECT 1")
+    with original_open(config.database) as database:
+        assert database.scalar("SELECT COUNT(*) FROM library_sources") == 0
+
+
+def test_track_insert_rolls_back_with_its_caller_transaction(tmp_path: Path) -> None:
+    application = WorkspaceApplication(_workspace(tmp_path))
+    scan_id = ScanRunRepository(application.database).start("source", scanner_version="test")
+
+    with pytest.raises(RuntimeError, match="abort track insert"):
+        with application.database.transaction():
+            TrackRepository(application.database).insert(
+                source_id="source",
+                relative_path="Techno/A.flac",
+                filename="A.flac",
+                extension=".flac",
+                size_bytes=10,
+                mtime_ns=20,
+                scan_id=scan_id,
+            )
+            raise RuntimeError("abort track insert")
+
+    assert application.database.scalar("SELECT COUNT(*) FROM tracks") == 0
+
+
+def test_workspace_application_context_closes_its_database(tmp_path: Path) -> None:
+    with WorkspaceApplication(_workspace(tmp_path)) as application:
+        database = application.database
+
+    with pytest.raises(sqlite3.ProgrammingError, match="closed database"):
+        database.scalar("SELECT 1")
+
+
 def _seed_failed_run(application: WorkspaceApplication) -> AnalysisRunResult:
     scan_id = ScanRunRepository(application.database).start("source", scanner_version="test")
-    track = TrackRepository(application.database).insert(
-        source_id="source", relative_path="Techno/A.flac", filename="A.flac",
-        extension=".flac", size_bytes=10, mtime_ns=20, scan_id=scan_id,
-    )
+    with application.database.transaction():
+        track = TrackRepository(application.database).insert(
+            source_id="source", relative_path="Techno/A.flac", filename="A.flac",
+            extension=".flac", size_bytes=10, mtime_ns=20, scan_id=scan_id,
+        )
     identity = application._analysis_identity
     persistence = AnalysisPersistence(application.database)
     run_id = persistence.start_run(

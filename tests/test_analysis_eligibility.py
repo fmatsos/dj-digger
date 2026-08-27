@@ -46,21 +46,26 @@ def present_track(
     analyze: bool = True,
     enabled: bool = True,
 ) -> Track:
-    SourceRepository(database).upsert(
-        source_id, Path(f"/mnt/{source_id}"), set_eligible=True, analyze=analyze, enabled=enabled
-    )
+    with database.transaction():
+        SourceRepository(database).upsert(
+            source_id,
+            Path(f"/mnt/{source_id}"),
+            set_eligible=True,
+            analyze=analyze,
+            enabled=enabled,
+        )
     scan_id = ScanRunRepository(database).start(source_id, scanner_version="test")
-    track = catalog.insert(
-        source_id=source_id,
-        relative_path=path,
-        filename=Path(path).name,
-        extension=Path(path).suffix,
-        size_bytes=size,
-        mtime_ns=mtime_ns,
-        scan_id=scan_id,
-    )
-    database.execute("UPDATE scan_runs SET status = 'succeeded' WHERE id = ?", (scan_id,))
-    database.commit()
+    with database.transaction():
+        track = catalog.insert(
+            source_id=source_id,
+            relative_path=path,
+            filename=Path(path).name,
+            extension=Path(path).suffix,
+            size_bytes=size,
+            mtime_ns=mtime_ns,
+            scan_id=scan_id,
+        )
+        database.execute("UPDATE scan_runs SET status = 'succeeded' WHERE id = ?", (scan_id,))
     return track
 
 

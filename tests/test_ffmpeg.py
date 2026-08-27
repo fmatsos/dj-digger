@@ -1,5 +1,7 @@
 from pathlib import Path
 
+import pytest
+
 from dj_digger.analysis.audio import TechnicalAudioMetadata
 from dj_digger.analysis.ffmpeg import FFmpegProbe
 from dj_digger.catalog.database import Database
@@ -113,14 +115,59 @@ def test_technical_audio_metadata_repository_upserts_current_probe(tmp_path: Pat
     database.commit()
 
     repository = TechnicalAudioMetadataRepository(database)
-    repository.upsert(
-        track, TechnicalAudioMetadata(sample_rate=48_000, lossless=True), "ffmpeg-test"
-    )
-    repository.upsert(
-        track, TechnicalAudioMetadata(sample_rate=44_100, lossless=False), "ffmpeg-test-2"
-    )
+    with database.transaction():
+        repository.upsert(
+            track, TechnicalAudioMetadata(sample_rate=48_000, lossless=True), "ffmpeg-test"
+        )
+        repository.upsert(
+            track, TechnicalAudioMetadata(sample_rate=44_100, lossless=False), "ffmpeg-test-2"
+        )
 
     assert database.execute(
         "SELECT sample_rate, lossless, probe_version FROM technical_audio_metadata "
         "WHERE track_id = 1"
     ).fetchone() == (44_100, 0, "ffmpeg-test-2")
+
+
+def test_technical_audio_metadata_upsert_rolls_back_with_its_caller_transaction(
+    tmp_path: Path,
+) -> None:
+    database = Database.open(tmp_path / "catalog.sqlite")
+    database.migrate()
+    database.execute(
+        "INSERT INTO library_sources "
+        "(source_id, root_path, set_eligible, analyze, enabled, created_at, updated_at) "
+        "VALUES ('source', '/music', 1, 1, 1, 'now', 'now')"
+    )
+    database.execute(
+        "INSERT INTO scan_runs (source_id, started_at, status, scanner_version) "
+        "VALUES ('source', 'now', 'running', 'test')"
+    )
+    database.execute(
+        "INSERT INTO tracks (id, source_id, relative_path, filename, extension, size_bytes, "
+        "mtime_ns, presence_status, discovered_at, last_seen_at, created_scan_id, "
+        "last_seen_scan_id) VALUES (1, 'source', 'track.flac', 'track.flac', '.flac', 4, 5, "
+        "'present', 'now', 'now', 1, 1)"
+    )
+    database.commit()
+    track = Track(
+        id=1,
+        source_id="source",
+        relative_path="track.flac",
+        filename="track.flac",
+        extension=".flac",
+        size_bytes=4,
+        mtime_ns=5,
+        presence_status="present",
+    )
+
+    with pytest.raises(RuntimeError, match="abort technical metadata"):
+        with database.transaction():
+            TechnicalAudioMetadataRepository(database).upsert(
+                track,
+                TechnicalAudioMetadata(sample_rate=48_000, lossless=True),
+                "ffmpeg-test",
+            )
+            raise RuntimeError("abort technical metadata")
+
+    assert database.scalar("SELECT COUNT(*) FROM technical_audio_metadata") == 0
