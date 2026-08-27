@@ -1,0 +1,29 @@
+{
+  "enabledPlugins": {
+    "pyright-lsp@claude-plugins-official": true
+  },
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if command -v codegraph >/dev/null 2>&1; then exec codegraph prompt-hook; fi"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".claude/scripts/protect-local --staged"
+          }
+        ]
+      }
+    ]
+  }
+}
