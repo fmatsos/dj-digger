@@ -9,6 +9,7 @@ from typing import Any
 from dj_digger.analysis.aggregation import canonical_json
 from dj_digger.analysis.config import AnalysisIdentity
 from dj_digger.analysis.extractor import AnalysisExtractionResult, Stage
+from dj_digger.catalog.current_analysis import CurrentAnalysisProjector
 from dj_digger.catalog.database import Database
 from dj_digger.catalog.models import Track
 
@@ -96,6 +97,7 @@ class AnalysisPersistence:
                 )
                 if sections is not None:
                     self._insert_sections(analysis_id, sections)
+                CurrentAnalysisProjector(self._database).advance(analysis_id)
                 self._append_event(
                     track.id,
                     run_id,

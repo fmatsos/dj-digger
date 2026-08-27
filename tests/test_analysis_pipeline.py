@@ -44,21 +44,23 @@ class RecordingProgress:
 
 
 def _track(database: Database, source_id: str, path: str) -> Track:
-    SourceRepository(database).upsert(
-        source_id, Path(f"/{source_id}"), set_eligible=True, analyze=True, enabled=True
-    )
+    with database.transaction():
+        SourceRepository(database).upsert(
+            source_id, Path(f"/{source_id}"), set_eligible=True, analyze=True, enabled=True
+        )
     scan_id = database.scalar("SELECT id FROM scan_runs WHERE source_id = ?", (source_id,))
     if scan_id is None:
         scan_id = ScanRunRepository(database).start(source_id, scanner_version="test")
-    return TrackRepository(database).insert(
-        source_id=source_id,
-        relative_path=path,
-        filename=Path(path).name,
-        extension=Path(path).suffix,
-        size_bytes=10,
-        mtime_ns=20,
-        scan_id=int(scan_id),
-    )
+    with database.transaction():
+        return TrackRepository(database).insert(
+            source_id=source_id,
+            relative_path=path,
+            filename=Path(path).name,
+            extension=Path(path).suffix,
+            size_bytes=10,
+            mtime_ns=20,
+            scan_id=int(scan_id),
+        )
 
 
 def _pipeline(database: Database, calls: list[str]):
@@ -305,6 +307,7 @@ def test_pipeline_force_reports_partial_when_reuse_and_pending_failure_coexist(
     pipeline = AnalysisPipeline(database, IDENTITY, extract)
     pipeline.run()
     failing_id = database.scalar("SELECT id FROM tracks WHERE relative_path = 'House/failing.flac'")
+    database.execute("DELETE FROM current_track_analysis WHERE track_id = ?", (failing_id,))
     database.execute("DELETE FROM audio_analysis WHERE track_id = ?", (failing_id,))
     database.commit()
     result = pipeline.run(force=True)

@@ -11,7 +11,8 @@ from typing import Any, cast
 from jsonschema import Draft202012Validator  # type: ignore[import-untyped]
 
 from dj_digger.catalog.database import Database
-from dj_digger.catalog.repositories import SourceRepository, TrackRepository
+from dj_digger.catalog.read_repositories import LibraryReadRepository
+from dj_digger.catalog.repositories import SourceRepository
 from dj_digger.exports.atomic import publish_atomic
 
 ROW_FIELDS = (
@@ -92,7 +93,7 @@ class TracksExporter:
 
     def _rows(self, roots: dict[str, Path]) -> list[dict[str, Any]]:
         result: list[dict[str, Any]] = []
-        for values in TrackRepository(self._database).export_rows():
+        for values in LibraryReadRepository(self._database).export_rows():
             track_id, source_id, path, filename, _extension, size, mtime, eligible, *metadata = (
                 values
             )

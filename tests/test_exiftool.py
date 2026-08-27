@@ -40,19 +40,21 @@ def catalog_with_two_tracks(
 ) -> tuple[Database, Track, Track]:
     database = Database.open(tmp_path / "catalog.sqlite")
     database.migrate()
-    SourceRepository(database).upsert(
-        "source", tmp_path / "source", set_eligible=True, analyze=True, enabled=True
-    )
+    with database.transaction():
+        SourceRepository(database).upsert(
+            "source", tmp_path / "source", set_eligible=True, analyze=True, enabled=True
+        )
     run_id = ScanRunRepository(database).start("source", scanner_version="test")
     tracks = TrackRepository(database)
-    first = tracks.insert(
-        source_id="source", relative_path="A.flac", filename="A.flac", extension=".flac",
-        size_bytes=1, mtime_ns=2, scan_id=run_id,
-    )
-    second = first if one_track else tracks.insert(
-        source_id="source", relative_path="B.flac", filename="B.flac", extension=".flac",
-        size_bytes=3, mtime_ns=4, scan_id=run_id,
-    )
+    with database.transaction():
+        first = tracks.insert(
+            source_id="source", relative_path="A.flac", filename="A.flac", extension=".flac",
+            size_bytes=1, mtime_ns=2, scan_id=run_id,
+        )
+        second = first if one_track else tracks.insert(
+            source_id="source", relative_path="B.flac", filename="B.flac", extension=".flac",
+            size_bytes=3, mtime_ns=4, scan_id=run_id,
+        )
     return database, first, second
 
 
@@ -301,19 +303,21 @@ def test_metadata_refresh_is_incremental_records_changes_and_keeps_failures_pres
     database = Database.open(tmp_path / "catalog.sqlite")
     database.migrate()
     root = tmp_path / "source"
-    SourceRepository(database).upsert(
-        "source", root, set_eligible=True, analyze=True, enabled=True
-    )
+    with database.transaction():
+        SourceRepository(database).upsert(
+            "source", root, set_eligible=True, analyze=True, enabled=True
+        )
     run_id = ScanRunRepository(database).start("source", scanner_version="test")
     tracks = TrackRepository(database)
-    first = tracks.insert(
-        source_id="source", relative_path="A.flac", filename="A.flac", extension=".flac",
-        size_bytes=1, mtime_ns=2, scan_id=run_id,
-    )
-    second = tracks.insert(
-        source_id="source", relative_path="B.flac", filename="B.flac", extension=".flac",
-        size_bytes=3, mtime_ns=4, scan_id=run_id,
-    )
+    with database.transaction():
+        first = tracks.insert(
+            source_id="source", relative_path="A.flac", filename="A.flac", extension=".flac",
+            size_bytes=1, mtime_ns=2, scan_id=run_id,
+        )
+        second = tracks.insert(
+            source_id="source", relative_path="B.flac", filename="B.flac", extension=".flac",
+            size_bytes=3, mtime_ns=4, scan_id=run_id,
+        )
 
     class Extractor:
         version = "exiftool-test"

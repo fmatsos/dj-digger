@@ -47,19 +47,21 @@ def test_export_publishes_source_aware_validated_analysis_facets(tmp_path: Path)
 
     database = Database.open(tmp_path / "catalog.sqlite")
     database.migrate()
-    SourceRepository(database).upsert(
-        "djing", tmp_path / "music", set_eligible=True, analyze=True, enabled=True
-    )
+    with database.transaction():
+        SourceRepository(database).upsert(
+            "djing", tmp_path / "music", set_eligible=True, analyze=True, enabled=True
+        )
     scan_id = ScanRunRepository(database).start("djing", scanner_version="test")
-    track = TrackRepository(database).insert(
-        source_id="djing",
-        relative_path="Techno/A.flac",
-        filename="A.flac",
-        extension=".flac",
-        size_bytes=10,
-        mtime_ns=20,
-        scan_id=scan_id,
-    )
+    with database.transaction():
+        track = TrackRepository(database).insert(
+            source_id="djing",
+            relative_path="Techno/A.flac",
+            filename="A.flac",
+            extension=".flac",
+            size_bytes=10,
+            mtime_ns=20,
+            scan_id=scan_id,
+        )
     run = database.execute(
         """
         INSERT INTO analysis_runs (
@@ -107,14 +109,16 @@ def test_export_rolls_back_all_previous_facets_when_second_publish_replace_fails
 
     database = Database.open(tmp_path / "catalog.sqlite")
     database.migrate()
-    SourceRepository(database).upsert(
-        "djing", tmp_path / "music", set_eligible=True, analyze=True, enabled=True
-    )
+    with database.transaction():
+        SourceRepository(database).upsert(
+            "djing", tmp_path / "music", set_eligible=True, analyze=True, enabled=True
+        )
     scan_id = ScanRunRepository(database).start("djing", scanner_version="test")
-    track = TrackRepository(database).insert(
-        source_id="djing", relative_path="A.flac", filename="A.flac", extension=".flac",
-        size_bytes=10, mtime_ns=20, scan_id=scan_id,
-    )
+    with database.transaction():
+        track = TrackRepository(database).insert(
+            source_id="djing", relative_path="A.flac", filename="A.flac", extension=".flac",
+            size_bytes=10, mtime_ns=20, scan_id=scan_id,
+        )
     run = database.execute(
         """
         INSERT INTO analysis_runs (

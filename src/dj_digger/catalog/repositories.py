@@ -39,7 +39,6 @@ class SourceRepository:
             """,
             (source_id, str(root_path), set_eligible, analyze, enabled, now, now),
         )
-        self._database.commit()
 
     def update_root(self, source_id: str, root_path: Path) -> None:
         """Relocate a configured source while retaining its source identifier."""
@@ -47,7 +46,6 @@ class SourceRepository:
             "UPDATE library_sources SET root_path = ?, updated_at = ? WHERE source_id = ?",
             (str(root_path), _now(), source_id),
         )
-        self._database.commit()
 
     def set_last_successful_scan(self, source_id: str, run_id: int, now: str) -> None:
         """Record the scan that last reconciled this source."""
@@ -141,26 +139,6 @@ class TrackRepository:
     def __init__(self, database: Database) -> None:
         self._database = database
 
-    def export_rows(self) -> list[tuple[Any, ...]]:
-        """Return present tracks with their current public metadata projection."""
-        return self._database.execute(
-            """
-            SELECT t.id, t.source_id, t.relative_path, t.filename, t.extension,
-                   t.size_bytes, t.mtime_ns, s.set_eligible,
-                   e.title, e.artist, e.album_artist, e.album, e.track_number,
-                   e.disc_number, e.genre, e.date, e.year, e.composer, e.comment,
-                   e.tag_bpm, e.tag_initial_key, e.grouping,
-                   a.duration_seconds, a.sample_rate, a.channels, a.codec,
-                   a.container, a.bitrate, a.lossless
-            FROM tracks t
-            JOIN library_sources s ON s.source_id = t.source_id
-            LEFT JOIN embedded_metadata e ON e.track_id = t.id
-            LEFT JOIN technical_audio_metadata a ON a.track_id = t.id
-            WHERE t.presence_status = 'present'
-            ORDER BY t.source_id, t.relative_path, t.id
-            """
-        ).fetchall()
-
     def insert(
         self,
         *,
@@ -194,7 +172,6 @@ class TrackRepository:
                 scan_id,
             ),
         )
-        self._database.commit()
         if cursor.lastrowid is None:
             raise RuntimeError("SQLite did not return a track id")
         track = self.find(source_id, relative_path)
@@ -598,7 +575,6 @@ class TechnicalAudioMetadataRepository:
                 _now(),
             ),
         )
-        self._database.commit()
 
 
 @dataclass(frozen=True)

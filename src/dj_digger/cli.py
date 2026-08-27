@@ -18,6 +18,8 @@ app = typer.Typer(
     invoke_without_command=True,
     context_settings={"help_option_names": ["-h", "--help"]},
 )
+database_app = typer.Typer(help="Inspect and maintain the SQLite catalog.")
+app.add_typer(database_app, name="database")
 
 
 @app.callback()
@@ -65,7 +67,8 @@ def _run(config_path: Path, action: Any) -> None:
     config = WorkspaceConfig.load(config_path)
     logger = RunLogger(config.database)
     try:
-        diagnostic = action(WorkspaceApplication(config))
+        with WorkspaceApplication(config) as service:
+            diagnostic = action(service)
     except Exception as error:
         diagnostic = {"event": "command", "status": "failed", "error": str(error)}
     logger.write(diagnostic)
@@ -227,6 +230,30 @@ def doctor(config: ConfigOption) -> None:
 def status(config: ConfigOption) -> None:
     """Report source freshness and currently known catalog state."""
     _run(config, lambda service: service.status())
+
+
+@database_app.command("optimize")
+def database_optimize(config: ConfigOption) -> None:
+    """Update SQLite planner statistics when useful."""
+    _run(config, lambda service: service.optimize_database())
+
+
+@database_app.command("quick-check")
+def database_quick_check(config: ConfigOption) -> None:
+    """Run SQLite's lightweight consistency check."""
+    _run(config, lambda service: service.quick_check_database())
+
+
+@database_app.command("integrity-check")
+def database_integrity_check(config: ConfigOption) -> None:
+    """Run SQLite's explicit full integrity check."""
+    _run(config, lambda service: service.integrity_check_database())
+
+
+@database_app.command("rebuild-current-analysis")
+def database_rebuild_current_analysis(config: ConfigOption) -> None:
+    """Rebuild the derived latest-successful-analysis projection."""
+    _run(config, lambda service: service.rebuild_current_analysis())
 
 
 @app.command()

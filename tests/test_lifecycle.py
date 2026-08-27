@@ -27,12 +27,13 @@ def observation(
 def database(tmp_path: Path) -> Database:
     database = Database.open(tmp_path / "catalog.sqlite")
     database.migrate()
-    SourceRepository(database).upsert(
-        "source", Path("/music"), set_eligible=True, analyze=True, enabled=True
-    )
-    SourceRepository(database).upsert(
-        "other", Path("/other"), set_eligible=True, analyze=True, enabled=True
-    )
+    with database.transaction():
+        SourceRepository(database).upsert(
+            "source", Path("/music"), set_eligible=True, analyze=True, enabled=True
+        )
+        SourceRepository(database).upsert(
+            "other", Path("/other"), set_eligible=True, analyze=True, enabled=True
+        )
     return database
 
 

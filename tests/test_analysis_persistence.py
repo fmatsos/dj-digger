@@ -17,19 +17,21 @@ def database(tmp_path: Path) -> Database:
 
 @pytest.fixture
 def track(database: Database):
-    SourceRepository(database).upsert(
-        "source", Path("/music"), set_eligible=True, analyze=True, enabled=True
-    )
+    with database.transaction():
+        SourceRepository(database).upsert(
+            "source", Path("/music"), set_eligible=True, analyze=True, enabled=True
+        )
     scan_id = ScanRunRepository(database).start("source", scanner_version="test")
-    return TrackRepository(database).insert(
-        source_id="source",
-        relative_path="Techno/A.flac",
-        filename="A.flac",
-        extension=".flac",
-        size_bytes=10,
-        mtime_ns=20,
-        scan_id=scan_id,
-    )
+    with database.transaction():
+        return TrackRepository(database).insert(
+            source_id="source",
+            relative_path="Techno/A.flac",
+            filename="A.flac",
+            extension=".flac",
+            size_bytes=10,
+            mtime_ns=20,
+            scan_id=scan_id,
+        )
 
 
 def identity(config_hash: str) -> AnalysisIdentity:

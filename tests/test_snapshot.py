@@ -18,9 +18,10 @@ from dj_digger.exports.snapshot import SnapshotExporter
 def test_snapshot_contains_hashed_canonical_facets_and_archive(tmp_path: Path) -> None:
     database = Database.open(tmp_path / "catalog.sqlite")
     database.migrate()
-    SourceRepository(database).upsert(
-        "src", tmp_path / "music", set_eligible=True, analyze=True, enabled=True
-    )
+    with database.transaction():
+        SourceRepository(database).upsert(
+            "src", tmp_path / "music", set_eligible=True, analyze=True, enabled=True
+        )
     database.execute(
         "INSERT INTO scan_runs (source_id, started_at, status, scanner_version) "
         "VALUES ('src', 'now', 'succeeded', 'test')"

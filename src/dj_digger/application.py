@@ -4,7 +4,8 @@ import importlib.util
 import shutil
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from types import TracebackType
+from typing import Any, Self
 
 from dj_digger.analysis.config import CURRENT_ANALYZER_VERSION, AnalysisIdentity
 from dj_digger.analysis.exporters import AnalysisExporter
@@ -15,6 +16,7 @@ from dj_digger.analysis.pipeline import (
     TimedAnalysisExtractor,
 )
 from dj_digger.analysis.worker_client import IsolatedAnalysisExtractor
+from dj_digger.catalog.current_analysis import CurrentAnalysisProjector
 from dj_digger.catalog.database import Database
 from dj_digger.catalog.migrations import CURRENT_VERSION
 from dj_digger.catalog.repositories import SourceRepository
@@ -43,32 +45,53 @@ class WorkspaceApplication:
         self, config: WorkspaceConfig, *, analysis_extractor: AnalysisExtractor | None = None
     ) -> None:
         self.config = config
-        self.database = Database.open(config.database)
-        self.database.migrate()
-        self._sources = SourceRepository(self.database)
-        self._analysis_extractor: AnalysisExtractor | TimedAnalysisExtractor
-        if analysis_extractor is None:
-            self._analysis_identity = AnalysisIdentity(
-                2, CURRENT_ANALYZER_VERSION, config.dsp.config_hash
-            )
-            self._analysis_extractor = IsolatedAnalysisExtractor(
-                {source.id: source.path for source in config.sources}, config.dsp
-            )
-        else:
-            self._analysis_extractor = analysis_extractor
-            self._analysis_identity = getattr(
-                analysis_extractor,
-                "identity",
-                AnalysisIdentity(2, CURRENT_ANALYZER_VERSION, config.dsp.config_hash),
-            )
-        for source in config.sources:
-            self._sources.upsert(
-                source.id,
-                source.path,
-                set_eligible=source.set_eligible,
-                analyze=source.analyze,
-                enabled=source.enabled,
-            )
+        database = Database.open(config.database)
+        self.database = database
+        try:
+            database.migrate()
+            self._sources = SourceRepository(database)
+            self._analysis_extractor: AnalysisExtractor | TimedAnalysisExtractor
+            if analysis_extractor is None:
+                self._analysis_identity = AnalysisIdentity(
+                    2, CURRENT_ANALYZER_VERSION, config.dsp.config_hash
+                )
+                self._analysis_extractor = IsolatedAnalysisExtractor(
+                    {source.id: source.path for source in config.sources}, config.dsp
+                )
+            else:
+                self._analysis_extractor = analysis_extractor
+                self._analysis_identity = getattr(
+                    analysis_extractor,
+                    "identity",
+                    AnalysisIdentity(2, CURRENT_ANALYZER_VERSION, config.dsp.config_hash),
+                )
+            with database.transaction():
+                for source in config.sources:
+                    self._sources.upsert(
+                        source.id,
+                        source.path,
+                        set_eligible=source.set_eligible,
+                        analyze=source.analyze,
+                        enabled=source.enabled,
+                    )
+        except BaseException:
+            database.close()
+            raise
+
+    def close(self) -> None:
+        """Close the application-owned catalog connection."""
+        self.database.close()
+
+    def __enter__(self) -> Self:
+        return self
+
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_value: BaseException | None,
+        traceback: TracebackType | None,
+    ) -> None:
+        self.close()
 
     def scan(self, source_id: str | None = None, *, enabled_only: bool = False) -> list[ScanResult]:
         sources = self._selected_sources(source_id, enabled_only=enabled_only)
@@ -274,6 +297,39 @@ class WorkspaceApplication:
             },
         }
 
+    def optimize_database(self) -> dict[str, Any]:
+        """Run SQLite's bounded planner-statistics maintenance."""
+        self.database.optimize()
+        return {"event": "database.optimize", "status": "succeeded"}
+
+    def quick_check_database(self) -> dict[str, Any]:
+        """Run the lightweight SQLite consistency check explicitly."""
+        result = self.database.quick_check()
+        return {
+            "event": "database.quick-check",
+            "status": "succeeded" if result == "ok" else "failed",
+            "quick_check": result,
+        }
+
+    def integrity_check_database(self) -> dict[str, Any]:
+        """Run SQLite's full integrity check explicitly."""
+        results = self.database.integrity_check()
+        return {
+            "event": "database.integrity-check",
+            "status": "succeeded" if results == ["ok"] else "failed",
+            "integrity_check": results,
+        }
+
+    def rebuild_current_analysis(self) -> dict[str, Any]:
+        """Rebuild the derived latest-success projection, then update planner statistics."""
+        projected_tracks = CurrentAnalysisProjector(self.database).rebuild()
+        self.database.optimize()
+        return {
+            "event": "database.rebuild-current-analysis",
+            "status": "succeeded",
+            "projected_tracks": projected_tracks,
+        }
+
     def doctor(self) -> dict[str, Any]:
         issues: list[str] = []
         for source in self.config.sources:
@@ -296,15 +352,34 @@ class WorkspaceApplication:
                     DspConfig.load(self.config.dsp_path)
                 except (OSError, ValueError) as error:
                     issues.append(f"DSP configuration invalid: {error}")
-        version = int(self.database.scalar("PRAGMA user_version") or 0)
+        database = self.database.diagnostics()
+        version = int(database["schema_version"])
         expected = CURRENT_VERSION
         if version != expected:
             issues.append(f"SQLite migration version is {version}, expected {expected}")
+        if database["journal_mode"] != "wal":
+            issues.append(f"SQLite journal mode is {database['journal_mode']}, expected wal")
+        if database["foreign_keys"] != 1:
+            issues.append("SQLite foreign keys are disabled")
+        if database["quick_check"] != "ok":
+            issues.append(f"SQLite quick check failed: {database['quick_check']}")
         return {
             "event": "doctor",
             "status": "failed" if issues else "succeeded",
-            "database": str(self.config.database),
+            "database": database["path"],
+            "sqlite_version": database["sqlite_version"],
             "migration_version": version,
+            "journal_mode": database["journal_mode"],
+            "foreign_keys": database["foreign_keys"],
+            "synchronous": database["synchronous"],
+            "busy_timeout_ms": database["busy_timeout_ms"],
+            "database_size_bytes": database["file_size_bytes"],
+            "wal_size_bytes": database["wal_size_bytes"],
+            "shm_present": database["shm_present"],
+            "page_count": database["page_count"],
+            "page_size_bytes": database["page_size_bytes"],
+            "freelist_count": database["freelist_count"],
+            "quick_check": database["quick_check"],
             "issues": issues,
         }
 

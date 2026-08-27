@@ -7,7 +7,8 @@ import pytest
 from jsonschema.exceptions import ValidationError
 
 from dj_digger.catalog.database import Database
-from dj_digger.catalog.repositories import SourceRepository
+from dj_digger.catalog.read_repositories import LibraryReadRepository
+from dj_digger.catalog.repositories import SourceRepository, TrackRepository
 from dj_digger.exports.tracks import TracksExporter
 
 TRACK_INSERT = """
@@ -49,12 +50,13 @@ def insert_track(
 def database(tmp_path: Path) -> Database:
     db = Database.open(tmp_path / "catalog.sqlite")
     db.migrate()
-    SourceRepository(db).upsert(
-        "src", tmp_path / "music", set_eligible=True, analyze=True, enabled=True
-    )
-    SourceRepository(db).upsert(
-        "other", tmp_path / "other", set_eligible=False, analyze=True, enabled=True
-    )
+    with db.transaction():
+        SourceRepository(db).upsert(
+            "src", tmp_path / "music", set_eligible=True, analyze=True, enabled=True
+        )
+        SourceRepository(db).upsert(
+            "other", tmp_path / "other", set_eligible=False, analyze=True, enabled=True
+        )
     db.execute(
         """
         INSERT INTO scan_runs (source_id, started_at, status, scanner_version)
@@ -104,21 +106,21 @@ def test_export_header_and_present_joined_rows(database: Database, tmp_path: Pat
     schema = Path("schemas/tracks.schema.json")
     out = tmp_path / "tracks.tsv"
     columns = json.loads(schema.read_text())["x-tabular"]["columns"]
-    insert_track(
-        database,
-        source_id="src",
-        relative_path="A\tB.mp3",
-        mtime_ns=1_700_000_000_000_000_000,
-    )
-    insert_track(
-        database,
-        source_id="src",
-        relative_path="zzz.wav",
-        mtime_ns=1_700_000_000_000_000_000,
-        presence_status="missing",
-    )
-    SourceRepository(database).update_root("src", tmp_path / "relocated")
-    database.commit()
+    with database.transaction():
+        insert_track(
+            database,
+            source_id="src",
+            relative_path="A\tB.mp3",
+            mtime_ns=1_700_000_000_000_000_000,
+        )
+        insert_track(
+            database,
+            source_id="src",
+            relative_path="zzz.wav",
+            mtime_ns=1_700_000_000_000_000_000,
+            presence_status="missing",
+        )
+        SourceRepository(database).update_root("src", tmp_path / "relocated")
 
     facet = TracksExporter(database, schema_path=schema).export(out)
     rows = list(csv.DictReader(out.open(newline="", encoding="utf-8"), delimiter="\t"))
@@ -138,6 +140,41 @@ def test_export_header_and_present_joined_rows(database: Database, tmp_path: Pat
     assert rows[0]["set_eligible"] == "false"
     assert rows[0]["title"] == ""
     assert rows[0]["lossless"] == ""
+
+
+def test_track_repository_keeps_no_export_read_boundary() -> None:
+    assert not hasattr(TrackRepository, "export_rows")
+
+
+def test_view_backed_export_is_byte_identical_to_legacy_projection(
+    database: Database, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    legacy_rows = database.execute(
+        """
+        SELECT t.id, t.source_id, t.relative_path, t.filename, t.extension,
+               t.size_bytes, t.mtime_ns, s.set_eligible,
+               e.title, e.artist, e.album_artist, e.album, e.track_number,
+               e.disc_number, e.genre, e.date, e.year, e.composer, e.comment,
+               e.tag_bpm, e.tag_initial_key, e.grouping,
+               technical.duration_seconds, technical.sample_rate, technical.channels,
+               technical.codec, technical.container, technical.bitrate, technical.lossless
+        FROM tracks AS t
+        JOIN library_sources AS s ON s.source_id = t.source_id
+        LEFT JOIN embedded_metadata AS e ON e.track_id = t.id
+        LEFT JOIN technical_audio_metadata AS technical ON technical.track_id = t.id
+        WHERE t.presence_status = 'present'
+        ORDER BY t.source_id, t.relative_path, t.id
+        """
+    ).fetchall()
+    legacy_path = tmp_path / "legacy.tsv"
+    view_path = tmp_path / "view.tsv"
+
+    with monkeypatch.context() as patch:
+        patch.setattr(LibraryReadRepository, "export_rows", lambda _repository: legacy_rows)
+        TracksExporter(database).export(legacy_path)
+    TracksExporter(database).export(view_path)
+
+    assert view_path.read_bytes() == legacy_path.read_bytes()
 
 
 def test_empty_catalog_header_only(database: Database, tmp_path: Path) -> None:
