@@ -1,0 +1,63 @@
+#!/bin/sh
+set -eu
+
+# Initialize fields with defaults
+status=""
+qa=""
+next=""
+risk=""
+
+# Parse flags
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --status)
+      shift
+      status="$1"
+      ;;
+    --qa)
+      shift
+      qa="$1"
+      ;;
+    --next)
+      shift
+      next="$1"
+      ;;
+    --risk)
+      shift
+      risk="$1"
+      ;;
+    *)
+      printf 'usage: handoff [--status VALUE] [--qa VALUE] [--next VALUE] [--risk VALUE]\n' >&2
+      exit 2
+      ;;
+  esac
+  shift
+done
+
+# Derive branch name
+branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")
+
+# Derive compact diff summary from real shortstat output (files/insertions/deletions)
+staged_summary=$(git diff --cached --shortstat 2>/dev/null | sed 's/^ *//' || echo "")
+unstaged_summary=$(git diff --shortstat 2>/dev/null | sed 's/^ *//' || echo "")
+
+# Create compact diff summary
+if [ -n "$staged_summary" ] && [ -n "$unstaged_summary" ]; then
+  diff_summary="staged: $staged_summary; unstaged: $unstaged_summary"
+elif [ -n "$staged_summary" ]; then
+  diff_summary="staged: $staged_summary"
+elif [ -n "$unstaged_summary" ]; then
+  diff_summary="unstaged: $unstaged_summary"
+else
+  diff_summary="no-diff"
+fi
+
+# Print exactly six lines with headings
+printf 'Status: %s\n' "$status"
+printf 'Branch: %s\n' "$branch"
+printf 'Diff: %s\n' "$diff_summary"
+printf 'QA: %s\n' "$qa"
+printf 'Next: %s\n' "$next"
+printf 'Risk: %s\n' "$risk"
+
+exit 0

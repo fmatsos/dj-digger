@@ -1,0 +1,58 @@
+#!/bin/sh
+set -eu
+
+# Build wheel and verify packaged resources
+# Runs through project-env, unpacks into temp dir, verifies contents, cleans up
+
+root=$(git rev-parse --show-toplevel)
+
+# Create temp directory for unpacking (subshell-wrapped for isolation)
+(
+  tmpdir=$(mktemp -d)
+  trap 'rm -rf "$tmpdir"' EXIT
+
+  # Build wheel using project-env, into a temp dir so nothing lands in the
+  # real dist/ directory
+  cd "$root"
+  ./.codex/scripts/project-env uv build --wheel -q --out-dir "$tmpdir/dist"
+
+  # Find the built wheel (most recently modified)
+  wheel_file=$(ls -t "$tmpdir"/dist/*.whl 2>/dev/null | head -1)
+  if [ -z "$wheel_file" ]; then
+    printf 'package-check: no wheel found in dist/\n' >&2
+    exit 1
+  fi
+
+  # Unpack wheel
+  cd "$tmpdir"
+  unzip -q "$wheel_file"
+
+  # Verify required files
+  errors=0
+
+  # Check for analysis.toml in data directory
+  if ! find . -name "analysis.toml" -type f | grep -q .; then
+    printf 'package-check: analysis.toml not found in wheel\n' >&2
+    errors=1
+  fi
+
+  # Check for schema-bundle.json
+  if ! find . -name "schema-bundle.json" -type f | grep -q .; then
+    printf 'package-check: schema-bundle.json not found in wheel\n' >&2
+    errors=1
+  fi
+
+  # Check for packaged schemas (JSON files in schemas directory or similar)
+  if ! find . -path "*/schemas/*.json" -type f | grep -q .; then
+    printf 'package-check: packaged schemas not found in wheel\n' >&2
+    errors=1
+  fi
+
+  # Check for catalog migration SQL
+  if ! find . -name "*.sql" -type f | grep -q .; then
+    printf 'package-check: catalog migration SQL not found in wheel\n' >&2
+    errors=1
+  fi
+
+  exit "$errors"
+)
