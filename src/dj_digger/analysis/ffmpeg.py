@@ -1,5 +1,6 @@
 """Read-only FFmpeg technical audio probing."""
 
+import dataclasses
 import json
 import re
 import subprocess
@@ -18,9 +19,19 @@ class FFmpegProbe:
         self._ffmpeg = ffmpeg
 
     def probe(self, path: Path) -> TechnicalAudioMetadata:
-        """Return technical facts, leaving the input and filesystem untouched."""
-        facts = self._facts(path)
+        """Return technical facts plus loudness measurements from a full ebur128 pass."""
+        facts = self.probe_facts(path)
         loudness_lufs, true_peak_db, dynamic_range = self._measure(path)
+        return dataclasses.replace(
+            facts,
+            loudness_lufs=loudness_lufs,
+            true_peak_db=true_peak_db,
+            dynamic_range=dynamic_range,
+        )
+
+    def probe_facts(self, path: Path) -> TechnicalAudioMetadata:
+        """Return lightweight FFprobe facts without running the loudness measurement."""
+        facts = self._facts(path)
         return TechnicalAudioMetadata(
             duration_seconds=_number(facts.get("duration")),
             sample_rate=_integer(facts.get("sample_rate")),
@@ -29,9 +40,8 @@ class FFmpegProbe:
             container=_container(facts.get("format_name")),
             bitrate=_integer(facts.get("bit_rate")),
             lossless=_lossless(facts.get("codec_name")),
-            loudness_lufs=loudness_lufs,
-            true_peak_db=true_peak_db,
-            dynamic_range=dynamic_range,
+            bit_depth=_integer(facts.get("bits_per_raw_sample"))
+            or _integer(facts.get("bits_per_sample")),
         )
 
     def _facts(self, path: Path) -> dict[str, object]:

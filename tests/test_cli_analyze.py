@@ -77,6 +77,7 @@ def test_analyze_propagates_selection_and_execution_options(monkeypatch, tmp_pat
             "3",
             "--track-timeout",
             "12.5",
+            "--json",
         ],
     )
 
@@ -133,9 +134,7 @@ def test_analyze_installs_rich_progress_reporter(monkeypatch, tmp_path: Path) ->
     monkeypatch.setattr("dj_digger.cli.RichProgressReporter", Progress)
     monkeypatch.setattr("dj_digger.cli.WorkspaceApplication.analyze", analyze)
 
-    result = CliRunner().invoke(
-        app, ["-v", "analyze", "--config", str(_config(tmp_path))]
-    )
+    result = CliRunner().invoke(app, ["-v", "analyze", "--config", str(_config(tmp_path))])
 
     assert result.exit_code == 0
     assert events[0:2] == [("created", 1), "entered"]

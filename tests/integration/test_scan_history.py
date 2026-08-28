@@ -32,7 +32,7 @@ def write_config(path: Path, source: Path) -> Path:
 
 
 def scan(runner: CliRunner, config: Path) -> object:
-    return runner.invoke(app, ["scan", "--config", str(config)])
+    return runner.invoke(app, ["scan", "--config", str(config), "--json"])
 
 
 def test_scan_failure_missing_and_restoration_keep_a_complete_history(

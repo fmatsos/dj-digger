@@ -50,7 +50,7 @@ def test_extract_commands_map_status_to_exit_code(
     )
     monkeypatch.setattr(WorkspaceApplication, command, lambda *_args, **_kwargs: result)
 
-    response = CliRunner().invoke(app, [command, "--config", str(_config(tmp_path))])
+    response = CliRunner().invoke(app, [command, "--config", str(_config(tmp_path)), "--json"])
 
     assert response.exit_code == exit_code
     assert f'"event":"{command}"' in response.output
@@ -69,7 +69,7 @@ def test_refresh_maps_status_to_exit_code(
         lambda *_args, **_kwargs: {"event": "refresh", "status": status},
     )
 
-    response = CliRunner().invoke(app, ["refresh", "--config", str(_config(tmp_path))])
+    response = CliRunner().invoke(app, ["refresh", "--config", str(_config(tmp_path)), "--json"])
 
     assert response.exit_code == exit_code
     assert response.output.strip() == f'{{"event":"refresh","status":"{status}"}}'

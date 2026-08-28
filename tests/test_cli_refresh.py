@@ -35,7 +35,7 @@ def test_refresh_does_not_publish_when_required_scan_fails(tmp_path: Path) -> No
     tracks.write_text("previous export\n", encoding="utf-8")
     config = write_config(tmp_path, source=tmp_path / "missing", exports=exports)
 
-    result = CliRunner().invoke(app, ["refresh", "--config", str(config)])
+    result = CliRunner().invoke(app, ["refresh", "--config", str(config), "--json"])
 
     assert result.exit_code != 0
     assert tracks.read_text(encoding="utf-8") == "previous export\n"
@@ -49,7 +49,9 @@ def test_scan_accepts_a_single_source_filter(tmp_path: Path) -> None:
     (source / "one.mp3").write_bytes(b"audio")
     config = write_config(tmp_path, source=source, exports=tmp_path / "exports")
 
-    result = CliRunner().invoke(app, ["scan", "--config", str(config), "--source", "required"])
+    result = CliRunner().invoke(
+        app, ["scan", "--config", str(config), "--source", "required", "--json"]
+    )
 
     assert result.exit_code == 0
     assert '"event":"scan"' in result.output
@@ -90,6 +92,7 @@ def test_refresh_passes_the_live_reporter_to_the_application(monkeypatch, tmp_pa
             "3",
             "--track-timeout",
             "12.5",
+            "--json",
         ],
     )
 
@@ -115,6 +118,8 @@ def test_refresh_uses_safe_execution_defaults(monkeypatch, tmp_path: Path) -> No
     assert result.exit_code == 0
     assert received["workers"] == 1
     assert received["track_timeout"] == 1800.0
+    assert "refresh · succeeded" in result.output
+    assert not result.output.lstrip().startswith("{")
 
 
 @pytest.mark.parametrize("value", ["0", "-1", "nan", "inf", "-inf"])

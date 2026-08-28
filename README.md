@@ -29,6 +29,44 @@ It can:
 For the data flow, catalog model, processing boundaries, and SQLite lifecycle, see
 [Architecture](docs/ARCHITECTURE.md).
 
+## CLI output and exports
+
+`--config` is optional when DJ Digger can discover a configuration file. The
+lookup order is:
+
+1. the path passed explicitly with `--config`;
+2. `config.toml` in the current DJ Digger workspace (the directory from which
+   the command is launched);
+3. `config/config.toml` in that same workspace;
+4. `~/.dj-digger/config.toml` in the current user's home directory.
+
+If none of these files exists and is readable, the command exits with a usage
+error asking for `--config PATH`. Workspace configuration deliberately takes
+precedence over the user-level configuration, so a project can override global
+defaults without changing them.
+
+Commands print a compact Rich terminal summary by default. Add `--json` to
+`scan`, `metadata`, `analyze`, `duplicates`, `export`, `snapshot`, `doctor`,
+`status`, `refresh`, `jobs`, or a `database` command for the stable compact JSON
+diagnostic (suitable for scripts). Background launch results and job listings
+support the same switch.
+
+`export` keeps the canonical mixed files when called without new options. Use
+`--type` to select a leaf (`tracks`, `artifacts`, `analysis`, `sections`, or
+`run`; `all` selects every leaf), and `--format json|csv|tsv` to choose one
+format for all selected leaves. `--fields` is comma-separated, preserves the
+given order, rejects blanks, duplicates, and unknown names, and requires one
+leaf type. For example:
+
+```text
+dj-digger export --config config/local.toml --type tracks --fields=title,filename
+dj-digger export --config config/local.toml --type analysis --fields=bpm
+```
+
+The [complete list of all 187 available fields](docs/export-fields.md) is grouped
+by export type and follows the packaged schemas used by CLI validation. Nested
+values in CSV/TSV are compact JSON cells.
+
 Audio fingerprinting, automatic move or rename reconciliation, and duplicate
 detection are not part of the current scope.
 
@@ -170,17 +208,36 @@ explicit read-only library root and output directory.
 | `scan` | Scan configured sources and update file presence. |
 | `metadata` | Extract or refresh embedded metadata. |
 | `analyze` | Analyze eligible audio files. |
+| `duplicates` | Fingerprint audio, list duplicate recordings, and mark the best-quality copy. |
 | `export` | Publish catalog and analysis files. |
 | `refresh` | Run scan, metadata, analysis, and export in order. |
 | `status` | Report catalog, source, and export status. |
 | `doctor` | Check paths, dependencies, and the current database schema. |
 | `snapshot` | Create a validated export snapshot. |
 | `copy` | Copy and renumber a playlist or explicit tracks into a portable set directory. |
+| `jobs` | List background jobs started with `--background` and their status. |
 
 Catalog commands print compact JSON diagnostics. Exit code `0` means success, `1`
 means failure, and `2` means that the command completed only partially. `copy` reports
 its own file progress: `0` means success, `1` a runtime/filesystem failure, and `2`
 invalid command usage.
+
+### Run a long command in the background
+
+`analyze`, `duplicates --analyze`, and `refresh` accept `--background`. Instead of
+running the analysis, the command detaches a copy of itself (same arguments, minus
+`--background`) into its own process group and returns immediately with a job id:
+
+```json
+{"event":"analyze","status":"background","job_id":"15ac91341eeb","pid":1079394,"log":"/path/to/workspace/jobs/15ac91341eeb.log"}
+```
+
+The detached process keeps running after the launching shell exits or an SSH
+connection is closed. Its JSON output is written to the `log` path, and its
+progress/result is tracked in `<database directory>/jobs/<job_id>.json` (status
+`running`, then `succeeded`/`partial`/`failed` with the full result once it exits).
+Run `dj-digger jobs --config <config>` at any time to list every job and its current
+status — a job whose process died without reporting a result is shown as `unknown`.
 
 ### Copy a portable set
 
@@ -293,6 +350,59 @@ dj-digger analyze --config config/local.toml --path "Techno" --workers 1
 
 Completed tracks remain reusable after an interruption. Only one analysis command may
 use a catalog at a time; a concurrent invocation fails immediately.
+
+### Find and resolve duplicate recordings
+
+`duplicates` fingerprints present audio with FFmpeg's Chromaprint muxer, groups tracks
+that share a complete fingerprint, and can elect the best-quality copy per group and
+per source. It requires an FFmpeg build providing the `chromaprint` muxer; it does not
+require Essentia.
+
+```text
+dj-digger duplicates --analyze [--mark-best-quality] [--source NAME]
+                     [--workers N] [--track-timeout SECONDS] --config PATH
+
+dj-digger duplicates --list [--source NAME] --config PATH
+
+dj-digger duplicates --mark-best-quality [--source NAME] --config PATH
+```
+
+`--analyze` and `--list` are mutually exclusive, and at least one action is required.
+`--mark-best-quality` is valid alone or combined with `--analyze`. `--workers` and
+`--track-timeout` are only valid with `--analyze`; both default to the same values as
+`analyze`. Invalid combinations fail as usage errors (exit code `2`) before the catalog
+is opened.
+
+```bash
+dj-digger duplicates --analyze --mark-best-quality --config config/local.toml
+dj-digger duplicates --list --config config/local.toml
+dj-digger duplicates --list --source djing --config config/local.toml
+```
+
+Grouping is conservative: two present tracks are duplicates only when their complete
+Chromaprint fingerprints match exactly. Perceptually similar but distinct recordings
+(different edits, remixes, live versions) are never grouped. Without `--source`, groups
+may span multiple sources; with `--source`, only that source's tracks are considered.
+
+Quality ranking is deterministic: known-lossless copies outrank known-lossy copies,
+which outrank copies with unknown technical facts. Within the lossless tier, higher bit
+depth wins, then higher sample rate. Within the lossy tier, higher bitrate wins, then
+higher sample rate. Remaining ties break on relative path, ascending. One winner is
+elected per `(source, fingerprint)` pair, so a cross-source group can have a different
+winner in each source. Standalone `--mark-best-quality` refuses to run, without changing
+any existing selection, when a present track in the requested scope lacks a current
+fingerprint or current technical facts — analyze that scope first.
+
+`--list` prints ordered duplicate groups as JSON, each with a `group_id` and member
+objects carrying `source`, `track_id`, `relative_path`, `technical_facts`, and
+`best_quality` (`true` for the elected copy, `false` for other members of a marked
+group, `null` when the group is not marked or scoped to another source). `tracks.tsv`
+exposes the same state as `duplicate_group_id` (empty when the track is not part of a
+duplicate group) and `duplicate_best_quality` (`true`, `false`, or empty).
+
+Exit codes match the other analysis commands: `0` on success, `1` on a command-level
+failure (including a refused `--mark-best-quality` on an incomplete scope), and `2` when
+a per-track analysis pass is only partially complete.
 
 ### Configure a ChatGPT or Claude project
 
@@ -479,8 +589,10 @@ a fresh V7 catalog.
 ### Why does `doctor` report missing programs?
 
 Metadata extraction requires `exiftool`. Analysis also requires `ffmpeg`, `ffprobe`,
-and Essentia. The Docker image installs these dependencies. For a native setup, they
-must be installed on the host.
+and Essentia. Duplicate detection reuses `ffmpeg`/`ffprobe` and additionally requires
+an FFmpeg build providing the `chromaprint` muxer, but does not require Essentia. The
+Docker image installs these dependencies. For a native setup, they must be installed
+on the host.
 
 ### Can I run only one part of the workflow?
 

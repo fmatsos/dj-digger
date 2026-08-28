@@ -98,8 +98,10 @@ completion report. Git scope is explicit; delivery must be requested separately.
 Skills route lightweight workflows: `task` scopes and prevents re-exploration;
 `implement` runs RED/GREEN loops; `qa` executes selection-based validation;
 `runtime-proof` validates public entry points; `sqlite-change` handles migrations;
-`native-analysis` provides analysis evidence; `ship` handles staged diffs and
-commits. Deterministic scripts provide environment setup, file discovery, local
+`native-analysis` provides analysis evidence; `commit` creates a scoped local
+commit; `mr` creates or updates a GitHub pull request; `ship` orchestrates QA,
+commits, push, and pull-request checks for explicitly authorized end-to-end
+delivery. Deterministic scripts provide environment setup, file discovery, local
 data protection, QA selection, and compact handoffs. All scripts
 remain silent on success and report only errors or status changes.
 

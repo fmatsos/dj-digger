@@ -30,14 +30,39 @@ class LibraryReadRepository:
         """Return the public track export projection in its stable publication order."""
         return self._database.execute(
             """
-            SELECT track_id, source_id, relative_path, filename, extension,
-                   size_bytes, mtime_ns, set_eligible,
-                   title, artist, album_artist, album, track_number,
-                   disc_number, genre, date, year, composer, comment,
-                   tag_bpm, tag_initial_key, grouping,
-                   duration_seconds, sample_rate, channels, codec,
-                   container, bitrate, lossless
-            FROM library_tracks
-            ORDER BY source_id, relative_path, track_id
+            SELECT lt.track_id, lt.source_id, lt.relative_path, lt.filename, lt.extension,
+                   lt.size_bytes, lt.mtime_ns, lt.set_eligible,
+                   lt.title, lt.artist, lt.album_artist, lt.album, lt.track_number,
+                   lt.disc_number, lt.genre, lt.date, lt.year, lt.composer, lt.comment,
+                   lt.tag_bpm, lt.tag_initial_key, lt.grouping,
+                   lt.duration_seconds, lt.sample_rate, lt.channels, lt.codec,
+                   lt.container, lt.bitrate, lt.lossless,
+                   dup.fingerprint_hash AS duplicate_group_id,
+                   CASE
+                       WHEN dup.fingerprint_hash IS NULL THEN NULL
+                       WHEN dqs.preferred_track_id IS NULL THEN NULL
+                       WHEN dqs.preferred_track_id = lt.track_id THEN 1
+                       ELSE 0
+                   END AS duplicate_best_quality
+            FROM library_tracks lt
+            LEFT JOIN (
+                SELECT af.track_id, af.fingerprint_hash
+                FROM audio_fingerprints af
+                JOIN tracks t ON t.id = af.track_id
+                JOIN library_sources s ON s.source_id = t.source_id
+                WHERE t.presence_status = 'present' AND s.enabled = 1
+                  AND af.fingerprint_hash IN (
+                      SELECT af2.fingerprint_hash
+                      FROM audio_fingerprints af2
+                      JOIN tracks t2 ON t2.id = af2.track_id
+                      JOIN library_sources s2 ON s2.source_id = t2.source_id
+                      WHERE t2.presence_status = 'present' AND s2.enabled = 1
+                      GROUP BY af2.fingerprint_hash
+                      HAVING COUNT(*) >= 2
+                  )
+            ) dup ON dup.track_id = lt.track_id
+            LEFT JOIN duplicate_quality_selections dqs
+                ON dqs.source_id = lt.source_id AND dqs.fingerprint_hash = dup.fingerprint_hash
+            ORDER BY lt.source_id, lt.relative_path, lt.track_id
             """
         ).fetchall()

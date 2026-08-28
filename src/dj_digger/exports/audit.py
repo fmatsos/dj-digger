@@ -12,6 +12,13 @@ from jsonschema import Draft202012Validator  # type: ignore[import-untyped]
 from dj_digger.catalog.database import Database
 from dj_digger.catalog.repositories import ArtifactRepository, SourceRepository
 from dj_digger.exports.atomic import publish_atomic
+from dj_digger.exports.formats import (
+    fields_for_schema,
+    output_path,
+    projected,
+    select_fields,
+    write_rows,
+)
 from dj_digger.exports.tracks import PublishedFacet
 
 
@@ -33,10 +40,17 @@ class AuditExporter:
         self._validator = Draft202012Validator(schema)
         self._columns = cast(list[str], schema["x-tabular"]["columns"])
 
-    def export(self, destination: Path) -> list[PublishedFacet]:
+    def export(
+        self, destination: Path, *, format: str | None = None, fields: str | None = None
+    ) -> list[PublishedFacet]:
         roots = SourceRepository(self._database).roots()
         rows = self._rows(roots)
         canonical = destination / "library-artifacts.tsv"
+        columns = fields_for_schema({"x-tabular": {"columns": self._columns}})
+        selected = select_fields(columns, fields)
+        for row in rows:
+            self._validator.validate(row)
+        target = output_path(canonical, format)
 
         def write(path: Path) -> None:
             with path.open("w", encoding="utf-8", newline="") as handle:
@@ -44,12 +58,16 @@ class AuditExporter:
                     handle, fieldnames=self._columns, delimiter="\t", lineterminator="\n"
                 )
                 writer.writeheader()
-                for row in rows:
-                    self._validator.validate(row)
-                    writer.writerow({key: _serialize(row[key]) for key in self._columns})
+                writer.writerows(
+                    {key: _serialize(row[key]) for key in self._columns} for row in rows
+                )
 
-        publish_atomic(canonical, write)
-        return [PublishedFacet(canonical, len(rows))]
+        if format is None and fields is None:
+            publish_atomic(target, write)
+        else:
+            chosen = selected or columns
+            write_rows(target, projected(rows, chosen), chosen, format or "tsv")
+        return [PublishedFacet(target, len(rows))]
 
     def _rows(self, roots: dict[str, Path]) -> list[dict[str, Any]]:
         result = []

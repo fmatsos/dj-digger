@@ -90,9 +90,78 @@ def _create_v6_catalog(path: Path, *, invalid_foreign_key: bool = False) -> None
     connection.close()
 
 
+_V6_TECHNICAL_AUDIO_METADATA_COLUMNS = (
+    "track_id, duration_seconds, sample_rate, channels, codec, container, bitrate, "
+    "lossless, loudness_lufs, true_peak_db, dynamic_range, probe_version, probed_at"
+)
+
+
+V7_TABLES = V6_TABLES + ("current_track_analysis",)
+
+
+def _create_v7_catalog(path: Path) -> None:
+    root = Path(__file__).parents[1]
+    connection = sqlite3.connect(path)
+    connection.executescript((root / "schemas/catalog-v7.sql").read_text(encoding="utf-8"))
+    connection.executescript(
+        """
+        INSERT INTO library_sources VALUES
+            ('source', '/music', 1, 1, 1, '2026-01-01', '2026-01-02', 11);
+        INSERT INTO scan_runs VALUES
+            (11, 'source', '2026-01-01', '2026-01-02', 'succeeded', 3, 1, 1,
+             NULL, NULL, 'scanner/7');
+        INSERT INTO tracks VALUES
+            (31, 'source', 'Artist/Track.flac', 'Track.flac', '.flac', 1234, 5678,
+             'present', '2026-01-01', '2026-01-02', NULL, NULL, 11, 11);
+        INSERT INTO directories VALUES
+            (21, 'source', 'Artist', 'present', '2026-01-01', '2026-01-02', NULL, 11);
+        INSERT INTO embedded_metadata VALUES
+            (31, 'Track', 'Artist', 'Album Artist', 'Album', '1', '1', 'House', '2026',
+             '2026', 'Composer', 'Comment', 126.0, '9A', 'Warmup', '2026-01-02',
+             'exiftool/1', 1234, 5678, 'normalizer/1');
+        INSERT INTO technical_audio_metadata VALUES
+            (31, 300.0, 48000, 2, 'flac', 'flac', 1000000, 1, -9.5, -1.0, 8.0,
+             'ffprobe/1', '2026-01-02');
+        INSERT INTO library_artifacts VALUES
+            (41, 'source', '_Serato_/crate', 'serato_crate', 12, 34, 'present',
+             '2026-01-01', '2026-01-02', NULL, 11);
+        INSERT INTO analysis_runs VALUES
+            (51, '2026-01-02', '2026-01-02', 'succeeded', 1, 1, 0, 0,
+             2, 'analyzer/2', 'hash');
+        INSERT INTO audio_analysis VALUES
+            (61, 31, 51, 2, 'analyzer/2', 'hash', 1234, 5678, 'succeeded', 0.81,
+             '{"bpm":126.0,"key":"Am"}', '2026-01-02T10:00:00Z');
+        INSERT INTO track_sections VALUES
+            (71, 61, 0, '{"index":0,"start_seconds":0,"end_seconds":32}');
+        INSERT INTO track_events VALUES
+            (81, 31, '2026-01-02', 11, NULL, 'track_discovered', NULL);
+        INSERT INTO current_track_analysis VALUES
+            (31, 61, 2, 'analyzer/2', 'hash', 0.81, 126.0, 0.82, 0.91, 'Am', 0.73,
+             0.2, 0.3, 0.4, '2026-01-02T10:00:00Z');
+        PRAGMA user_version = 7;
+        """
+    )
+    connection.close()
+
+
+def _snapshot_v7_rows(connection: sqlite3.Connection) -> dict[str, list[tuple[object, ...]]]:
+    return {
+        table: connection.execute(
+            f"SELECT {_V6_TECHNICAL_AUDIO_METADATA_COLUMNS} FROM {table} ORDER BY rowid"
+            if table == "technical_audio_metadata"
+            else f"SELECT * FROM {table} ORDER BY rowid"
+        ).fetchall()
+        for table in V7_TABLES
+    }
+
+
 def _snapshot_v6_rows(connection: sqlite3.Connection) -> dict[str, list[tuple[object, ...]]]:
     return {
-        table: connection.execute(f"SELECT * FROM {table} ORDER BY rowid").fetchall()
+        table: connection.execute(
+            f"SELECT {_V6_TECHNICAL_AUDIO_METADATA_COLUMNS} FROM {table} ORDER BY rowid"
+            if table == "technical_audio_metadata"
+            else f"SELECT * FROM {table} ORDER BY rowid"
+        ).fetchall()
         for table in V6_TABLES
     }
 
@@ -103,15 +172,19 @@ def _normalized_schema(connection: sqlite3.Connection) -> dict[tuple[str, str], 
         "WHERE type IN ('table', 'index', 'view') AND name NOT LIKE 'sqlite_%'"
     ).fetchall()
     return {
-        (str(object_type), str(name)): None if sql is None else " ".join(str(sql).split())
+        (str(object_type), str(name)): (
+            None
+            if sql is None
+            else " ".join(str(sql).split()).replace(" ,", ",").replace(" )", ")")
+        )
         for object_type, name, sql in rows
     }
 
 
 def test_current_schema_copy_matches_packaged_schema() -> None:
     root = Path(__file__).parents[1]
-    assert (root / "schemas/catalog-v7.sql").read_bytes() == (
-        root / "src/dj_digger/catalog/sql/catalog-v7.sql"
+    assert (root / "schemas/catalog-v8.sql").read_bytes() == (
+        root / "src/dj_digger/catalog/sql/catalog-v8.sql"
     ).read_bytes()
 
 
@@ -126,8 +199,9 @@ def test_wheel_migrates_without_the_checkout_schema(tmp_path: Path) -> None:
     isolated_package = tmp_path / "installed"
     with zipfile.ZipFile(wheel) as archive:
         packaged_files = set(archive.namelist())
-        assert "dj_digger/catalog/sql/catalog-v7.sql" in packaged_files
+        assert "dj_digger/catalog/sql/catalog-v8.sql" in packaged_files
         assert "dj_digger/catalog/sql/migrate-v6-to-v7.sql" in packaged_files
+        assert "dj_digger/catalog/sql/migrate-v7-to-v8.sql" in packaged_files
         archive.extractall(isolated_package)
 
     result = subprocess.run(
@@ -176,7 +250,7 @@ def test_isolated_wheel_upgrades_a_v6_catalog(tmp_path: Path) -> None:
             "from dj_digger.catalog.database import Database; "
             "database = Database.open(Path('catalog.sqlite')); "
             "database.migrate(); "
-            "assert database.scalar('PRAGMA user_version') == 7; "
+            "assert database.scalar('PRAGMA user_version') == 8; "
             "assert database.scalar('SELECT audio_analysis_id FROM current_track_analysis') == 61",
         ],
         check=False,
@@ -221,14 +295,14 @@ def test_catalog_migration_is_idempotent_after_reopening(tmp_path: Path) -> None
     database.migrate()
     database.migrate()
 
-    assert database.scalar("PRAGMA user_version") == 7
+    assert database.scalar("PRAGMA user_version") == 8
     assert database.scalar("PRAGMA foreign_keys") == 1
     assert database.table_exists("tracks")
     assert database.table_exists("track_events")
 
     reopened = Database.open(database_path)
     reopened.migrate()
-    assert reopened.scalar("PRAGMA user_version") == 7
+    assert reopened.scalar("PRAGMA user_version") == 8
     assert reopened.table_exists("library_sources")
 
 
@@ -247,7 +321,7 @@ def test_current_schema_has_embedded_metadata_input_facts(tmp_path: Path) -> Non
         row[1]: row for row in database.execute("PRAGMA table_info(embedded_metadata)").fetchall()
     }
 
-    assert database.scalar("PRAGMA user_version") == 7
+    assert database.scalar("PRAGMA user_version") == 8
     assert {"input_size_bytes", "input_mtime_ns", "normalization_version"} <= columns.keys()
     assert columns["input_size_bytes"][3] == 0
     assert columns["input_mtime_ns"][3] == 0
@@ -265,7 +339,7 @@ def test_v6_upgrade_preserves_all_rows_and_backfills_latest_success(tmp_path: Pa
     database.migrate()
 
     assert _snapshot_v6_rows(database._connection) == before
-    assert database.scalar("PRAGMA user_version") == 7
+    assert database.scalar("PRAGMA user_version") == 8
     assert database.execute("PRAGMA foreign_key_check").fetchall() == []
     assert database.execute(
         "SELECT track_id, audio_analysis_id, analysis_schema_version, analyzer_version, "
@@ -289,6 +363,70 @@ def test_v6_upgrade_preserves_all_rows_and_backfills_latest_success(tmp_path: Pa
         0.4,
         "2026-01-02T10:00:00Z",
     )
+
+
+def test_current_schema_has_duplicate_detection_tables(tmp_path: Path) -> None:
+    database = Database.open(tmp_path / "catalog.sqlite")
+    database.migrate()
+
+    technical_columns = {
+        row[1]: row
+        for row in database.execute("PRAGMA table_info(technical_audio_metadata)").fetchall()
+    }
+    assert {"bit_depth", "input_size_bytes", "input_mtime_ns"} <= technical_columns.keys()
+    assert technical_columns["bit_depth"][3] == 0
+    assert technical_columns["input_size_bytes"][3] == 0
+    assert technical_columns["input_mtime_ns"][3] == 0
+
+    assert database.table_exists("audio_fingerprints")
+    fingerprint_columns = {
+        row[1] for row in database.execute("PRAGMA table_info(audio_fingerprints)").fetchall()
+    }
+    assert fingerprint_columns == {
+        "track_id",
+        "fingerprint",
+        "fingerprint_hash",
+        "fingerprint_version",
+        "input_size_bytes",
+        "input_mtime_ns",
+        "fingerprinted_at",
+    }
+    assert database.scalar(
+        "SELECT 1 FROM sqlite_master WHERE type = 'index' "
+        "AND name = 'audio_fingerprints_group_idx'"
+    ) == 1
+
+    assert database.table_exists("duplicate_quality_selections")
+    selection_columns = {
+        row[1]
+        for row in database.execute("PRAGMA table_info(duplicate_quality_selections)").fetchall()
+    }
+    assert selection_columns == {
+        "source_id",
+        "fingerprint_hash",
+        "preferred_track_id",
+        "ranking_version",
+        "selected_at",
+    }
+
+
+def test_v7_upgrade_preserves_all_rows_and_adds_duplicate_schema(tmp_path: Path) -> None:
+    path = tmp_path / "catalog.sqlite"
+    _create_v7_catalog(path)
+    before_connection = sqlite3.connect(path)
+    before = _snapshot_v7_rows(before_connection)
+    before_connection.close()
+
+    database = Database.open(path)
+    database.migrate()
+
+    assert _snapshot_v7_rows(database._connection) == before
+    assert database.scalar("PRAGMA user_version") == 8
+    assert database.execute("PRAGMA foreign_key_check").fetchall() == []
+    assert database.table_exists("audio_fingerprints")
+    assert database.execute("SELECT * FROM audio_fingerprints").fetchall() == []
+    assert database.table_exists("duplicate_quality_selections")
+    assert database.execute("SELECT * FROM duplicate_quality_selections").fetchall() == []
 
 
 def test_v6_upgrade_uses_begin_immediate_and_checks_foreign_keys(tmp_path: Path) -> None:

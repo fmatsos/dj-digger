@@ -53,7 +53,7 @@ test "$env_output" = "/tmp/dj-digger-uv-cache|/tmp/dj-digger-uv-tools"
   git commit -q -m "init"
 
   # Test 1: protected files should fail
-  for path in config/local.toml workspace/export.tsv sets/demo.m3u8 catalog.sqlite docs/superpowers/specs/demo.md
+  for path in config/local.toml workspace/export.tsv sets/demo.m3u8 catalog.sqlite catalog.sqlite3 docs/superpowers/specs/demo.md
   do
     mkdir -p "$(dirname "$path")"
     echo "content" > "$path"
@@ -77,6 +77,11 @@ test "$env_output" = "/tmp/dj-digger-uv-cache|/tmp/dj-digger-uv-tools"
 
   # Test 4: spec file should pass with DJ_DIGGER_ALLOW_SPEC_STAGE=1
   DJ_DIGGER_ALLOW_SPEC_STAGE=1 "$ROOT/.codex/scripts/protect-local" --staged
+
+  git reset -q
+  git add catalog.sqlite3
+  git commit -q -m "add protected catalog"
+  ! "$ROOT/.codex/scripts/protect-local" --range HEAD^..HEAD 2>/dev/null
 )
 
 # Test qa-select classification rules
@@ -225,7 +230,7 @@ line2" > src/example.py
 )
 
 # Test skill structure and content
-for skill in task implement qa runtime-proof sqlite-change native-analysis ship
+for skill in task implement qa runtime-proof sqlite-change native-analysis commit mr ship
 do
   skill_file="$ROOT/.codex/skills/$skill/SKILL.md"
   test -f "$skill_file"
@@ -247,7 +252,7 @@ do
   test "$lines" -le 140
 done
 
-# Verify root AGENTS.md names all seven skills in the Skill routing section
+# Verify root AGENTS.md names all nine skills in the Skill routing section
 # (backticked, as they appear there) rather than merely containing common
 # English words that would pass even if no skill were actually named.
 grep -q '`task`' "$AGENTS"
@@ -256,6 +261,8 @@ grep -q '`qa`' "$AGENTS"
 grep -q '`runtime-proof`' "$AGENTS"
 grep -q '`sqlite-change`' "$AGENTS"
 grep -q '`native-analysis`' "$AGENTS"
+grep -q '`commit`' "$AGENTS"
+grep -q '`mr`' "$AGENTS"
 grep -q '`ship`' "$AGENTS"
 
 # Test hooks.json configuration

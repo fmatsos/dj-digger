@@ -2,6 +2,7 @@
 
 import importlib.util
 import shutil
+import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 from types import TracebackType
@@ -21,6 +22,12 @@ from dj_digger.catalog.database import Database
 from dj_digger.catalog.migrations import CURRENT_VERSION
 from dj_digger.catalog.repositories import SourceRepository
 from dj_digger.config import LibrarySourceConfig, WorkspaceConfig
+from dj_digger.duplicates.quality import QualityMarkResult
+from dj_digger.duplicates.service import (
+    DuplicateAnalysisResult,
+    DuplicateGroupDescription,
+    DuplicateService,
+)
 from dj_digger.exports.audit import AuditExporter
 from dj_digger.exports.snapshot import SnapshotExporter, SnapshotResult
 from dj_digger.exports.tracks import TracksExporter
@@ -153,24 +160,102 @@ class WorkspaceApplication:
             track_timeout=track_timeout,
         )
 
-    def export(self, facet: str | None = None) -> list[str]:
+    def duplicates_analyze(
+        self,
+        source_id: str | None = None,
+        *,
+        workers: int = 1,
+        track_timeout: float = 1800.0,
+        mark_best_quality: bool = False,
+        progress: ProgressReporter | None = None,
+    ) -> DuplicateAnalysisResult:
+        """Fingerprint present tracks and derive duplicate groups in the requested scope."""
+        if source_id is not None:
+            self._selected_sources(source_id, enabled_only=True)
+        return self._duplicate_service(progress=progress).analyze(
+            source_id=source_id,
+            workers=workers,
+            track_timeout=track_timeout,
+            mark_best_quality=mark_best_quality,
+        )
+
+    def duplicates_list(self, source_id: str | None = None) -> list[DuplicateGroupDescription]:
+        """List duplicate groups enriched with technical facts and quality state."""
+        if source_id is not None:
+            self._selected_sources(source_id, enabled_only=True)
+        return self._duplicate_service().describe_groups(source_id)
+
+    def duplicates_mark_best_quality(self, source_id: str | None = None) -> QualityMarkResult:
+        """Elect and persist the best-quality track per duplicate group, standalone."""
+        if source_id is not None:
+            self._selected_sources(source_id, enabled_only=True)
+        return self._duplicate_service().mark_best_quality(source_id)
+
+    def _duplicate_service(self, *, progress: ProgressReporter | None = None) -> DuplicateService:
+        return DuplicateService(
+            self.database,
+            {source.id: source.path for source in self.config.sources},
+            progress=progress,
+        )
+
+    def export(
+        self,
+        facet: str | None = None,
+        *,
+        type: str | None = None,
+        format: str | None = None,
+        fields: str | None = None,
+    ) -> list[str]:
         destination = self.config.exports
         destination.mkdir(parents=True, exist_ok=True)
         if facet not in {None, "all", "tracks", "artifacts", "analysis"}:
             raise ValueError(f"unknown export facet: {facet}")
+        if type is not None and type not in {
+            "all",
+            "tracks",
+            "artifacts",
+            "analysis",
+            "sections",
+            "run",
+        }:
+            raise ValueError(f"unknown export type: {type}")
+        if fields is not None and type is None:
+            raise ValueError("--fields requires a leaf --type")
+        if fields is not None and type == "all":
+            raise ValueError("--fields requires a leaf --type")
+        if (
+            type is not None
+            and type != "all"
+            and facet not in {None, type, "analysis" if type in {"sections", "run"} else type}
+        ):
+            raise ValueError("--type and --facet select different exports")
+        selected = type or facet
+        if selected == "all" or selected is None:
+            selected = None
         published: list[str] = []
         # Validate/publish the atomic analysis group first.
-        if facet in {"all", "analysis"} or facet is None:
-            published.extend(
-                str(item.path) for item in AnalysisExporter(self.database).export(destination)
-            )
-        if facet in {None, "all", "tracks"}:
-            tracks = TracksExporter(self.database).export(destination / "tracks.tsv")
-            published.append(str(tracks.path))
-        if facet in {None, "all", "artifacts"}:
+        analysis_selected = selected in {None, "analysis", "sections", "run"}
+        if analysis_selected:
             published.extend(
                 str(item.path)
-                for item in AuditExporter(self.database).export(destination)
+                for item in AnalysisExporter(self.database).export(
+                    destination,
+                    format=format,
+                    fields=fields,
+                    leaf_type=type if type in {"analysis", "sections", "run"} else None,
+                )
+            )
+        if selected in {None, "tracks"}:
+            tracks = TracksExporter(self.database).export(
+                destination / "tracks.tsv", format=format, fields=fields
+            )
+            published.append(str(tracks.path))
+        if selected in {None, "artifacts"}:
+            published.extend(
+                str(item.path)
+                for item in AuditExporter(self.database).export(
+                    destination, format=format, fields=fields
+                )
             )
         return published
 
@@ -203,9 +288,7 @@ class WorkspaceApplication:
         metadata = self.metadata()
         reporter.phase_finished("metadata", 2, 4)
         reporter.phase_started("analysis", 2, 4)
-        analysis = self.analyze(
-            workers=workers, track_timeout=track_timeout, progress=reporter
-        )
+        analysis = self.analyze(workers=workers, track_timeout=track_timeout, progress=reporter)
         reporter.phase_finished("analysis", 3, 4)
         status = _worst_status(
             "succeeded" if all(result.succeeded for result in scans) else "partial",
@@ -218,10 +301,13 @@ class WorkspaceApplication:
         except Exception as error:
             reporter.phase_finished("exports", 4, 4)
             return {
-                "event": "refresh", "status": "failed", "published": False,
+                "event": "refresh",
+                "status": "failed",
+                "published": False,
                 "error": str(error),
                 "scans": [result.__dict__ for result in scans],
-                "metadata": metadata.__dict__, "analysis": analysis.__dict__,
+                "metadata": metadata.__dict__,
+                "analysis": analysis.__dict__,
             }
         reporter.phase_finished("exports", 4, 4)
         return {
@@ -339,10 +425,13 @@ class WorkspaceApplication:
             if shutil.which(binary) is None:
                 issues.append(f"required binary unavailable: {binary}")
         analysis_enabled = any(source.enabled and source.analyze for source in self.config.sources)
-        if analysis_enabled:
+        duplicates_expected = any(source.enabled for source in self.config.sources)
+        ffmpeg_available = shutil.which("ffmpeg") is not None
+        if analysis_enabled or duplicates_expected:
             for binary in ("ffprobe", "ffmpeg"):
                 if shutil.which(binary) is None:
                     issues.append(f"required binary unavailable: {binary}")
+        if analysis_enabled:
             if importlib.util.find_spec("essentia") is None:
                 issues.append("required dependency unavailable: essentia")
             if self.config.dsp_path is not None:
@@ -352,6 +441,8 @@ class WorkspaceApplication:
                     DspConfig.load(self.config.dsp_path)
                 except (OSError, ValueError) as error:
                     issues.append(f"DSP configuration invalid: {error}")
+        if duplicates_expected and ffmpeg_available and not _has_chromaprint_muxer():
+            issues.append("ffmpeg is missing the chromaprint muxer required for duplicates")
         database = self.database.diagnostics()
         version = int(database["schema_version"])
         expected = CURRENT_VERSION
@@ -400,3 +491,14 @@ class WorkspaceApplication:
 def _worst_status(*statuses: str) -> str:
     order = {"succeeded": 0, "partial": 1, "failed": 2}
     return max(statuses, key=lambda status: order.get(status, 2))
+
+
+def _has_chromaprint_muxer() -> bool:
+    """Report whether the available FFmpeg build can mux Chromaprint fingerprints."""
+    try:
+        result = subprocess.run(
+            ["ffmpeg", "-hide_banner", "-muxers"], check=True, capture_output=True, text=True
+        )
+    except (OSError, subprocess.CalledProcessError):
+        return False
+    return "chromaprint" in result.stdout
