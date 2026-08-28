@@ -244,10 +244,10 @@ Changes must preserve these boundaries:
 7. Every SQLite connection enables the required pragmas, and write transactions stay
    bounded enough for WAL readers and serialized writers.
 
-For Catalog V8, add an ordered `7 -> 8` packaged migration and a fresh V8 schema,
-advance `CURRENT_VERSION`, and keep the migration transactional, version-checked,
-foreign-key-clean, and wheel-installable. Any new materialized projection needs an
-atomic write path, a deterministic rebuild command or routine, query-plan coverage,
-and preservation tests for the V7-to-V8 upgrade. Public view or export changes also
-require explicit schema/consumer compatibility decisions rather than silent column or
-semantic changes.
+Catalog V9 extends the V8 append-only catalog with mastering attempts and the
+rebuildable current mastering and DJ projections. The `8 -> 9` packaged migration
+and fresh V9 schema are transactional, version-checked, foreign-key-clean, and
+wheel-installable. Any new materialized projection needs an atomic write path, a
+deterministic rebuild command or routine, query-plan coverage, and preservation tests.
+Public view or export changes also require explicit schema/consumer compatibility
+decisions rather than silent column or semantic changes.

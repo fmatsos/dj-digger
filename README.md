@@ -638,3 +638,13 @@ not include the common root or source IDs.
 See [Architecture](docs/ARCHITECTURE.md) for the current Catalog V7 data model,
 migration path, connection and concurrency lifecycle, processing flows, publication
 contracts, maintenance commands, and extension invariants.
+## Duplicate mastering review
+
+Exact duplicate groups can optionally be measured with FFmpeg EBU R128:
+`dj-digger duplicates --analyze --mastering`. Use `--list --dj-review` to
+filter groups whose descriptive loudness, peak, PLR, or gain metrics warrant
+listening review. The default DJ targets are -9 LUFS and -1 dBTP; metrics are
+nullable and analysis failures produce a partial result. Existing
+`best_quality` remains a technical-only selection and mastering analysis never
+changes it. Analysis is idempotent for unchanged inputs and exact
+Chromaprint identity does not discover all remasters.
