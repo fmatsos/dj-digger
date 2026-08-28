@@ -167,6 +167,7 @@ class WorkspaceApplication:
         workers: int = 1,
         track_timeout: float = 1800.0,
         mark_best_quality: bool = False,
+        mastering: bool = False,
         progress: ProgressReporter | None = None,
     ) -> DuplicateAnalysisResult:
         """Fingerprint present tracks and derive duplicate groups in the requested scope."""
@@ -177,6 +178,7 @@ class WorkspaceApplication:
             workers=workers,
             track_timeout=track_timeout,
             mark_best_quality=mark_best_quality,
+            mastering=mastering,
         )
 
     def duplicates_list(self, source_id: str | None = None) -> list[DuplicateGroupDescription]:
@@ -196,6 +198,7 @@ class WorkspaceApplication:
             self.database,
             {source.id: source.path for source in self.config.sources},
             progress=progress,
+            mastering_config=self.config.mastering,
         )
 
     def export(

@@ -109,6 +109,35 @@ class DspConfig:
 
 
 @dataclass(frozen=True)
+class ComparisonThresholds:
+    active_loudness_db: float = 1.5
+    true_peak_db: float = 1.0
+    plr_db: float = 2.0
+    integrated_lufs_db: float | None = 1.5
+    lra_lu: float | None = 1.5
+    gain_deficit_db: float | None = None
+
+
+VARIANT_DEFAULTS = ComparisonThresholds()
+REVIEW_DEFAULTS = ComparisonThresholds(
+    active_loudness_db=1.5,
+    true_peak_db=1.0,
+    plr_db=2.0,
+    integrated_lufs_db=None,
+    lra_lu=None,
+    gain_deficit_db=1.5,
+)
+
+
+@dataclass(frozen=True)
+class MasteringConfig:
+    dj_target_lufs: float = -9.0
+    dj_target_true_peak_dbtp: float = -1.0
+    variant_thresholds: ComparisonThresholds = VARIANT_DEFAULTS
+    review_thresholds: ComparisonThresholds = REVIEW_DEFAULTS
+
+
+@dataclass(frozen=True)
 class WorkspaceConfig:
     """Immutable configuration for a DJ Digger workspace."""
 
@@ -117,6 +146,7 @@ class WorkspaceConfig:
     sources: tuple[LibrarySourceConfig, ...]
     dsp: DspConfig = field(default_factory=DspConfig.canonical)
     dsp_path: Path | None = None
+    mastering: MasteringConfig = field(default_factory=MasteringConfig)
 
     @classmethod
     def load(cls, path: Path, *, dsp_path: Path | None = None) -> "WorkspaceConfig":
@@ -170,12 +200,34 @@ class WorkspaceConfig:
         # Keep loading the workspace possible so `doctor` can report malformed DSP
         # configuration as a structured diagnostic instead of aborting config parsing.
         dsp = DspConfig.canonical()
+        mastering_raw = raw_config.get("mastering", {})
+        mastering_table = _mapping(mastering_raw, "mastering")
+        mastering = MasteringConfig(
+            dj_target_lufs=_number(
+                mastering_table.get("dj_target_lufs", -9.0), "mastering.dj_target_lufs"
+            ),
+            dj_target_true_peak_dbtp=_number(
+                mastering_table.get("dj_target_true_peak_dbtp", -1.0),
+                "mastering.dj_target_true_peak_dbtp",
+            ),
+            variant_thresholds=_thresholds(
+                mastering_table.get("variant_thresholds"),
+                VARIANT_DEFAULTS,
+                "mastering.variant_thresholds",
+            ),
+            review_thresholds=_thresholds(
+                mastering_table.get("review_thresholds"),
+                REVIEW_DEFAULTS,
+                "mastering.review_thresholds",
+            ),
+        )
         return cls(
             database,
             exports,
             tuple(sources),
             dsp,
             configured_dsp,
+            mastering,
         )
 
 
@@ -210,6 +262,43 @@ def _number(value: object, name: str) -> float:
     if not isinstance(value, int | float) or isinstance(value, bool) or not isfinite(value):
         raise ValueError(f"{name} must be a finite number")
     return float(value)
+
+
+def _thresholds(value: object, defaults: ComparisonThresholds, name: str) -> ComparisonThresholds:
+    if value is None:
+        return defaults
+    table = _mapping(value, name)
+    values: dict[str, float | None] = {}
+    for key in (
+        "active_loudness_db",
+        "true_peak_db",
+        "plr_db",
+        "integrated_lufs_db",
+        "lra_lu",
+        "gain_deficit_db",
+    ):
+        raw = table.get(key, getattr(defaults, key))
+        if raw is None:
+            values[key] = None
+        else:
+            parsed = _number(raw, f"{name}.{key}")
+            if parsed < 0:
+                raise ValueError(f"{name}.{key} must not be negative")
+            values[key] = parsed
+    active_loudness_db = values["active_loudness_db"]
+    true_peak_db = values["true_peak_db"]
+    plr_db = values["plr_db"]
+    assert active_loudness_db is not None
+    assert true_peak_db is not None
+    assert plr_db is not None
+    return ComparisonThresholds(
+        active_loudness_db=active_loudness_db,
+        true_peak_db=true_peak_db,
+        plr_db=plr_db,
+        integrated_lufs_db=values["integrated_lufs_db"],
+        lra_lu=values["lra_lu"],
+        gain_deficit_db=values["gain_deficit_db"],
+    )
 
 
 def _is_within(path: Path, root: Path) -> bool:

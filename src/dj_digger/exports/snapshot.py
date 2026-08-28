@@ -70,7 +70,7 @@ class SnapshotExporter:
             "schema_version": 1,
             "created_at": self._created_at().isoformat(),
             "catalog_schema_version": 1,
-            "tracks_export_schema_version": 1,
+            "tracks_export_schema_version": 2,
             "analysis_schema_version": 2,
             "sources": [
                 {
