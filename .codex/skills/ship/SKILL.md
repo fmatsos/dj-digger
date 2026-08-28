@@ -1,54 +1,46 @@
 ---
 name: ship
-description: Staged diff check, commit, and push with explicit authorization and ancestry proof
+description: Run QA, scoped commits, push, and GitHub pull-request checks for explicitly requested delivery
 ---
 
 ## Purpose
 
-Handles staged diffs, commits, and pushes. Requires explicit scope and authorization. Never stages with `.`, never deletes branches without proof, never stages specs without explicit approval.
+Use only when the user explicitly requests end-to-end delivery (for example,
+“ship this” or “get this to a green PR”). Invocation authorizes the scoped
+commit, push, PR create/update, and checks below; ordinary implementation does
+not. Never broaden the diff or touch protected paths.
 
-## Pre-flight checks
+## Workflow
 
-1. **Explicit request**: User has explicitly requested commit/push.
-2. **Staged scope**: Run `.codex/scripts/staged-check <file1> [<file2> ...]` for all staged files.
-3. **No glob staging**: Confirm no `git add .` or `git add -A` used.
-4. **No conflict markers**: Scan staged content for `<<<<<<<`, `=======`, `>>>>>>>`.
-5. **Protected paths**: No staging of `config/local.toml`, `workspace/`, `sets/`, `*.sqlite*`, `docs/superpowers/specs/**`.
-6. **Spec authorization**: Specs in `docs/superpowers/specs/**` require `DJ_DIGGER_ALLOW_SPEC_STAGE=1`.
-7. **HEAD verification**: Confirm local HEAD matches expected commit.
-8. **Remote HEAD**: Confirm remote main hasn't changed (pull to sync if needed).
+1. Record branch, remote, and base. Resolve an explicit base first, otherwise
+   use the configured upstream/default branch and prove ancestry with
+   `git merge-base`; do not guess. Use the `mr` skill's all-state lookup to
+   confirm the branch is not reusing a closed or merged PR. If head equals base,
+   create a descriptive non-colliding branch for this delivery, then repeat
+   preflight; do not use a worktree.
+2. Determine changed paths with `.codex/scripts/changed-files`, protect local
+   data with `.codex/scripts/protect-local --changed`, select QA with
+   `.codex/scripts/qa-select`, and run it with `.codex/scripts/qa-run`.
+   Stop before mutation on red QA or inaccessible required dependencies.
+3. Group the actual diff into scoped conventional commits. Stage paths
+   explicitly, run `.codex/scripts/staged-check`, inspect the cached diff, and
+   use `git commit` without `--no-verify` or amend. Recheck that protected
+   paths (`config/local.toml`, `workspace/`, `sets/`, `*.sqlite*`) are absent.
+   Never stage `docs/superpowers/specs/**` unless the user authorized those
+   exact paths in the current turn and `DJ_DIGGER_ALLOW_SPEC_STAGE=1` is set.
+4. Push `origin <branch>` and create or update the exact open-head PR with
+   `gh`, following the `mr` skill and its description reference. Run
+   `.codex/scripts/protect-local --range <base>...<branch>` immediately before
+   pushing so already-committed protected files cannot escape. Preserve PR
+   metadata unless requested; never force-push unless the user explicitly
+   authorizes rewriting that branch.
+5. Run `gh pr checks <number> --watch`. For actionable failures, identify the
+   failed workflow/check from `gh pr checks <number> --json` and inspect its
+   actual GitHub Actions log with `gh run view`; allow at most three repair
+   rounds. Each repair reruns QA,
+   makes a scoped commit, pushes, and watches checks again. Exit immediately
+   for secrets, permissions, infrastructure, or external-service failures.
 
-## Commit workflow
-
-1. **Diff review**: Show `git diff --cached` and confirm correctness.
-2. **Message**: Brief summary (Goal, Changed files, Observed proof, Residual risk).
-3. **Sign-off**: Include Co-Authored-By and session URL.
-4. **Create**: `git commit -m "..."` (not amend unless explicitly requested).
-
-## Push workflow
-
-1. **Branch ancestry**: Confirm current branch is ahead of main.
-2. **Rebase check**: No rebase -i or destructive reset needed.
-3. **Push**: `git push origin <branch> -u`.
-4. **No force**: Never use `--force` without explicit user instruction.
-
-## Branch deletion
-
-- **Never** delete a branch without user authorization and ancestry proof.
-- Require explicit confirmation: "delete branch <name>".
-- Verify the branch is merged into main or the deletion target.
-
-## Report format
-
-Use `.codex/scripts/handoff` to print the compact six-field report (Status,
-Branch, Diff, QA, Next, Risk) — this is the exact format AGENTS.md's
-"Completion report" section mandates.
-
-## Do not do
-
-- Stage with `.` or `-A`
-- Commit without explicit request
-- Skip staged-check
-- Delete branches without authorization
-- Push without remote HEAD verification
-- Stage specs without DJ_DIGGER_ALLOW_SPEC_STAGE
+Read [assets/report.md](assets/report.md) for the final report shape. Finish
+with `.codex/scripts/handoff`, including branch/base proof, commits, QA, PR,
+check result, repair rounds, and residual risk. Do not merge or delete branches.

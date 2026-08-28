@@ -146,6 +146,128 @@ def test_track_repository_keeps_no_export_read_boundary() -> None:
     assert not hasattr(TrackRepository, "export_rows")
 
 
+def _fingerprint(database: Database, track_id: int, fingerprint_hash: str) -> None:
+    database.execute(
+        """
+        INSERT INTO audio_fingerprints (
+            track_id, fingerprint, fingerprint_hash, fingerprint_version,
+            input_size_bytes, input_mtime_ns, fingerprinted_at
+        ) VALUES (?, ?, ?, 'test/1', 12, 1, 'now')
+        """,
+        (track_id, fingerprint_hash, fingerprint_hash),
+    )
+
+
+def test_export_reports_the_three_duplicate_quality_states(
+    database: Database, tmp_path: Path
+) -> None:
+    with database.transaction():
+        winner = insert_track(
+            database, source_id="src", relative_path="Dup/Winner.flac", mtime_ns=1
+        )
+        loser = insert_track(
+            database, source_id="src", relative_path="Dup/Loser.mp3", mtime_ns=1
+        )
+        unmarked_a = insert_track(
+            database, source_id="src", relative_path="Unmarked/A.flac", mtime_ns=1
+        )
+        unmarked_b = insert_track(
+            database, source_id="src", relative_path="Unmarked/B.mp3", mtime_ns=1
+        )
+        _fingerprint(database, winner, "marked-hash")
+        _fingerprint(database, loser, "marked-hash")
+        _fingerprint(database, unmarked_a, "unmarked-hash")
+        _fingerprint(database, unmarked_b, "unmarked-hash")
+        database.execute(
+            """
+            INSERT INTO duplicate_quality_selections (
+                source_id, fingerprint_hash, preferred_track_id, ranking_version, selected_at
+            ) VALUES ('src', 'marked-hash', ?, 'test/1', 'now')
+            """,
+            (winner,),
+        )
+
+    out = tmp_path / "tracks.tsv"
+    TracksExporter(database).export(out)
+    rows = {
+        row["path"]: row
+        for row in csv.DictReader(out.open(newline="", encoding="utf-8"), delimiter="\t")
+    }
+
+    assert rows["Dir/Éxample.FLAC"]["duplicate_group_id"] == ""
+    assert rows["Dir/Éxample.FLAC"]["duplicate_best_quality"] == ""
+    assert rows["Dup/Winner.flac"]["duplicate_group_id"] == "marked-hash"
+    assert rows["Dup/Winner.flac"]["duplicate_best_quality"] == "true"
+    assert rows["Dup/Loser.mp3"]["duplicate_group_id"] == "marked-hash"
+    assert rows["Dup/Loser.mp3"]["duplicate_best_quality"] == "false"
+    assert rows["Unmarked/A.flac"]["duplicate_group_id"] == "unmarked-hash"
+    assert rows["Unmarked/A.flac"]["duplicate_best_quality"] == ""
+    assert rows["Unmarked/B.mp3"]["duplicate_group_id"] == "unmarked-hash"
+    assert rows["Unmarked/B.mp3"]["duplicate_best_quality"] == ""
+
+
+def test_export_excludes_missing_members_from_duplicate_groups(
+    database: Database, tmp_path: Path
+) -> None:
+    with database.transaction():
+        present = insert_track(
+            database, source_id="src", relative_path="Solo/Present.flac", mtime_ns=1
+        )
+        missing = insert_track(
+            database,
+            source_id="src",
+            relative_path="Solo/Missing.mp3",
+            mtime_ns=1,
+            presence_status="missing",
+        )
+        _fingerprint(database, present, "solo-hash")
+        _fingerprint(database, missing, "solo-hash")
+
+    out = tmp_path / "tracks.tsv"
+    TracksExporter(database).export(out)
+    rows = {
+        row["path"]: row
+        for row in csv.DictReader(out.open(newline="", encoding="utf-8"), delimiter="\t")
+    }
+
+    assert "Solo/Missing.mp3" not in rows
+    assert rows["Solo/Present.flac"]["duplicate_group_id"] == ""
+    assert rows["Solo/Present.flac"]["duplicate_best_quality"] == ""
+
+
+def test_export_scopes_quality_state_to_the_members_own_source(
+    database: Database, tmp_path: Path
+) -> None:
+    with database.transaction():
+        src_track = insert_track(
+            database, source_id="src", relative_path="Cross/A.flac", mtime_ns=1
+        )
+        other_track = insert_track(
+            database, source_id="other", relative_path="Cross/A.mp3", mtime_ns=1
+        )
+        _fingerprint(database, src_track, "cross-hash")
+        _fingerprint(database, other_track, "cross-hash")
+        database.execute(
+            """
+            INSERT INTO duplicate_quality_selections (
+                source_id, fingerprint_hash, preferred_track_id, ranking_version, selected_at
+            ) VALUES ('src', 'cross-hash', ?, 'test/1', 'now')
+            """,
+            (src_track,),
+        )
+
+    out = tmp_path / "tracks.tsv"
+    TracksExporter(database).export(out)
+    rows = {
+        row["path"]: row
+        for row in csv.DictReader(out.open(newline="", encoding="utf-8"), delimiter="\t")
+    }
+
+    assert rows["Cross/A.flac"]["duplicate_best_quality"] == "true"
+    assert rows["Cross/A.mp3"]["duplicate_group_id"] == "cross-hash"
+    assert rows["Cross/A.mp3"]["duplicate_best_quality"] == ""
+
+
 def test_view_backed_export_is_byte_identical_to_legacy_projection(
     database: Database, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -157,11 +279,36 @@ def test_view_backed_export_is_byte_identical_to_legacy_projection(
                e.disc_number, e.genre, e.date, e.year, e.composer, e.comment,
                e.tag_bpm, e.tag_initial_key, e.grouping,
                technical.duration_seconds, technical.sample_rate, technical.channels,
-               technical.codec, technical.container, technical.bitrate, technical.lossless
+               technical.codec, technical.container, technical.bitrate, technical.lossless,
+               dup.fingerprint_hash,
+               CASE
+                   WHEN dup.fingerprint_hash IS NULL THEN NULL
+                   WHEN dqs.preferred_track_id IS NULL THEN NULL
+                   WHEN dqs.preferred_track_id = t.id THEN 1
+                   ELSE 0
+               END
         FROM tracks AS t
         JOIN library_sources AS s ON s.source_id = t.source_id
         LEFT JOIN embedded_metadata AS e ON e.track_id = t.id
         LEFT JOIN technical_audio_metadata AS technical ON technical.track_id = t.id
+        LEFT JOIN (
+            SELECT af.track_id, af.fingerprint_hash
+            FROM audio_fingerprints af
+            JOIN tracks t2 ON t2.id = af.track_id
+            JOIN library_sources s2 ON s2.source_id = t2.source_id
+            WHERE t2.presence_status = 'present' AND s2.enabled = 1
+              AND af.fingerprint_hash IN (
+                  SELECT af2.fingerprint_hash
+                  FROM audio_fingerprints af2
+                  JOIN tracks t3 ON t3.id = af2.track_id
+                  JOIN library_sources s3 ON s3.source_id = t3.source_id
+                  WHERE t3.presence_status = 'present' AND s3.enabled = 1
+                  GROUP BY af2.fingerprint_hash
+                  HAVING COUNT(*) >= 2
+              )
+        ) dup ON dup.track_id = t.id
+        LEFT JOIN duplicate_quality_selections dqs
+            ON dqs.source_id = t.source_id AND dqs.fingerprint_hash = dup.fingerprint_hash
         WHERE t.presence_status = 'present'
         ORDER BY t.source_id, t.relative_path, t.id
         """

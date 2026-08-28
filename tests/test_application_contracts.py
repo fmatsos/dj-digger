@@ -118,8 +118,13 @@ def _seed_failed_run(application: WorkspaceApplication) -> AnalysisRunResult:
     scan_id = ScanRunRepository(application.database).start("source", scanner_version="test")
     with application.database.transaction():
         track = TrackRepository(application.database).insert(
-            source_id="source", relative_path="Techno/A.flac", filename="A.flac",
-            extension=".flac", size_bytes=10, mtime_ns=20, scan_id=scan_id,
+            source_id="source",
+            relative_path="Techno/A.flac",
+            filename="A.flac",
+            extension=".flac",
+            size_bytes=10,
+            mtime_ns=20,
+            scan_id=scan_id,
         )
     identity = application._analysis_identity
     persistence = AnalysisPersistence(application.database)
@@ -199,6 +204,7 @@ def test_refresh_export_exception_preserves_existing_analysis_bytes(monkeypatch,
     monkeypatch.setattr(application, "scan", lambda **_: scans)
     monkeypatch.setattr(application, "metadata", lambda: SimpleNamespace(status="succeeded"))
     monkeypatch.setattr(application, "analyze", lambda **_: SimpleNamespace(status="succeeded"))
+
     def fail_export(*_args, **_kwargs):
         raise RuntimeError("publish failed")
 
@@ -238,9 +244,7 @@ def test_refresh_reports_the_four_phases_in_order(monkeypatch, tmp_path: Path) -
     ]
 
 
-def test_refresh_stops_progress_after_a_required_scan_failure(
-    monkeypatch, tmp_path: Path
-) -> None:
+def test_refresh_stops_progress_after_a_required_scan_failure(monkeypatch, tmp_path: Path) -> None:
     application = WorkspaceApplication(_workspace(tmp_path))
     progress = RecordingProgress()
     monkeypatch.setattr(
@@ -265,7 +269,9 @@ def test_export_analysis_publishes_only_analysis_facets(tmp_path):
     published = application.export("analysis")
 
     assert {Path(path).name for path in published} == {
-        "dj-analysis.tsv", "dj-sections.jsonl", "dj-analysis-run.json"
+        "dj-analysis.tsv",
+        "dj-sections.jsonl",
+        "dj-analysis-run.json",
     }
     assert not (application.config.exports / "tracks.tsv").exists()
     assert not (application.config.exports / "artifacts.jsonl").exists()
@@ -279,13 +285,61 @@ def test_export_all_has_only_canonical_facets(tmp_path):
     application.export("all")
 
     assert (config.exports / "tracks.tsv").is_file()
-    assert all((config.exports / name).is_file() for name in (
-        "dj-analysis.tsv", "dj-sections.jsonl", "dj-analysis-run.json"
-    ))
+    assert all(
+        (config.exports / name).is_file()
+        for name in ("dj-analysis.tsv", "dj-sections.jsonl", "dj-analysis-run.json")
+    )
     assert {path.name for path in config.exports.iterdir()} == {
-        "tracks.tsv", "library-artifacts.tsv", "dj-analysis.tsv",
-        "dj-sections.jsonl", "dj-analysis-run.json",
+        "tracks.tsv",
+        "library-artifacts.tsv",
+        "dj-analysis.tsv",
+        "dj-sections.jsonl",
+        "dj-analysis-run.json",
     }
+
+
+def test_export_tracks_json_projects_requested_fields_in_order(tmp_path):
+    application = WorkspaceApplication(_workspace(tmp_path))
+
+    published = application.export(type="tracks", format="json", fields="title,filename")
+
+    assert [Path(path).name for path in published] == ["tracks.json"]
+    assert json.loads(Path(published[0]).read_text(encoding="utf-8")) == []
+
+
+def test_export_all_csv_applies_the_format_to_every_leaf(tmp_path):
+    application = WorkspaceApplication(_workspace(tmp_path))
+    _seed_failed_run(application)
+
+    published = application.export(type="all", format="csv")
+
+    assert {Path(path).name for path in published} == {
+        "tracks.csv",
+        "library-artifacts.csv",
+        "dj-analysis.csv",
+        "dj-sections.csv",
+        "dj-analysis-run.csv",
+    }
+
+
+@pytest.mark.parametrize(
+    ("type_", "fields", "message"),
+    [
+        (None, "title", "--fields requires a leaf --type"),
+        ("all", "title", "--fields requires a leaf --type"),
+        ("tracks", "title,title", "--fields contains duplicate fields"),
+        ("tracks", "bpm", "unknown field: bpm"),
+    ],
+)
+def test_export_rejects_invalid_field_selection_before_publication(
+    tmp_path, type_, fields, message
+):
+    application = WorkspaceApplication(_workspace(tmp_path))
+
+    with pytest.raises(ValueError, match=message):
+        application.export(type=type_, fields=fields)
+
+    assert not application.config.exports.exists() or not any(application.config.exports.iterdir())
 
 
 def test_status_reports_analysis_facet_booleans_and_latest_identity(tmp_path):
@@ -298,10 +352,14 @@ def test_status_reports_analysis_facet_booleans_and_latest_identity(tmp_path):
     result = application.status()
 
     assert set(result["exports"]["analysis"]) == {
-        "dj-analysis.tsv", "dj-sections.jsonl", "dj-analysis-run.json"
+        "dj-analysis.tsv",
+        "dj-sections.jsonl",
+        "dj-analysis-run.json",
     }
     assert result["exports"]["analysis"] == {
-        "dj-analysis.tsv": True, "dj-sections.jsonl": False, "dj-analysis-run.json": True
+        "dj-analysis.tsv": True,
+        "dj-sections.jsonl": False,
+        "dj-analysis-run.json": True,
     }
     identity = result["latest_analysis"]["identity"]
     assert identity == {

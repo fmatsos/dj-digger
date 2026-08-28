@@ -39,7 +39,7 @@ def test_status_reports_source_counts_after_scan(tmp_path: Path) -> None:
     runner = CliRunner()
 
     assert runner.invoke(app, ["scan", "--config", str(config)]).exit_code == 0
-    result = runner.invoke(app, ["status", "--config", str(config)])
+    result = runner.invoke(app, ["status", "--config", str(config), "--json"])
 
     assert result.exit_code == 0
     assert '"event":"status"' in result.output
@@ -50,7 +50,7 @@ def test_status_reports_source_counts_after_scan(tmp_path: Path) -> None:
 def test_doctor_reports_unavailable_source_root(tmp_path: Path) -> None:
     config = write_config(tmp_path, source=tmp_path / "missing", exports=tmp_path / "exports")
 
-    result = CliRunner().invoke(app, ["doctor", "--config", str(config)])
+    result = CliRunner().invoke(app, ["doctor", "--config", str(config), "--json"])
 
     assert result.exit_code != 0
     assert '"event":"doctor"' in result.output
@@ -62,13 +62,13 @@ def test_doctor_reports_sqlite_runtime_schema_and_health(tmp_path: Path) -> None
     source.mkdir()
     config = write_config(tmp_path, source=source, exports=tmp_path / "exports")
 
-    result = CliRunner().invoke(app, ["doctor", "--config", str(config)])
+    result = CliRunner().invoke(app, ["doctor", "--config", str(config), "--json"])
 
     assert result.exit_code == 0
     payload = json.loads(result.output)
     assert payload["database"] == str((tmp_path / "catalog.sqlite").resolve())
     assert payload["sqlite_version"]
-    assert payload["migration_version"] == 7
+    assert payload["migration_version"] == 8
     assert payload["journal_mode"] == "wal"
     assert payload["foreign_keys"] == 1
     assert payload["synchronous"] == 1
@@ -88,7 +88,7 @@ def test_doctor_reports_sqlite_runtime_schema_and_health(tmp_path: Path) -> None
     (
         ("foreign_keys", "OFF", "SQLite foreign keys are disabled"),
         ("journal_mode", "DELETE", "SQLite journal mode is delete, expected wal"),
-        ("user_version", "6", "SQLite migration version is 6, expected 7"),
+        ("user_version", "7", "SQLite migration version is 7, expected 8"),
     ),
 )
 def test_doctor_marks_unhealthy_sqlite_settings_as_issues(
@@ -119,6 +119,53 @@ def test_doctor_marks_failed_quick_check_as_an_issue(
 
     assert diagnostic["status"] == "failed"
     assert "SQLite quick check failed: corrupt page" in diagnostic["issues"]
+
+
+def test_doctor_flags_ffmpeg_missing_the_chromaprint_muxer(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source = tmp_path / "music"
+    source.mkdir()
+    config_path = write_config(tmp_path, source=source, exports=tmp_path / "exports")
+
+    with WorkspaceApplication(WorkspaceConfig.load(config_path)) as application:
+        monkeypatch.setattr("dj_digger.application._has_chromaprint_muxer", lambda: False)
+        diagnostic = application.doctor()
+
+    assert diagnostic["status"] == "failed"
+    assert "ffmpeg is missing the chromaprint muxer required for duplicates" in diagnostic["issues"]
+
+
+def test_doctor_skips_chromaprint_check_when_no_source_is_enabled(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source = tmp_path / "music"
+    source.mkdir()
+    config_path = tmp_path / "dj-digger.toml"
+    config_path.write_text(
+        "\n".join(
+            [
+                "[workspace]",
+                'database = "catalog.sqlite"',
+                f'exports = "{tmp_path / "exports"}"',
+                "",
+                "[[library.sources]]",
+                'id = "required"',
+                f'path = "{source}"',
+                "set_eligible = true",
+                "analyze = false",
+                "enabled = false",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    with WorkspaceApplication(WorkspaceConfig.load(config_path)) as application:
+        monkeypatch.setattr("dj_digger.application._has_chromaprint_muxer", lambda: False)
+        diagnostic = application.doctor()
+
+    assert not any("chromaprint" in issue for issue in diagnostic["issues"])
 
 
 def test_doctor_treats_absent_wal_and_shm_files_as_information(

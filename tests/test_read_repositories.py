@@ -166,6 +166,8 @@ def test_export_rows_preserves_public_tuple_and_order(database: Database) -> Non
             "flac",
             900000,
             1,
+            None,
+            None,
         )
     ]
 

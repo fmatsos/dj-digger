@@ -50,6 +50,7 @@ def test_ffmpeg_normalizes_facts_and_uses_read_only_argv(monkeypatch) -> None:
     assert metadata.loudness_lufs == -13.2
     assert metadata.true_peak_db == -0.4
     assert metadata.dynamic_range == 6.9
+    assert metadata.bit_depth == 24
     assert calls == [
         ["ffprobe", "-v", "error", "-show_streams", "-show_format", "-of", "json", str(path)],
         [
@@ -88,6 +89,60 @@ def test_ffmpeg_tolerates_malformed_optional_facts_and_measurements(monkeypatch)
     assert metadata.loudness_lufs is None
     assert metadata.true_peak_db is None
     assert metadata.dynamic_range is None
+    assert metadata.bit_depth is None
+
+
+def test_probe_facts_skips_the_loudness_measurement(monkeypatch) -> None:
+    ffprobe_calls: list[list[str]] = []
+    measure_calls: list[list[str]] = []
+
+    def run(argv: list[str], **_kwargs: object) -> object:
+        if argv[0] == "ffprobe":
+            ffprobe_calls.append(argv)
+            return type(
+                "Result",
+                (),
+                {
+                    "stdout": '{"streams":[{"codec_type":"audio","sample_rate":"44100",'
+                    '"channels":2,"codec_name":"mp3","bit_rate":"320000"}],'
+                    '"format":{"duration":"200.0","format_name":"mp3"}}',
+                    "stderr": "",
+                },
+            )()
+        measure_calls.append(argv)
+        return type("Result", (), {"stdout": "", "stderr": "I: -9.0 LUFS\n"})()
+
+    monkeypatch.setattr("dj_digger.analysis.ffmpeg.subprocess.run", run)
+
+    metadata = FFmpegProbe().probe_facts(Path("track.mp3"))
+
+    assert metadata.sample_rate == 44_100
+    assert metadata.bitrate == 320_000
+    assert metadata.lossless is False
+    assert metadata.loudness_lufs is None
+    assert metadata.true_peak_db is None
+    assert metadata.dynamic_range is None
+    assert ffprobe_calls
+    assert measure_calls == []
+
+
+def test_probe_facts_falls_back_to_bits_per_sample(monkeypatch) -> None:
+    def run(argv: list[str], **_kwargs: object) -> object:
+        return type(
+            "Result",
+            (),
+            {
+                "stdout": '{"streams":[{"codec_type":"audio","codec_name":"flac",'
+                '"bits_per_sample":16}],"format":{}}',
+                "stderr": "",
+            },
+        )()
+
+    monkeypatch.setattr("dj_digger.analysis.ffmpeg.subprocess.run", run)
+
+    metadata = FFmpegProbe().probe_facts(Path("track.flac"))
+
+    assert metadata.bit_depth == 16
 
 
 def test_technical_audio_metadata_repository_upserts_current_probe(tmp_path: Path) -> None:
@@ -127,6 +182,50 @@ def test_technical_audio_metadata_repository_upserts_current_probe(tmp_path: Pat
         "SELECT sample_rate, lossless, probe_version FROM technical_audio_metadata "
         "WHERE track_id = 1"
     ).fetchone() == (44_100, 0, "ffmpeg-test-2")
+
+
+def test_upsert_facts_preserves_existing_loudness_measurements(tmp_path: Path) -> None:
+    database = Database.open(tmp_path / "catalog.sqlite")
+    database.migrate()
+    database.execute(
+        "INSERT INTO library_sources "
+        "(source_id, root_path, set_eligible, analyze, enabled, created_at, updated_at) "
+        "VALUES ('source', '/music', 1, 1, 1, 'now', 'now')"
+    )
+    database.execute(
+        "INSERT INTO scan_runs (source_id, started_at, status, scanner_version) "
+        "VALUES ('source', 'now', 'running', 'test')"
+    )
+    track = Track(
+        id=1, source_id="source", relative_path="track.flac", filename="track.flac",
+        extension=".flac", size_bytes=4, mtime_ns=5, presence_status="present"
+    )
+    database.execute(
+        "INSERT INTO tracks (id, source_id, relative_path, filename, extension, size_bytes, "
+        "mtime_ns, presence_status, discovered_at, last_seen_at, created_scan_id, "
+        "last_seen_scan_id) VALUES (1, 'source', 'track.flac', 'track.flac', '.flac', 4, 5, "
+        "'present', 'now', 'now', 1, 1)"
+    )
+    database.commit()
+
+    repository = TechnicalAudioMetadataRepository(database)
+    with database.transaction():
+        repository.upsert(
+            track,
+            TechnicalAudioMetadata(sample_rate=44_100, loudness_lufs=-9.5, true_peak_db=-0.5),
+            "ffmpeg-full",
+        )
+    with database.transaction():
+        repository.upsert_facts(
+            track,
+            TechnicalAudioMetadata(sample_rate=48_000, bit_depth=24, lossless=True),
+            "ffmpeg-facts",
+        )
+
+    assert database.execute(
+        "SELECT sample_rate, bit_depth, loudness_lufs, true_peak_db, input_size_bytes, "
+        "input_mtime_ns, probe_version FROM technical_audio_metadata WHERE track_id = 1"
+    ).fetchone() == (48_000, 24, -9.5, -0.5, 4, 5, "ffmpeg-facts")
 
 
 def test_technical_audio_metadata_upsert_rolls_back_with_its_caller_transaction(

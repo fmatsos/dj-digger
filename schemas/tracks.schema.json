@@ -34,7 +34,9 @@
     "codec",
     "container",
     "bitrate",
-    "lossless"
+    "lossless",
+    "duplicate_group_id",
+    "duplicate_best_quality"
   ],
   "properties": {
     "source_id": {
@@ -202,6 +204,18 @@
         "boolean",
         "null"
       ]
+    },
+    "duplicate_group_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "duplicate_best_quality": {
+      "type": [
+        "boolean",
+        "null"
+      ]
     }
   },
   "x-tabular": {
@@ -238,7 +252,9 @@
       "codec",
       "container",
       "bitrate",
-      "lossless"
+      "lossless",
+      "duplicate_group_id",
+      "duplicate_best_quality"
     ],
     "null_serialization": ""
   }

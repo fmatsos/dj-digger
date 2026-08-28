@@ -549,15 +549,17 @@ class TechnicalAudioMetadataRepository:
             """
             INSERT INTO technical_audio_metadata (
                 track_id, duration_seconds, sample_rate, channels, codec, container, bitrate,
-                lossless, loudness_lufs, true_peak_db, dynamic_range, probe_version, probed_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                lossless, loudness_lufs, true_peak_db, dynamic_range, bit_depth,
+                input_size_bytes, input_mtime_ns, probe_version, probed_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(track_id) DO UPDATE SET
                 duration_seconds=excluded.duration_seconds, sample_rate=excluded.sample_rate,
                 channels=excluded.channels, codec=excluded.codec, container=excluded.container,
                 bitrate=excluded.bitrate, lossless=excluded.lossless,
                 loudness_lufs=excluded.loudness_lufs, true_peak_db=excluded.true_peak_db,
-                dynamic_range=excluded.dynamic_range, probe_version=excluded.probe_version,
-                probed_at=excluded.probed_at
+                dynamic_range=excluded.dynamic_range, bit_depth=excluded.bit_depth,
+                input_size_bytes=excluded.input_size_bytes, input_mtime_ns=excluded.input_mtime_ns,
+                probe_version=excluded.probe_version, probed_at=excluded.probed_at
             """,
             (
                 track.id,
@@ -571,6 +573,44 @@ class TechnicalAudioMetadataRepository:
                 metadata.loudness_lufs,
                 metadata.true_peak_db,
                 metadata.dynamic_range,
+                metadata.bit_depth,
+                track.size_bytes,
+                track.mtime_ns,
+                probe_version,
+                _now(),
+            ),
+        )
+
+    def upsert_facts(
+        self, track: Track, metadata: TechnicalAudioMetadata, probe_version: str
+    ) -> None:
+        """Replace technical facts and current input identity, preserving loudness measurements."""
+        self._database.execute(
+            """
+            INSERT INTO technical_audio_metadata (
+                track_id, duration_seconds, sample_rate, channels, codec, container, bitrate,
+                lossless, bit_depth, input_size_bytes, input_mtime_ns, probe_version, probed_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(track_id) DO UPDATE SET
+                duration_seconds=excluded.duration_seconds, sample_rate=excluded.sample_rate,
+                channels=excluded.channels, codec=excluded.codec, container=excluded.container,
+                bitrate=excluded.bitrate, lossless=excluded.lossless,
+                bit_depth=excluded.bit_depth, input_size_bytes=excluded.input_size_bytes,
+                input_mtime_ns=excluded.input_mtime_ns, probe_version=excluded.probe_version,
+                probed_at=excluded.probed_at
+            """,
+            (
+                track.id,
+                metadata.duration_seconds,
+                metadata.sample_rate,
+                metadata.channels,
+                metadata.codec,
+                metadata.container,
+                metadata.bitrate,
+                metadata.lossless,
+                metadata.bit_depth,
+                track.size_bytes,
+                track.mtime_ns,
                 probe_version,
                 _now(),
             ),

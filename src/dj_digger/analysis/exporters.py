@@ -13,6 +13,14 @@ from typing import Any, cast
 from jsonschema import Draft202012Validator, FormatChecker  # type: ignore[import-untyped]
 
 from dj_digger.catalog.database import Database
+from dj_digger.exports.formats import (
+    fields_for_schema,
+    output_path,
+    projected,
+    select_fields,
+    write_object,
+    write_rows,
+)
 from dj_digger.exports.tracks import PublishedFacet
 
 
@@ -52,7 +60,14 @@ class AnalysisExporter:
         )
         self._columns = cast(list[str], self._schemas.analysis["x-tabular"]["columns"])
 
-    def export(self, destination: Path) -> list[PublishedFacet]:
+    def export(
+        self,
+        destination: Path,
+        *,
+        format: str | None = None,
+        fields: str | None = None,
+        leaf_type: str | None = None,
+    ) -> list[PublishedFacet]:
         with self._database.read_transaction():
             analyses = self._analysis_rows()
             sections = self._section_rows(analyses)
@@ -64,6 +79,81 @@ class AnalysisExporter:
         for row in sections:
             self._sections_validator.validate(row)
         self._run_validator.validate(run)
+
+        if format is not None or fields is not None:
+            effective_formats = {
+                "analysis": format or "tsv",
+                "sections": format or "json",
+                "run": format or "json",
+            }
+            if format is not None and format not in {"json", "csv", "tsv"}:
+                raise ValueError(f"unknown export format: {format}")
+            schema_fields = {
+                "analysis": fields_for_schema(self._schemas.analysis),
+                "sections": fields_for_schema(self._schemas.sections),
+                "run": fields_for_schema(self._schemas.run),
+            }
+            selected_types = (
+                (leaf_type,)
+                if leaf_type in {"analysis", "sections", "run"}
+                else ("analysis", "sections", "run")
+            )
+            chosen = select_fields(schema_fields[selected_types[0]], fields)
+            paths_by_type = {
+                "analysis": output_path(destination / "dj-analysis.tsv", format or "tsv"),
+                "sections": output_path(destination / "dj-sections.jsonl", format or "json"),
+                "run": output_path(destination / "dj-analysis-run.json", format or "json"),
+            }
+            # Validate full rows above, then stage every selected artifact before replacement.
+            destination.mkdir(parents=True, exist_ok=True)
+            with tempfile.TemporaryDirectory(prefix=".analysis-publish-", dir=destination) as tmp:
+                staged_by_type = {
+                    name: Path(tmp) / path.name for name, path in paths_by_type.items()
+                }
+                if "analysis" in selected_types:
+                    write_rows(
+                        staged_by_type["analysis"],
+                        projected(analyses, chosen),
+                        chosen or schema_fields["analysis"],
+                        effective_formats["analysis"],
+                    )
+                if "sections" in selected_types:
+                    write_rows(
+                        staged_by_type["sections"],
+                        projected(sections, chosen),
+                        chosen or schema_fields["sections"],
+                        effective_formats["sections"],
+                    )
+                if "run" in selected_types:
+                    value = run if chosen is None else {k: run.get(k) for k in chosen}
+                    write_object(
+                        staged_by_type["run"],
+                        value,
+                        chosen or schema_fields["run"],
+                        effective_formats["run"],
+                    )
+                custom_backups: list[tuple[Path, Path]] = []
+                custom_replaced: list[Path] = []
+                try:
+                    for name in selected_types:
+                        target = paths_by_type[name]
+                        if target.exists():
+                            backup = Path(tmp) / f"{target.name}.bak"
+                            os.replace(target, backup)
+                            custom_backups.append((target, backup))
+                    for name in selected_types:
+                        target = paths_by_type[name]
+                        os.replace(staged_by_type[name], target)
+                        custom_replaced.append(target)
+                except BaseException:
+                    for target in custom_replaced:
+                        target.unlink(missing_ok=True)
+                    for target, backup in custom_backups:
+                        if backup.exists():
+                            os.replace(backup, target)
+                    raise
+            counts = {"analysis": len(analyses), "sections": len(sections), "run": 1}
+            return [PublishedFacet(paths_by_type[name], counts[name]) for name in selected_types]
 
         analysis_path = destination / "dj-analysis.tsv"
         sections_path = destination / "dj-sections.jsonl"

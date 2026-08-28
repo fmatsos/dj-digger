@@ -17,3 +17,4 @@ class TechnicalAudioMetadata:
     loudness_lufs: float | None = None
     true_peak_db: float | None = None
     dynamic_range: float | None = None
+    bit_depth: int | None = None

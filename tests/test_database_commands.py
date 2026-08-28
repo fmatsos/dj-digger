@@ -45,7 +45,7 @@ def test_database_reports_runtime_file_and_health_diagnostics(tmp_path: Path) ->
 
     assert diagnostics["path"] == str(path.resolve())
     assert diagnostics["sqlite_version"]
-    assert diagnostics["schema_version"] == 7
+    assert diagnostics["schema_version"] == 8
     assert diagnostics["journal_mode"] == "wal"
     assert diagnostics["foreign_keys"] == 1
     assert diagnostics["synchronous"] == 1
@@ -73,10 +73,10 @@ def test_database_maintenance_commands_return_structured_json(tmp_path: Path) ->
     config = _write_config(tmp_path)
     runner = CliRunner()
 
-    optimize = runner.invoke(app, ["database", "optimize", "--config", str(config)])
-    quick_check = runner.invoke(app, ["database", "quick-check", "--config", str(config)])
+    optimize = runner.invoke(app, ["database", "optimize", "--config", str(config), "--json"])
+    quick_check = runner.invoke(app, ["database", "quick-check", "--config", str(config), "--json"])
     integrity_check = runner.invoke(
-        app, ["database", "integrity-check", "--config", str(config)]
+        app, ["database", "integrity-check", "--config", str(config), "--json"]
     )
 
     assert optimize.exit_code == 0
@@ -99,7 +99,8 @@ def test_database_rebuild_current_analysis_reports_projected_count(tmp_path: Pat
     config = _write_config(tmp_path)
 
     result = CliRunner().invoke(
-        app, ["database", "rebuild-current-analysis", "--config", str(config)]
+        app,
+        ["database", "rebuild-current-analysis", "--config", str(config), "--json"],
     )
 
     assert result.exit_code == 0
