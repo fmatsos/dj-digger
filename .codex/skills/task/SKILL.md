@@ -5,7 +5,9 @@ description: Route work by risk and model; consult AGENTS.md routing table for S
 
 ## Purpose
 
-Scopes tasks and prevents re-exploration. Routes bounded tranches to Luna or Sol based on the root AGENTS.md model table.
+Scopes direct-Codex tasks and prevents re-exploration. Under Docker Agent, the
+bounded brief is authoritative and this skill is a fallback for direct use.
+Routes tranches to Luna or Sol based on the root AGENTS.md model table.
 
 ## Inputs
 
@@ -30,4 +32,4 @@ payload and reporting contract — do not restate it here.
 
 ## Handoff format
 
-Always include: Status, Branch, Diff, QA, Next, Risk. Use `.codex/scripts/handoff` for compact format.
+Always include: Status, Branch, Diff, QA, Next, Risk. Use `.codex/scripts/handoff` for compact format. A Docker Agent worker returns this handoff to the lead.

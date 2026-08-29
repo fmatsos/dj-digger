@@ -3,13 +3,9 @@
 import sqlite3
 from importlib.resources import files
 
-CURRENT_VERSION = 9
-CURRENT_SCHEMA = "catalog-v9.sql"
-MIGRATIONS = {
-    6: "migrate-v6-to-v7.sql",
-    7: "migrate-v7-to-v8.sql",
-    8: "migrate-v8-to-v9.sql",
-}
+CURRENT_VERSION = 8
+CURRENT_SCHEMA = "catalog-v8.sql"
+MIGRATIONS = {6: "migrate-v6-to-v7.sql", 7: "migrate-v7-to-v8.sql"}
 
 
 def migrate(connection: sqlite3.Connection) -> None:

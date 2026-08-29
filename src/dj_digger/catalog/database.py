@@ -153,7 +153,7 @@ class Database:
     @contextmanager
     def transaction(self) -> Iterator[None]:
         """Execute a group of catalog mutations atomically."""
-        self._connection.execute("BEGIN IMMEDIATE")
+        self._connection.execute("BEGIN")
         try:
             yield
         except BaseException:

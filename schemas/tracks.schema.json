@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://dj-digger.local/schemas/v2/tracks.schema.json",
+  "$id": "https://dj-digger.local/schemas/v1a/tracks.schema.json",
   "title": "DJ Digger canonical public inventory row",
   "type": "object",
   "additionalProperties": false,
@@ -36,16 +36,7 @@
     "bitrate",
     "lossless",
     "duplicate_group_id",
-    "duplicate_best_quality",
-    "integrated_lufs",
-    "loudness_range_lu",
-    "true_peak_dbtp",
-    "short_term_lufs_p50",
-    "short_term_lufs_p95",
-    "peak_to_loudness_ratio_db",
-    "required_gain_db",
-    "available_gain_db",
-    "gain_deficit_db"
+    "duplicate_best_quality"
   ],
   "properties": {
     "source_id": {
@@ -225,16 +216,7 @@
         "boolean",
         "null"
       ]
-    },
-    "integrated_lufs": {"type": ["number", "null"]},
-    "loudness_range_lu": {"type": ["number", "null"]},
-    "true_peak_dbtp": {"type": ["number", "null"]},
-    "short_term_lufs_p50": {"type": ["number", "null"]},
-    "short_term_lufs_p95": {"type": ["number", "null"]},
-    "peak_to_loudness_ratio_db": {"type": ["number", "null"]},
-    "required_gain_db": {"type": ["number", "null"]},
-    "available_gain_db": {"type": ["number", "null"]},
-    "gain_deficit_db": {"type": ["number", "null"]}
+    }
   },
   "x-tabular": {
     "format": "TSV",
@@ -272,16 +254,7 @@
       "bitrate",
       "lossless",
       "duplicate_group_id",
-      "duplicate_best_quality",
-      "integrated_lufs",
-      "loudness_range_lu",
-      "true_peak_dbtp",
-      "short_term_lufs_p50",
-      "short_term_lufs_p95",
-      "peak_to_loudness_ratio_db",
-      "required_gain_db",
-      "available_gain_db",
-      "gain_deficit_db"
+      "duplicate_best_quality"
     ],
     "null_serialization": ""
   }

@@ -44,10 +44,6 @@ class LibraryReadRepository:
                        WHEN dqs.preferred_track_id = lt.track_id THEN 1
                        ELSE 0
                    END AS duplicate_best_quality
-                   ,lt.integrated_lufs, lt.loudness_range_lu, lt.true_peak_dbtp,
-                   lt.short_term_lufs_p50, lt.short_term_lufs_p95,
-                   lt.peak_to_loudness_ratio_db, lt.required_gain_db,
-                   lt.available_gain_db, lt.gain_deficit_db
             FROM library_tracks lt
             LEFT JOIN (
                 SELECT af.track_id, af.fingerprint_hash

@@ -168,15 +168,6 @@ def test_export_rows_preserves_public_tuple_and_order(database: Database) -> Non
             1,
             None,
             None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
         )
     ]
 

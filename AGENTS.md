@@ -4,16 +4,20 @@
 
 DJ Digger is a music library analysis system that ingests track metadata, runs
 analysis workers, maintains a SQLite V7 catalog, and exports structured data.
-The public entry point is the CLI application. Codex orchestrates bounded,
-vertically scoped changes: from CLI flags through catalog mutations to worker
+The public entry point is the CLI application. Docker Agent may orchestrate
+bounded work while Codex remains the implementation worker; direct Codex use
+continues as the fallback. Changes stay vertically scoped from CLI flags through catalog mutations to worker
 concurrency and export publication. The system spans application code, catalog
 schema, analysis workers, exports, and integration tests. Each layer has its own
 invariants and acceptance criteria.
 
-Architecture, supervision, and final review are routed to GPT-5.6 Sol low. Simple
-implementation is routed to GPT-5.6 Luna low. Complex multi-file changes or
-independent risk review are routed to GPT-5.6 Luna medium. CodeGraph indexes all
-symbols and enables semantic searches. New work always checks CodeGraph first.
+Architecture, supervision, arbitration, and independent risk review are routed
+to GPT-5.6 Sol medium. Simple bounded implementation is routed to GPT-5.6 Luna
+low, while complex multi-file implementation uses GPT-5.6 Luna medium. Under
+Docker Agent, the Luna-low lead owns orchestration, delegates bounded work to
+the Luna-medium Codex worker, and uses the Sol-medium reviewer for elevated-risk
+changes. CodeGraph indexes all symbols and enables semantic searches. New work
+always checks CodeGraph first.
 
 ## Instruction scope
 
@@ -53,11 +57,11 @@ without reading that directory's closest `AGENTS.md` first.
 
 | Work | Model | Effort |
 | --- | --- | --- |
-| Architecture, supervision, arbitration | GPT-5.6 Sol | low |
-| Global and final review | GPT-5.6 Sol | low |
-| Simple bounded implementation | GPT-5.6 Luna | low |
+| Architecture, supervision, arbitration | GPT-5.6 Sol | medium |
+| Global and final review | GPT-5.6 Sol | medium |
+| Lightweight orchestration / simple bounded implementation | GPT-5.6 Luna | low |
 | Complex multi-file implementation | GPT-5.6 Luna | medium |
-| Independent targeted risk review | GPT-5.6 Luna | medium |
+| Independent targeted risk review | GPT-5.6 Sol | medium |
 
 Sol scopes tasks and routes bounded, self-contained tranches to Luna. Delegated
 work receives: Goal, Owned files, Observable acceptance, Relevant AGENTS.md,
@@ -104,6 +108,16 @@ commits, push, and pull-request checks for explicitly authorized end-to-end
 delivery. Deterministic scripts provide environment setup, file discovery, local
 data protection, QA selection, and compact handoffs. All scripts
 remain silent on success and report only errors or status changes.
+
+## Orchestration modes
+
+- Under a Docker Agent bounded brief, Codex implements only the stated owned
+  files and acceptance criteria, then returns its compact handoff. It does not
+  re-orchestrate or repeat broad exploration after ownership is established.
+- When invoked directly, Codex retains the routing, scoped-instruction, QA,
+  and delivery workflow below. Docker Agent is optional and never a prerequisite.
+- The external deterministic QA gate owns final profile selection. Focused
+  implementation checks remain with the worker; a passing gate is not reinterpreted.
 
 ## Completion report
 

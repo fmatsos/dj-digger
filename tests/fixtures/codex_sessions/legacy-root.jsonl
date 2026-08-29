@@ -1,0 +1,5 @@
+{"type":"session_meta","payload":{"id":"legacy-session","cwd":"/repo/dj-digger","timestamp":"2026-08-28T10:00:00Z"}}
+{"timestamp":"2026-08-28T10:00:01Z","type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"synthetic request"}]}}
+{"timestamp":"2026-08-28T10:00:02Z","type":"command_execution","payload":{"command":"rg --files src","exit_code":0}}
+{"timestamp":"2026-08-28T10:00:03Z","type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":10,"cached_input_tokens":2,"output_tokens":3,"reasoning_output_tokens":1,"total_tokens":14}}}}
+{"timestamp":"2026-08-28T10:00:04Z","type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":20,"cached_input_tokens":4,"output_tokens":6,"reasoning_output_tokens":2,"total_tokens":28}}}}

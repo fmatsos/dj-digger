@@ -5,7 +5,7 @@ from datetime import UTC, datetime
 
 from dj_digger.catalog.database import Database
 from dj_digger.catalog.models import Track
-from dj_digger.duplicates.fingerprint import FINGERPRINT_VERSION, Fingerprint
+from dj_digger.duplicates.fingerprint import Fingerprint
 
 
 @dataclass(frozen=True)
@@ -92,11 +92,8 @@ class DuplicateRepository:
             JOIN tracks t ON t.id = af.track_id
             JOIN library_sources s ON s.source_id = t.source_id
             WHERE t.presence_status = 'present' AND s.enabled = 1
-              AND af.fingerprint_version = ?
-              AND af.input_size_bytes = t.size_bytes
-              AND af.input_mtime_ns = t.mtime_ns
         """
-        parameters: list[object] = [FINGERPRINT_VERSION]
+        parameters: list[object] = []
         if source_id is not None:
             query += " AND t.source_id = ?"
             parameters.append(source_id)
@@ -107,10 +104,7 @@ class DuplicateRepository:
                 JOIN tracks t2 ON t2.id = af2.track_id
                 JOIN library_sources s2 ON s2.source_id = t2.source_id
                 WHERE t2.presence_status = 'present' AND s2.enabled = 1
-                  AND af2.fingerprint_version = ?
-                  AND af2.input_size_bytes = t2.size_bytes AND af2.input_mtime_ns = t2.mtime_ns
         """
-        parameters.append(FINGERPRINT_VERSION)
         if source_id is not None:
             query += " AND t2.source_id = ?"
             parameters.append(source_id)
@@ -146,9 +140,6 @@ class DuplicateRepository:
                 LEFT JOIN audio_fingerprints af
                     ON af.track_id = dqs.preferred_track_id
                    AND af.fingerprint_hash = dqs.fingerprint_hash
-                   AND af.fingerprint_version = ?
-                   AND af.input_size_bytes = t.size_bytes
-                   AND af.input_mtime_ns = t.mtime_ns
                 LEFT JOIN technical_audio_metadata tam
                     ON tam.track_id = dqs.preferred_track_id
                    AND t.id IS NOT NULL
@@ -156,8 +147,7 @@ class DuplicateRepository:
                    AND tam.input_mtime_ns = t.mtime_ns
                 WHERE t.id IS NULL OR af.track_id IS NULL OR tam.track_id IS NULL
             )
-            """,
-            (FINGERPRINT_VERSION,),
+            """
         )
 
     def replace_quality_selections(

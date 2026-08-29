@@ -1,0 +1,319 @@
+#!/usr/bin/env python3
+# ruff: noqa: E501
+"""Produce a privacy-safe, deterministic summary of Codex rollout JSONL."""
+from __future__ import annotations
+
+import argparse
+import csv
+import hashlib
+import json
+import os
+import re
+import sys
+from collections import Counter
+from dataclasses import dataclass, field
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any
+
+
+@dataclass
+class Thread:
+    session_id: str
+    thread_id: str
+    parent: str | None
+    cwd: Path | None
+    started: datetime | None
+    path: Path
+    events: list[dict[str, Any]] = field(default_factory=list)
+    usage: dict[str, int] | None = None
+    unknown: int = 0
+
+
+def _timestamp(value: Any) -> datetime | None:
+    if isinstance(value, (int, float)):
+        return datetime.fromtimestamp(value, timezone.utc)
+    if not isinstance(value, str):
+        return None
+    try:
+        text = value.replace("Z", "+00:00")
+        result = datetime.fromisoformat(text)
+        return result if result.tzinfo else result.replace(tzinfo=timezone.utc)
+    except ValueError:
+        return None
+
+
+def _payload(line: dict[str, Any]) -> dict[str, Any]:
+    value = line.get("payload", line)
+    return value if isinstance(value, dict) else {}
+
+
+def _usage(payload: dict[str, Any]) -> dict[str, int] | None:
+    info = payload.get("info", payload)
+    if not isinstance(info, dict):
+        return None
+    value = info.get("total_token_usage", info.get("token_usage", info))
+    if not isinstance(value, dict):
+        return None
+    aliases = {
+        "total": ("total_tokens", "total"),
+        "input": ("input_tokens", "input"),
+        "cached_input": ("cached_input_tokens", "cached_input"),
+        "cache_write_input": ("cache_write_input_tokens", "cache_write_input"),
+        "output": ("output_tokens", "output"),
+        "reasoning_output": ("reasoning_output_tokens", "reasoning_output"),
+    }
+    result: dict[str, int] = {}
+    for target, names in aliases.items():
+        raw = next((value.get(name) for name in names if value.get(name) is not None), 0)
+        if isinstance(raw, bool) or not isinstance(raw, (int, float)):
+            return None
+        result[target] = int(raw)
+    if not any(result.values()):
+        return None
+    return result
+
+
+def _meta(path: Path) -> Thread | None:
+    first: dict[str, Any] | None = None
+    try:
+        with path.open(encoding="utf-8") as handle:
+            for raw in handle:
+                try:
+                    line = json.loads(raw)
+                except json.JSONDecodeError:
+                    continue
+                if isinstance(line, dict) and line.get("type") == "session_meta":
+                    first = line
+                    break
+    except OSError:
+        return None
+    if not first:
+        return None
+    payload = _payload(first)
+    session_id = str(payload.get("session_id") or payload.get("conversation_id") or payload.get("id") or path.stem)
+    thread_id = str(payload.get("thread_id") or payload.get("threadId") or payload.get("id") or path.stem)
+    parent = payload.get("parent_thread_id", payload.get("parent_threadId", payload.get("parent_id")))
+    cwd_value = payload.get("cwd") or payload.get("working_directory")
+    cwd = Path(cwd_value).expanduser() if isinstance(cwd_value, str) else None
+    started = _timestamp(payload.get("timestamp")) or _timestamp(first.get("timestamp"))
+    return Thread(session_id, thread_id, str(parent) if parent else None, cwd, started, path)
+
+
+def _read(thread: Thread) -> None:
+    try:
+        with thread.path.open(encoding="utf-8") as handle:
+            for raw in handle:
+                try:
+                    line = json.loads(raw)
+                except json.JSONDecodeError:
+                    thread.unknown += 1
+                    continue
+                if not isinstance(line, dict):
+                    thread.unknown += 1
+                    continue
+                event_type = str(line.get("type", ""))
+                payload = _payload(line)
+                if event_type in {"event_msg", "response_item", "turn_context", "session_meta", "compacted"}:
+                    thread.events.append({"type": event_type, "payload": payload, "timestamp": _timestamp(line.get("timestamp"))})
+                    if event_type == "event_msg" and str(payload.get("type", "")) in {"token_count", "usage"}:
+                        current = _usage(payload)
+                        if current is not None:
+                            thread.usage = current
+                elif event_type in {"turn_started", "turn_completed", "command_execution", "file_change", "tool_call", "approval"}:
+                    thread.events.append({"type": event_type, "payload": payload, "timestamp": _timestamp(line.get("timestamp"))})
+                else:
+                    thread.unknown += 1
+    except (OSError, UnicodeError):
+        thread.unknown += 1
+
+
+DISCOVERY = {"rg", "grep", "git grep", "find", "fd", "ls", "tree", "sed", "cat", "head", "tail", "codegraph"}
+QA = (".codex/scripts/qa-run", ".docker-agent/scripts/qa-gate", "pytest", "ruff", "mypy", "package-check", "git diff --check", ".codex/tests/test-harness.sh")
+CHILD_RE = re.compile(r"(?:child|subagent|sub-agent)", re.I)
+
+
+def _command(payload: dict[str, Any]) -> str:
+    value = payload.get("command") or payload.get("cmd") or payload.get("argv")
+    if isinstance(value, list):
+        return " ".join(str(x) for x in value)
+    return str(value or "")
+
+
+def _category(command: str) -> str | None:
+    command = command.strip()
+    base = command.split()[0].rsplit("/", 1)[-1] if command else ""
+    if base in {"rg", "grep", "find", "fd", "ls", "tree", "sed", "cat", "head", "tail", "codegraph"}:
+        return "discovery"
+    if command.startswith("git grep"):
+        return "discovery"
+    if command.startswith("git ") and command.split()[1:2] in [["status"], ["diff"], ["log"], ["show"]]:
+        return "discovery"
+    if any(command == item or command.startswith(item + " ") for item in QA):
+        return "qa"
+    return "shell"
+
+
+def _profile(command: str) -> str | None:
+    for name in ("focused", "subsystem", "catalog", "analysis", "exports", "runtime", "full"):
+        if re.search(rf"(?:^|[ /_-]){name}(?:$|[ /_-])", command):
+            return name
+    return "full" if "qa-run" in command and "full" in command else None
+
+
+def _event_metrics(threads: list[Thread], root_ids: set[str]) -> tuple[Counter[str], Counter[str], dict[str, int], dict[str, int]]:
+    counts: Counter[str] = Counter()
+    profiles: Counter[str] = Counter()
+    qa_status: Counter[str] = Counter()
+    edits: dict[str, int] = {"failed": 0, "passing": 0, "review": 0, "accept": 0}
+    discovery_ops: Counter[str] = Counter()
+    for thread in threads:
+        root = thread.thread_id in root_ids
+        for event in thread.events:
+            typ, payload = event["type"], event["payload"]
+            subtype = str(payload.get("type", ""))
+            if typ == "response_item" and payload.get("role") == "user" and root:
+                counts["user_turns"] += 1
+            if typ in {"command_execution", "tool_call"} or subtype in {"command_execution", "shell_command"}:
+                command = _command(payload)
+                if command:
+                    counts["shell_commands"] += 1
+                    category = _category(command)
+                    if category == "discovery":
+                        counts["discovery_calls"] += 1
+                        discovery_ops[re.sub(r"\s+", " ", command.split(" ", 1)[0])] += 1
+                    if category == "qa":
+                        counts["qa_invocations"] += 1
+                        if (profile := _profile(command)):
+                            profiles[profile] += 1
+                        status = payload.get("exit_code", payload.get("status"))
+                        if status in (0, "0", "passed", "pass", "success"):
+                            qa_status["pass"] += 1
+                            edits["passing"] += 1
+                        elif status is not None:
+                            qa_status["fail"] += 1
+                            edits["failed"] += 1
+            if typ == "file_change" or subtype in {"file_change", "patch_apply", "apply_patch"}:
+                counts["file_changes"] += 1
+            if typ == "tool_call" or subtype in {"mcp_tool_call", "mcp_call"}:
+                counts["tool_calls"] += 1
+            if subtype in {"compaction", "context_compacted"} or typ == "compacted":
+                counts["compactions"] += 1
+            if typ == "approval" or subtype in {"approval_requested", "approval_granted"}:
+                counts["approvals"] += 1
+            if subtype in {"review", "review_started", "review_completed"}:
+                edits["review"] += 1
+            if subtype in {"acceptance", "task_completed", "turn_completed"}:
+                edits["accept"] += 1
+    counts["threads"] = len(threads)
+    counts["root_threads"] = len(root_ids)
+    counts["child_threads"] = max(0, len(threads) - len(root_ids))
+    counts["subagent_count"] = counts["child_threads"]
+    return counts, profiles, qa_status, {**edits, "repeated_discovery": sum(v - 1 for v in discovery_ops.values() if v > 1)}
+
+
+def _session(session_id: str, threads: list[Thread]) -> dict[str, Any]:
+    explicit_roots = {t.thread_id for t in threads if t.parent is None and not CHILD_RE.search(t.thread_id)}
+    roots = explicit_roots
+    root_coverage = 1.0
+    if not roots:
+        candidates = [t for t in threads if not CHILD_RE.search(t.thread_id)]
+        if len(candidates) == 1:
+            roots = {candidates[0].thread_id}
+        else:
+            root_coverage = 0.0
+            roots = {min(threads, key=lambda t: (t.started or datetime.max.replace(tzinfo=timezone.utc), t.thread_id)).thread_id}
+    counts, profiles, qa_status, derived = _event_metrics(threads, roots)
+    usages = [t.usage for t in threads if t.usage]
+    tokens = {key: sum(u.get(key, 0) for u in usages) for key in ("total", "input", "cached_input", "cache_write_input", "output", "reasoning_output")}
+    start = min((t.started for t in threads if t.started), default=None)
+    end = max((e["timestamp"] for t in threads for e in t.events if e["timestamp"]), default=start)
+    duration = (end - start).total_seconds() if start and end else None
+    shell = counts["shell_commands"]
+    qa = counts["qa_invocations"]
+    return {
+        "session_key": "sha256:" + hashlib.sha256(session_id.encode()).hexdigest(),
+        "thread_count": counts["threads"], "root_thread_count": counts["root_threads"], "child_thread_count": counts["child_threads"],
+        "tokens": {"total": tokens["total"], "input": tokens["input"], "cached_input": tokens["cached_input"], "cache_write_input": tokens["cache_write_input"], "uncached_input": max(0, tokens["input"] - tokens["cached_input"]), "output": tokens["output"], "reasoning_output": tokens["reasoning_output"]},
+        "metrics": {"user_turns": counts["user_turns"], "shell_commands": shell, "file_changes": counts["file_changes"], "tool_calls": counts["tool_calls"], "discovery_calls": counts["discovery_calls"], "compactions": counts["compactions"], "approvals": counts["approvals"], "subagent_count": counts["subagent_count"], "qa_invocations": qa, "qa_pass": qa_status["pass"], "qa_fail": qa_status["fail"]},
+        "qa_profiles": dict(profiles),
+        "derived": {"discovery_ratio": counts["discovery_calls"] / shell if shell else None, "repeated_discovery_count": derived["repeated_discovery"], "qa_repair_cycles": 1 if derived["failed"] and derived["passing"] else (None if not qa else 0), "post_review_rework_cycles": None, "full_qa_rate": profiles.get("full", 0) / qa if qa else None, "first_edit_to_final_green_seconds": duration if qa_status["pass"] else None, "subagent_token_share": (sum((t.usage or {}).get("total", 0) for t in threads if t.thread_id not in roots) / tokens["total"] if tokens["total"] else None)},
+        "duration_seconds": duration,
+        "coverage": {"metadata": 1.0, "token_usage": len(usages) / len(threads) if threads else 0.0, "timestamps": sum(t.started is not None for t in threads) / len(threads) if threads else 0.0, "root_detection": root_coverage},
+        "unknown_event_count": sum(t.unknown for t in threads),
+    }
+
+
+def collect(repo: Path, limit: int, codex_home: Path, archived: bool) -> dict[str, Any]:
+    roots = [codex_home / "sessions"] + ([codex_home / "archived_sessions"] if archived else [])
+    grouped: dict[str, list[Thread]] = {}
+    canonical = repo.expanduser().resolve()
+    for root in roots:
+        if not root.is_dir():
+            continue
+        for path in sorted(root.rglob("*.jsonl")):
+            thread = _meta(path)
+            if not thread or not thread.cwd:
+                continue
+            try:
+                cwd = thread.cwd.expanduser().resolve()
+                cwd.relative_to(canonical)
+            except (OSError, ValueError):
+                continue
+            _read(thread)
+            grouped.setdefault(thread.session_id, []).append(thread)
+    def root_timestamp(item: tuple[str, list[Thread]]) -> datetime:
+        candidates = [t.started for t in item[1] if t.parent is None and not CHILD_RE.search(t.thread_id) and t.started]
+        return max(candidates, default=min((t.started for t in item[1] if t.started), default=datetime.min.replace(tzinfo=timezone.utc)))
+
+    ordered = sorted(grouped.items(), key=root_timestamp, reverse=True)
+    selected = []
+    for key, threads in ordered:
+        roots_found = [t for t in threads if t.parent is None and not CHILD_RE.search(t.thread_id)]
+        if roots_found or len(threads) == 1:
+            selected.append((key, threads))
+        if len(selected) >= limit:
+            break
+    sessions = [_session(key, threads) for key, threads in selected]
+    unknown = sum(s["unknown_event_count"] for s in sessions)
+    return {"schema_version": "1.0", "summary": {"session_count": len(sessions), "thread_count": sum(s["thread_count"] for s in sessions), "unknown_event_count": unknown}, "coverage": {"metadata": sum(s["coverage"]["metadata"] for s in sessions) / len(sessions) if sessions else 0.0, "token_usage": sum(s["coverage"]["token_usage"] for s in sessions) / len(sessions) if sessions else 0.0, "timestamps": sum(s["coverage"]["timestamps"] for s in sessions) / len(sessions) if sessions else 0.0, "root_detection": sum(s["coverage"]["root_detection"] for s in sessions) / len(sessions) if sessions else 0.0}, "sessions": sessions}
+
+
+def _protected(path: Path, repo: Path) -> bool:
+    try:
+        relative = path.resolve().relative_to(repo.resolve())
+    except ValueError:
+        return False
+    return not (str(relative).startswith(".agent-benchmarks/") or str(relative) == ".agent-benchmarks")
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--repo", type=Path, required=True)
+    parser.add_argument("--limit", type=int, required=True)
+    parser.add_argument("--codex-home", type=Path)
+    parser.add_argument("--include-archived", action="store_true")
+    parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--csv", dest="csv_path", type=Path)
+    args = parser.parse_args()
+    repo = args.repo.resolve()
+    if args.limit < 1:
+        parser.error("--limit must be positive")
+    if _protected(args.output, repo) or (args.csv_path and _protected(args.csv_path, repo)):
+        parser.error("output must be outside source/protected paths (use .agent-benchmarks)")
+    home = (args.codex_home or Path(os.environ.get("CODEX_HOME", "~/.codex"))).expanduser()
+    report = collect(repo, args.limit, home, args.include_archived)
+    args.output.parent.mkdir(parents=True, exist_ok=True)
+    args.output.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    if args.csv_path:
+        args.csv_path.parent.mkdir(parents=True, exist_ok=True)
+        with args.csv_path.open("w", newline="", encoding="utf-8") as handle:
+            writer = csv.writer(handle)
+            writer.writerow(["session_key", "thread_count", "total_tokens", "user_turns", "discovery_calls", "qa_invocations"])
+            for session in report["sessions"]:
+                writer.writerow([session["session_key"], session["thread_count"], session["tokens"]["total"], session["metrics"]["user_turns"], session["metrics"]["discovery_calls"], session["metrics"]["qa_invocations"]])
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

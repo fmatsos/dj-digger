@@ -1,0 +1,20 @@
+#!/bin/sh
+set -eu
+
+# Read-only startup checks for Docker Agent sessions.
+root=$(git rev-parse --show-toplevel 2>/dev/null) || {
+  printf '%s\n' 'session-guard: current directory is not a Git worktree' >&2
+  exit 1
+}
+[ -f "$root/AGENTS.md" ] && [ -d "$root/src/dj_digger" ] || {
+  printf '%s\n' 'session-guard: worktree is not DJ Digger' >&2
+  exit 1
+}
+for script in .codex/scripts/changed-files .codex/scripts/protect-local .docker-agent/scripts/qa-gate
+do
+  [ -x "$root/$script" ] || {
+    printf 'session-guard: required script is not executable: %s\n' "$script" >&2
+    exit 1
+  }
+done
+printf '%s\n' 'session-guard: pass'

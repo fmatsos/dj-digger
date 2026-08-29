@@ -5,27 +5,6 @@ import pytest
 
 from dj_digger.config import DspConfig, WorkspaceConfig
 
-
-def test_workspace_config_uses_mastering_defaults() -> None:
-    config = WorkspaceConfig.load(FIXTURES / "dj-digger.toml")
-    assert config.mastering.dj_target_lufs == -9.0
-    assert config.mastering.dj_target_true_peak_dbtp == -1.0
-    assert config.mastering.variant_thresholds.integrated_lufs_db == 1.5
-    assert config.mastering.variant_thresholds.active_loudness_db == 1.5
-    assert config.mastering.variant_thresholds.plr_db == 2.0
-    assert config.mastering.review_thresholds.gain_deficit_db == 1.5
-
-
-@pytest.mark.parametrize("value", [float("inf"), float("nan"), "-9"])
-def test_mastering_targets_must_be_finite_numbers(tmp_path: Path, value: object) -> None:
-    source = (FIXTURES / "dj-digger.toml").read_text(encoding="utf-8")
-    path = tmp_path / "config.toml"
-    rendered = source + f"\n[mastering]\ndj_target_lufs = {value!r}\n"
-    path.write_text(rendered, encoding="utf-8")
-    with pytest.raises(ValueError, match="mastering.dj_target_lufs"):
-        WorkspaceConfig.load(path)
-
-
 FIXTURES = Path(__file__).parent / "fixtures"
 
 

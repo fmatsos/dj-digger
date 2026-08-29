@@ -34,6 +34,20 @@ for script in project-env changed-files protect-local
 do
   test -x "$ROOT/.codex/scripts/$script"
 done
+test -x "$ROOT/.docker-agent/scripts/qa-gate"
+test -x "$ROOT/.docker-agent/scripts/session-guard"
+test -f "$ROOT/docker-agent.yaml"
+test -f "$ROOT/.docker-agent/schemas/task-brief.schema.json"
+test -f "$ROOT/.docker-agent/schemas/review-result.schema.json"
+"$ROOT/.docker-agent/scripts/session-guard" >/dev/null
+python3 - <<'PY'
+import json
+from pathlib import Path
+from jsonschema import Draft202012Validator
+
+for name in ("task-brief.schema.json", "review-result.schema.json"):
+    Draft202012Validator.check_schema(json.loads(Path(".docker-agent/schemas", name).read_text()))
+PY
 env_output=$(.codex/scripts/project-env sh -c 'printf "%s|%s" "$UV_CACHE_DIR" "$UV_TOOL_DIR"')
 test "$env_output" = "/tmp/dj-digger-uv-cache|/tmp/dj-digger-uv-tools"
 .codex/scripts/changed-files | LC_ALL=C sort -c
@@ -93,6 +107,8 @@ test "$(printf 'src/dj_digger/analysis/worker_client.py\n' | "$ROOT/.codex/scrip
 test "$(printf 'src/dj_digger/exports/tracks.py\n' | "$ROOT/.codex/scripts/qa-select")" = "exports"
 test "$(printf 'src/dj_digger/cli.py\n' | "$ROOT/.codex/scripts/qa-select")" = "runtime"
 test "$(printf 'src/dj_digger/cli.py\nsrc/dj_digger/catalog/migrations.py\n' | "$ROOT/.codex/scripts/qa-select")" = "full"
+test "$(printf 'docker-agent.yaml\n' | "$ROOT/.codex/scripts/qa-select")" = "focused"
+test "$(printf '.docker-agent/scripts/qa-gate\n' | "$ROOT/.codex/scripts/qa-select")" = "focused"
 
 # Test qa-select does not escalate a docs+single-production-category change to
 # full: docs must be filtered out of the production-category count just like
