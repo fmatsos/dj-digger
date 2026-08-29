@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dj-digger.invalid/schemas/benchmark.schema.json",
+  "type": "object",
+  "required": ["schema_version", "summary", "coverage", "sessions"],
+  "properties": {
+    "schema_version": {"type": "string"},
+    "summary": {"type": "object", "required": ["session_count", "thread_count", "unknown_event_count"], "additionalProperties": {"type": "integer", "minimum": 0}},
+    "coverage": {"$ref": "#/$defs/coverage"},
+    "sessions": {"type": "array", "items": {"$ref": "#/$defs/session"}}
+  },
+  "$defs": {
+    "coverage": {"type": "object", "additionalProperties": {"type": "number", "minimum": 0, "maximum": 1}},
+    "session": {"type": "object", "required": ["session_key", "thread_count", "tokens", "metrics", "derived", "coverage", "unknown_event_count"], "properties": {"session_key": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}, "thread_count": {"type": "integer"}, "root_thread_count": {"type": "integer"}, "child_thread_count": {"type": "integer"}, "duration_seconds": {"type": ["number", "null"]}, "unknown_event_count": {"type": "integer"}, "tokens": {"type": "object", "additionalProperties": {"type": "integer", "minimum": 0}}, "metrics": {"type": "object", "additionalProperties": {"type": "integer", "minimum": 0}}, "qa_profiles": {"type": "object", "additionalProperties": {"type": "integer", "minimum": 0}}, "derived": {"type": "object", "additionalProperties": {"type": ["number", "null"]}}, "coverage": {"$ref": "#/$defs/coverage"}}, "additionalProperties": false}
+  },
+  "additionalProperties": false
+}

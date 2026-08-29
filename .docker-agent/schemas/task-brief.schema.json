@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dj-digger.invalid/schemas/task-brief.schema.json",
+  "type": "object",
+  "required": ["goal", "risk", "subsystem", "owned_files", "acceptance", "scoped_instructions", "required_skill", "focused_red_green", "qa_profile_hint", "do_not_touch", "review_required"],
+  "properties": {
+    "goal": {"type": "string", "minLength": 1},
+    "risk": {"enum": ["S", "M", "L"]},
+    "subsystem": {"enum": ["catalog", "analysis", "exports", "runtime", "subsystem", "docs", "harness"]},
+    "owned_files": {"type": "array", "items": {"type": "string"}},
+    "acceptance": {"type": "array", "items": {"type": "string"}},
+    "scoped_instructions": {"type": "array", "items": {"type": "string"}},
+    "required_skill": {"enum": ["implement", "sqlite-change", "native-analysis", "runtime-proof", "none"]},
+    "focused_red_green": {"type": "array", "items": {"type": "string"}},
+    "qa_profile_hint": {"enum": ["focused", "subsystem", "catalog", "analysis", "exports", "runtime", "full"]},
+    "do_not_touch": {"type": "array", "items": {"type": "string"}},
+    "review_required": {"type": "boolean"}
+  },
+  "additionalProperties": false
+}

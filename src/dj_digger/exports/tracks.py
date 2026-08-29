@@ -55,15 +55,6 @@ ROW_FIELDS = (
     "lossless",
     "duplicate_group_id",
     "duplicate_best_quality",
-    "integrated_lufs",
-    "loudness_range_lu",
-    "true_peak_dbtp",
-    "short_term_lufs_p50",
-    "short_term_lufs_p95",
-    "peak_to_loudness_ratio_db",
-    "required_gain_db",
-    "available_gain_db",
-    "gain_deficit_db",
 )
 
 
@@ -133,12 +124,7 @@ class TracksExporter:
                 eligible,
                 *metadata_and_duplicate,
             ) = values
-            metadata = list(metadata_and_duplicate[:21])
-            duplicate_group_id = metadata_and_duplicate[21]
-            duplicate_best_quality = metadata_and_duplicate[22]
-            mastering = list(metadata_and_duplicate[23:])
-            if len(mastering) < 9:
-                mastering.extend([None] * (9 - len(mastering)))
+            *metadata, duplicate_group_id, duplicate_best_quality = metadata_and_duplicate
             rel = str(path)
             if metadata[-1] is not None:
                 metadata[-1] = bool(metadata[-1])
@@ -158,7 +144,6 @@ class TracksExporter:
                 *metadata,
                 duplicate_group_id,
                 duplicate_best_quality,
-                *mastering,
             )
             result.append(dict(zip(ROW_FIELDS, projected, strict=True)))
         return result

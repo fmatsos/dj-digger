@@ -1,0 +1,4 @@
+{"type":"session_meta","payload":{"id":"page-session","cwd":"/repo/dj-digger/subdir","timestamp":"2026-08-28T11:00:00Z","history_mode":"paginated"}}
+{"timestamp":"2026-08-28T11:00:01Z","type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"another synthetic request"}]}}
+{"timestamp":"2026-08-28T11:00:02Z","type":"command_execution","payload":{"command":"pytest tests -q","exit_code":0}}
+{"timestamp":"2026-08-28T11:00:03Z","type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":30,"cached_input_tokens":5,"output_tokens":8,"total_tokens":38}}}}

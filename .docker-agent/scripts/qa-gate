@@ -1,0 +1,63 @@
+#!/bin/sh
+set -eu
+
+# Select and run the repository QA profile without model judgment.
+root=$(git rev-parse --show-toplevel)
+base=""
+if [ "$#" -gt 0 ]; then
+  if [ "$#" -ne 2 ] || [ "$1" != "--base" ]; then
+    printf 'usage: qa-gate [--base REF]\n' >&2
+    exit 2
+  fi
+  base=$2
+fi
+cd "$root"
+
+if [ -n "$base" ]; then
+  changed=$(git diff --name-only "$base"...HEAD)
+  working=$("$root/.codex/scripts/changed-files")
+  changed=$(printf '%s\n%s\n' "$changed" "$working" | sed '/^$/d' | LC_ALL=C sort -u)
+else
+  changed=$("$root/.codex/scripts/changed-files")
+fi
+profile=$(printf '%s\n' "$changed" | "$root/.codex/scripts/qa-select")
+
+set +e
+log=$(mktemp "${TMPDIR:-/tmp}/dj-digger-qa-gate.XXXXXX.log")
+if [ "$profile" = "focused" ]; then
+  targets=""
+  while IFS= read -r path; do
+    case "$path" in
+      tests/*.py|.codex/tests/*.sh)
+        [ -f "$root/$path" ] && targets="$targets $root/$path"
+        ;;
+    esac
+  done <<EOF
+$changed
+EOF
+  if [ -n "$targets" ]; then
+    # shellcheck disable=SC2086
+    "$root/.codex/scripts/qa-run" focused -- $targets >"$log" 2>&1
+  else
+    "$root/.codex/scripts/qa-run" focused -- "$root/.codex/tests/simple-test.sh" >"$log" 2>&1
+  fi
+else
+  "$root/.codex/scripts/qa-run" "$profile" >"$log" 2>&1
+fi
+status=$?
+set -e
+
+if [ "$status" -eq 0 ]; then
+  rm -f "$log"
+  printf '{"status":"pass","profile":"%s"}\n' "$profile"
+  exit 0
+fi
+
+diagnostic=$(tail -10 "$log" | tr '\n' ' ' | cut -c1-800)
+python3 - "$profile" "$status" "$diagnostic" "$log" <<'PY'
+import json
+import sys
+
+print(json.dumps({"status": "fail", "profile": sys.argv[1], "exit_code": int(sys.argv[2]), "diagnostic": sys.argv[3], "log": sys.argv[4]}, separators=(",", ":")))
+PY
+exit "$status"

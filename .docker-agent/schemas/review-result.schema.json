@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dj-digger.invalid/schemas/review-result.schema.json",
+  "type": "object",
+  "required": ["verdict", "blocking", "non_blocking", "residual_risk"],
+  "properties": {
+    "verdict": {"enum": ["accept", "changes_required"]},
+    "blocking": {"type": "array", "items": {"type": "string"}},
+    "non_blocking": {"type": "array", "items": {"type": "string"}},
+    "residual_risk": {"type": "array", "items": {"type": "string"}}
+  },
+  "additionalProperties": false
+}
