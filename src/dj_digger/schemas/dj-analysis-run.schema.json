@@ -1,0 +1,116 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dj-digger.local/schemas/v1a/dj-analysis-run.schema.json",
+  "title": "DJ Digger unified analysis run audit",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "analysis_schema_version",
+    "catalog_schema_version",
+    "started_at",
+    "finished_at",
+    "status",
+    "eligible",
+    "analyzed",
+    "reused",
+    "failed",
+    "config_hash",
+    "analyzer_version",
+    "failures"
+  ],
+  "properties": {
+    "analysis_schema_version": {
+      "const": 2
+    },
+    "catalog_schema_version": {
+      "const": 1
+    },
+    "started_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "finished_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "succeeded",
+        "partial",
+        "failed"
+      ]
+    },
+    "eligible": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "analyzed": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "reused": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "failed": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "config_hash": {
+      "type": "string",
+      "pattern": "^[A-Fa-f0-9]{64}$"
+    },
+    "analyzer_version": {
+      "type": "string",
+      "minLength": 1
+    },
+    "failures": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "source_id",
+          "track_id",
+          "path",
+          "stage",
+          "error"
+        ],
+        "properties": {
+          "source_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "track_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "path": {
+            "type": "string",
+            "minLength": 1
+          },
+          "stage": {
+            "type": "string",
+            "enum": [
+              "decode",
+              "technical",
+              "rhythm",
+              "spectrum",
+              "windows",
+              "segmentation",
+              "semantics",
+              "aggregation",
+              "persist",
+              "export"
+            ]
+          },
+          "error": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    }
+  }
+}

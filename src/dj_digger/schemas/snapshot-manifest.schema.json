@@ -1,0 +1,84 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dj-digger.local/schemas/v2/snapshot-manifest.schema.json",
+  "title": "DJ Digger snapshot manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "created_at",
+    "catalog_schema_version",
+    "tracks_export_schema_version",
+    "analysis_schema_version",
+    "sources",
+    "facets"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "catalog_schema_version": {
+      "const": 1
+    },
+    "tracks_export_schema_version": {
+      "const": 2
+    },
+    "analysis_schema_version": {
+      "const": 2
+    },
+    "sources": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "source_id",
+          "root_path",
+          "last_successful_scan_id"
+        ],
+        "properties": {
+          "source_id": {
+            "type": "string"
+          },
+          "root_path": {
+            "type": "string"
+          },
+          "last_successful_scan_id": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          }
+        }
+      }
+    },
+    "facets": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name",
+          "relative_path",
+          "sha256"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "relative_path": {
+            "type": "string"
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[A-Fa-f0-9]{64}$"
+          }
+        }
+      }
+    }
+  }
+}

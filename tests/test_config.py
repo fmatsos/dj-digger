@@ -119,3 +119,17 @@ def test_dsp_config_hash_changes_when_a_canonical_value_changes(tmp_path: Path) 
     )
 
     assert DspConfig.load(changed).config_hash != DspConfig.canonical().config_hash
+
+
+def test_canonical_dsp_config_requires_packaged_resource(monkeypatch: pytest.MonkeyPatch) -> None:
+    class MissingResource:
+        def joinpath(self, *_parts: str) -> "MissingResource":
+            return self
+
+        def is_file(self) -> bool:
+            return False
+
+    monkeypatch.setattr("dj_digger.config.files", lambda _package: MissingResource())
+
+    with pytest.raises(FileNotFoundError, match="dj_digger/analysis.toml"):
+        DspConfig.canonical()

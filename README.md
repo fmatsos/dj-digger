@@ -213,6 +213,44 @@ This installs the complete development toolchain (pytest, Ruff, and mypy) from
 `uv.lock`; normal development and QA must not rely on implicit `uv run --with`
 downloads. The deterministic harness entry points are under `.agents/scripts/`.
 
+### Running with uvx
+
+For development, keep using the lockfile-backed environment:
+
+```bash
+uv sync --frozen --group dev
+uv run dj-digger ...
+```
+
+To run the published CLI directly from GitHub without cloning it:
+
+```bash
+uvx --from git+https://github.com/fmatsos/dj-digger dj-digger ...
+```
+
+After a release on PyPI, the same commands can use the published package:
+
+```bash
+uvx dj-digger ...
+```
+
+For example, `doctor` and `refresh` are available through either `uvx` form:
+
+```bash
+uvx dj-digger doctor --config /path/to/config.toml
+uvx dj-digger refresh --config /path/to/config.toml
+```
+
+`uvx` installs Python dependencies declared by the package, including the audio
+analysis dependencies. It does not install operating-system programs. Native
+`doctor`, `refresh`, and analysis workflows require these commands on `PATH`:
+
+```text
+ffmpeg
+ffprobe
+exiftool
+```
+
 ### Codex Cloud
 
 Codex Cloud can consume the same repository-defined contract without Docker or a

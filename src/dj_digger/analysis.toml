@@ -1,0 +1,30 @@
+[meta]
+version = 1
+
+[audio]
+sample_rate = 48000
+channels = 1
+
+[fft]
+window_size = 4096
+hop_size = 2048
+
+[segmentation]
+min_seconds = 8.0
+max_seconds = 64.0
+
+[semantics]
+min_confidence = 0.80
+
+[normalization]
+minimum = 0.0
+maximum = 100.0
+
+[bands]
+sub = [20.0, 60.0]
+low = [60.0, 250.0]
+low_mid = [250.0, 500.0]
+kick = [40.0, 120.0]
+bass = [40.0, 250.0]
+onset = [0.0, 100.0]
+spectral = [0.0, 22050.0]
