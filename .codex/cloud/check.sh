@@ -1,7 +1,8 @@
 #!/bin/sh
 set -eu
 
-root="/workspace/dj-digger"
+script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+root=$(CDPATH= cd -- "$script_dir/../.." && pwd)
 cd "$root"
 mode=${1:---quick}
 if [ "$mode" != --quick ] && [ "$mode" != --runtime ]; then
