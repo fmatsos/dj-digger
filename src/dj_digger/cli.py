@@ -12,7 +12,9 @@ from dj_digger import background
 from dj_digger.application import WorkspaceApplication
 from dj_digger.completion import install_patches
 from dj_digger.config import WorkspaceConfig
+from dj_digger.curation import CurationCatalog
 from dj_digger.logging import RunLogger
+from dj_digger.mcp_server import create_curation_mcp_server
 from dj_digger.rich_progress import RichProgressReporter
 from dj_digger.set_copy import copy_set
 from dj_digger.terminal import render
@@ -70,6 +72,18 @@ ConfigOption = Annotated[
         help="Workspace config; discovered automatically when omitted.",
     ),
 ]
+
+
+@app.command("mcp")
+def mcp_server(config: ConfigOption) -> None:
+    """Serve the read-only curation catalog over MCP stdio."""
+    try:
+        workspace = WorkspaceConfig.load(config)
+        CurationCatalog(workspace.database).overview()
+        create_curation_mcp_server(workspace).run(transport="stdio")
+    except Exception as error:
+        typer.echo(f"MCP startup failed: {error}", err=True)
+        raise typer.Exit(1) from None
 
 
 def _positive_track_timeout(value: float) -> float:

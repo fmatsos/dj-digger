@@ -20,6 +20,10 @@ flowchart LR
     Catalog --> Exports[Validated exports]
     Catalog --> Snapshots[Snapshots and archives]
     Exports --> Curator[LLM curator and other consumers]
+    Catalog --> Curation[CurationCatalog]
+    Curation --> MCP[MCPServer: in-memory or stdio]
+    MCP --> Native[Future native curator]
+    MCP --> External[External local agents]
     Curator --> Sets[JSON, M3U8, and transition sheet]
 ```
 
@@ -34,7 +38,9 @@ The main implementation layers are:
 | Catalog | `src/dj_digger/catalog/` | SQLite lifecycle, migrations, repositories, history, and read projections. |
 | Analysis | `src/dj_digger/analysis/` | Eligibility, isolated extraction, append-only persistence, and analysis exports. |
 | Publication | `src/dj_digger/exports/` | Schema validation, atomic export replacement, and snapshots. |
-| Curation | `skills/electronic-dj-set-curator/` | Consumes published evidence without accessing SQLite or source files. |
+| Curation read model | `src/dj_digger/curation/` | Exposes bounded, globally deduplicated Catalog V9 candidates. |
+| MCP | `src/dj_digger/mcp_server.py` | Publishes the curation read model in-process and over local stdio. |
+| Curation skill | `skills/electronic-dj-set-curator/` | Consumes published evidence without accessing SQLite or source files. |
 
 `WorkspaceApplication` is the orchestration boundary used by catalog commands. It
 opens and migrates the database, registers configured sources in one transaction,
@@ -204,6 +210,10 @@ The electronic DJ set curator is downstream of these contracts. It joins track a
 analysis facts by `(source_id, track_id, path)`, admits only present eligible tracks,
 and emits validated JSON, M3U8, and Markdown artifacts. It neither writes the catalog
 nor modifies the music library.
+
+The current MCP server is a separate read-only path over the same Catalog V9
+facts. It does not replace the export-based skill and does not yet include the
+native agent loop; that is future work described in the historical plans.
 
 ## Diagnostics and maintenance
 

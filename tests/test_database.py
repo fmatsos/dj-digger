@@ -36,6 +36,26 @@ def test_open_uses_five_second_sqlite_timeout(
     assert calls == [(tmp_path / "catalog.sqlite", 5.0)]
 
 
+def test_open_read_only_refuses_a_missing_catalog(tmp_path: Path) -> None:
+    missing = tmp_path / "missing" / "catalog.sqlite"
+
+    with pytest.raises(sqlite3.OperationalError):
+        Database.open_read_only(missing)
+
+    assert not missing.parent.exists()
+
+
+def test_open_read_only_enforces_query_only(tmp_path: Path) -> None:
+    path = tmp_path / "catalog.sqlite"
+    with Database.open(path) as writer:
+        writer.migrate()
+
+    with Database.open_read_only(path) as reader:
+        assert reader.scalar("PRAGMA query_only") == 1
+        with pytest.raises(sqlite3.OperationalError, match="readonly"):
+            reader.execute("CREATE TABLE forbidden (id INTEGER)")
+
+
 def test_database_configuration_rejects_non_wal_mode_and_closes_connection() -> None:
     connection = sqlite3.connect(":memory:")
 

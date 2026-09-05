@@ -27,6 +27,20 @@ class Database:
         cls._configure_connection(connection)
         return cls(connection)
 
+    @classmethod
+    def open_read_only(cls, path: Path) -> Self:
+        """Open an existing catalog without creating or mutating it."""
+        uri = f"{path.resolve().as_uri()}?mode=ro"
+        connection = sqlite3.connect(uri, uri=True, timeout=5.0)
+        try:
+            connection.execute("PRAGMA foreign_keys = ON")
+            connection.execute("PRAGMA busy_timeout = 5000")
+            connection.execute("PRAGMA query_only = ON")
+        except BaseException:
+            connection.close()
+            raise
+        return cls(connection)
+
     @staticmethod
     def _configure_database(connection: sqlite3.Connection) -> None:
         """Configure settings persisted by the database file."""

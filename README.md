@@ -29,6 +29,9 @@ It can:
 For the data flow, catalog model, processing boundaries, and SQLite lifecycle, see
 [Architecture](docs/ARCHITECTURE.md).
 
+The bounded read-only MCP interface for curation is documented in
+[docs/mcp.md](docs/mcp.md).
+
 ## CLI output and exports
 
 `--config` is optional when DJ Digger can discover a configuration file. The

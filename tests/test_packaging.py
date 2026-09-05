@@ -6,6 +6,17 @@ from dj_digger import resources
 from dj_digger.catalog import migrations
 
 
+def test_mcp_dependencies_and_factory_are_importable() -> None:
+    import mcp
+    import pydantic
+
+    from dj_digger.mcp_server import create_curation_mcp_server
+
+    assert mcp is not None
+    assert pydantic is not None
+    assert callable(create_curation_mcp_server)
+
+
 def test_required_packaged_resource_reports_missing_file(monkeypatch: pytest.MonkeyPatch) -> None:
     class MissingResource:
         def joinpath(self, *_parts: str) -> "MissingResource":
