@@ -120,7 +120,7 @@ def run() -> dict[str, Any]:
             name for name in expected_exports if not (exports / name).is_file()
         )
         groups = duplicate_groups.get("groups", [])
-        if schema_version != 9 or track_count != 2 or fingerprint_count < 2:
+        if schema_version != 10 or track_count != 2 or fingerprint_count < 2:
             raise RuntimeError("catalog smoke assertions failed")
         if quick_check != "ok" or missing_exports or not groups:
             raise RuntimeError("publication smoke assertions failed")

@@ -41,10 +41,11 @@ dj_digger/schemas/snapshot-manifest.schema.json
 dj_digger/schemas/dj-analysis.schema.json
 dj_digger/schemas/dj-sections.schema.json
 dj_digger/schemas/dj-analysis-run.schema.json
-dj_digger/catalog/sql/catalog-v9.sql
+dj_digger/catalog/sql/catalog-v10.sql
 dj_digger/catalog/sql/migrate-v6-to-v7.sql
 dj_digger/catalog/sql/migrate-v7-to-v8.sql
-dj_digger/catalog/sql/migrate-v8-to-v9.sql'
+dj_digger/catalog/sql/migrate-v8-to-v9.sql
+dj_digger/catalog/sql/migrate-v9-to-v10.sql'
   while IFS= read -r required; do
     [ -z "$required" ] && continue
     if [ ! -f "$required" ]; then
