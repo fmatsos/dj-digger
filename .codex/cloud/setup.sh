@@ -31,4 +31,4 @@ cd /workspace/dj-digger
 python3 -m pip install "uv==$uv_version"
 uv --version
 uv sync --frozen --group dev
-exec .codex/cloud/check.sh" --quick
+exec .codex/cloud/check.sh --quick
