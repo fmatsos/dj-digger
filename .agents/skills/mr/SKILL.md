@@ -24,9 +24,9 @@ unless the user requests a change.
    selected remote ref and prove the relationship with `git merge-base`; do not
    guess from `origin/HEAD` or an unrelated branch name.
 2. Inspect actual commits and `git diff <base>...<head>`. Run applicable QA via
-   `.codex/scripts/qa-select` and `.codex/scripts/qa-run`; derive title, summary,
+   `.agents/scripts/qa-select` and `.agents/scripts/qa-run`; derive title, summary,
    test plan, and risks from those results, not assumptions. Before any push,
-   run `.codex/scripts/protect-local --range <base>...<head>` and inspect the
+   run `.agents/scripts/protect-local --range <base>...<head>` and inspect the
    committed diff for private library facts; a clean working tree alone does
    not prove that the branch range is safe.
 3. Before pushing, query all historical matches with
@@ -46,5 +46,5 @@ policy flags such as auto-delete or squash unless requested.
 
 ## Report
 
-Use `.codex/scripts/handoff`; include branch, base proof, PR URL/number, push
+Use `.agents/scripts/handoff`; include branch, base proof, PR URL/number, push
 result, actual QA, and residual risk. This skill does not merge the PR.

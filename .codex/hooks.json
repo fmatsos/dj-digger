@@ -15,7 +15,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": ".agents/scripts/protect-local --staged"
+            "command": ".codex/hooks/stop-protect-local"
           }
         ]
       }

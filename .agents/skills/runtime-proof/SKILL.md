@@ -18,7 +18,7 @@ Checks real composition and observable state changes. Exercises the public entry
 ## Observable proof format
 
 ```
-Command: dj-digger <args>
+Command: <public entry point> <args>
 Exit: 0
 State: <file or DB query showing changed state>
 Artifact: <path/to/output/file>

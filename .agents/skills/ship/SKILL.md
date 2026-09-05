@@ -18,19 +18,18 @@ not. Never broaden the diff or touch protected paths.
    confirm the branch is not reusing a closed or merged PR. If head equals base,
    create a descriptive non-colliding branch for this delivery, then repeat
    preflight; do not use a worktree.
-2. Determine changed paths with `.codex/scripts/changed-files`, protect local
-   data with `.codex/scripts/protect-local --changed`, select QA with
-   `.codex/scripts/qa-select`, and run it with `.codex/scripts/qa-run`.
+2. Determine changed paths with `.agents/scripts/changed-files`, protect local
+   data with `.agents/scripts/protect-local --changed`, select QA with
+   `.agents/scripts/qa-select`, and run it with `.agents/scripts/qa-run`.
    Stop before mutation on red QA or inaccessible required dependencies.
 3. Group the actual diff into scoped conventional commits. Stage paths
-   explicitly, run `.codex/scripts/staged-check`, inspect the cached diff, and
-   use `git commit` without `--no-verify` or amend. Recheck that protected
-   paths (`config/local.toml`, `workspace/`, `sets/`, `*.sqlite*`) are absent.
-   Never stage `docs/superpowers/specs/**` unless the user authorized those
-   exact paths in the current turn and `DJ_DIGGER_ALLOW_SPEC_STAGE=1` is set.
+   explicitly, run `.agents/scripts/staged-check`, inspect the cached diff, and
+   use `git commit` without `--no-verify` or amend. Recheck that repository-
+   declared protected paths and ignored files are absent. Never force-stage
+   ignored archives or local data.
 4. Push `origin <branch>` and create or update the exact open-head PR with
    `gh`, following the `mr` skill and its description reference. Run
-   `.codex/scripts/protect-local --range <base>...<branch>` immediately before
+   `.agents/scripts/protect-local --range <base>...<branch>` immediately before
    pushing so already-committed protected files cannot escape. Preserve PR
    metadata unless requested; never force-push unless the user explicitly
    authorizes rewriting that branch.
@@ -42,5 +41,5 @@ not. Never broaden the diff or touch protected paths.
    for secrets, permissions, infrastructure, or external-service failures.
 
 Read [assets/report.md](assets/report.md) for the final report shape. Finish
-with `.codex/scripts/handoff`, including branch/base proof, commits, QA, PR,
+with `.agents/scripts/handoff`, including branch/base proof, commits, QA, PR,
 check result, repair rounds, and residual risk. Do not merge or delete branches.

@@ -103,7 +103,7 @@ agents:
 
       stop:
         - type: command
-          command: ./.codex/scripts/protect-local --staged
+          command: ./.agents/scripts/protect-local --staged
 
   codex-worker:
     description: Bounded Luna-medium Codex implementation worker

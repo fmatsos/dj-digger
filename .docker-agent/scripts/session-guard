@@ -10,7 +10,7 @@ root=$(git rev-parse --show-toplevel 2>/dev/null) || {
   printf '%s\n' 'session-guard: worktree is not DJ Digger' >&2
   exit 1
 }
-for script in .codex/scripts/changed-files .codex/scripts/protect-local .docker-agent/scripts/qa-gate
+for script in .agents/scripts/changed-files .agents/scripts/protect-local .docker-agent/scripts/qa-gate
 do
   [ -x "$root/$script" ] || {
     printf 'session-guard: required script is not executable: %s\n' "$script" >&2

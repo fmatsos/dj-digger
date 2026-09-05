@@ -22,7 +22,7 @@ while IFS= read -r path; do
        [ "$path" = "Makefile" ] || [ "$path" = "conftest.py" ] || \
        [ "$path" = "pytest.ini" ] || [ "$path" = "pyproject.toml" ] || \
        [ "$path" = "setup.py" ] || [ "$path" = "setup.cfg" ] || \
-       [ "$path" = "tox.ini" ] || printf '%s\n' "$path" | grep -qE '^\.(codex|github)/|^(scripts|skills|tests)/'; then
+       [ "$path" = "tox.ini" ] || printf '%s\n' "$path" | grep -qE '^\.(agents|codex|docker-agent|github)/|^(scripts|skills|tests)/'; then
     category="focused"
   # Check for production modules
   elif printf '%s\n' "$path" | grep -q '^src/dj_digger/catalog/'; then

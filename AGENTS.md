@@ -3,7 +3,7 @@
 ## Mission and architecture
 
 DJ Digger is a music library analysis system that ingests track metadata, runs
-analysis workers, maintains a SQLite V7 catalog, and exports structured data.
+analysis workers, maintains a SQLite V9 catalog, and exports structured data.
 The public entry point is the CLI application. Docker Agent may orchestrate
 bounded work while Codex remains the implementation worker; direct Codex use
 continues as the fallback. Changes stay vertically scoped from CLI flags through catalog mutations to worker
@@ -16,8 +16,8 @@ to GPT-5.6 Sol medium. Simple bounded implementation is routed to GPT-5.6 Luna
 low, while complex multi-file implementation uses GPT-5.6 Luna medium. Under
 Docker Agent, the Luna-low lead owns orchestration, delegates bounded work to
 the Luna-medium Codex worker, and uses the Sol-medium reviewer for elevated-risk
-changes. CodeGraph indexes all symbols and enables semantic searches. New work
-always checks CodeGraph first.
+changes. CodeGraph is an optional accelerator: use it first when available, but
+fall back to Read/Grep/rg without blocking when it is absent.
 
 ## Instruction scope
 
@@ -32,9 +32,10 @@ without reading that directory's closest `AGENTS.md` first.
 ## Exploration order
 
 1. Check if `.codegraph/` exists; use CodeGraph with semantic queries first when
-   the code location is unknown.
+   the code location is unknown and the command is available.
 2. Perform one semantic search if the execution path or symbol location remains
-   unknown after CodeGraph fails or is unavailable.
+   unknown after CodeGraph fails or is unavailable; ordinary `rg` is sufficient
+   when the repository has no CodeGraph index.
 3. Read directly once the execution path is established and the change scope is
    clear.
 4. Stop exploring when ownership and file boundaries are defined. Avoid repeated
@@ -45,7 +46,7 @@ without reading that directory's closest `AGENTS.md` first.
 - Private library facts (musician names, track titles, local paths) must never
   appear in committed files, logs, agent reports, or staged diffs.
 - Protected paths (`config/local.toml`, `workspace/`, `sets/`, `*.sqlite*`,
-  `docs/superpowers/specs/**`) require explicit scoped authorization before any
+  `.specifications/**`) require explicit scoped authorization before any
   modification or staging.
 - No automatic commits, pushes, file deletes, stash operations, or resets without
   explicit and specific user instructions.
@@ -121,7 +122,7 @@ remain silent on success and report only errors or status changes.
 
 ## Completion report
 
-Every workflow ends with a structured report using `.codex/scripts/handoff`'s
+Every workflow ends with a structured report using `.agents/scripts/handoff`'s
 six fields:
 
 ```

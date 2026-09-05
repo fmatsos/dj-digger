@@ -32,4 +32,4 @@ payload and reporting contract — do not restate it here.
 
 ## Handoff format
 
-Always include: Status, Branch, Diff, QA, Next, Risk. Use `.codex/scripts/handoff` for compact format. A Docker Agent worker returns this handoff to the lead.
+Always include: Status, Branch, Diff, QA, Next, Risk. Use `.agents/scripts/handoff` for compact format. A Docker Agent worker returns this handoff to the lead.

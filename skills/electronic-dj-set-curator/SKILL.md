@@ -43,8 +43,9 @@ only, never availability.
 5. Choose the core, alternatives, and improvisation branches. Alternatives
    must also be eligible and source-aware. Validate identity, paths, hard
    constraints, duration, and every transition reference before emission.
-6. Always write all three artifacts: `<identity>.set.json` (schema version 2),
-   `<identity>.m3u8` (exact relative paths only), and a Markdown
+6. Always write all three artifacts: `<identity>.set.json` (validated against
+   the repository-declared set schema), `<identity>.m3u8` (exact relative paths
+   only), and a Markdown
    transition/branch sheet. A mixed-source M3U8 requires the explicit common
    root but never writes that root into the list.
 

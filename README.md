@@ -67,8 +67,8 @@ The [complete list of all 187 available fields](docs/export-fields.md) is groupe
 by export type and follows the packaged schemas used by CLI validation. Nested
 values in CSV/TSV are compact JSON cells.
 
-Audio fingerprinting, automatic move or rename reconciliation, and duplicate
-detection are not part of the current scope.
+Duplicate fingerprinting is available through `duplicates --analyze`; automatic
+move or rename reconciliation remains outside the current scope.
 
 ## Installation
 
@@ -79,9 +79,9 @@ The recommended installation uses Docker Compose. It requires:
 - Docker with the Compose plugin;
 - a local folder that contains your music library.
 
-For a native installation, use Python 3.12 or later. ExifTool is required for
-metadata extraction. FFmpeg, FFprobe, and the optional `analysis` dependencies are
-required when audio analysis is enabled.
+For a native installation, use Python 3.12. ExifTool is required for
+metadata extraction. FFmpeg, FFprobe, and Essentia are required by the default
+audio-analysis workflow.
 
 Install the native system packages for your platform before creating the Python
 virtual environment. FFprobe is included in the FFmpeg package.
@@ -182,7 +182,7 @@ Create and activate a virtual environment, then install the project:
 python3.12 -m venv .venv
 source .venv/bin/activate
 python -m pip install --upgrade pip
-python -m pip install -e '.[analysis]'
+python -m pip install -e .
 ```
 
 On Windows PowerShell, activate the environment with
@@ -197,6 +197,41 @@ cp config/dj-digger.example.toml config/local.toml
 dj-digger doctor --config config/local.toml
 dj-digger refresh --config config/local.toml
 ```
+
+### Development with uv
+
+The repository lockfile is the source of truth for contributor and agent
+environments. With Python 3.12 and the native system packages installed, run:
+
+```bash
+python3.12 -m pip install --upgrade pip
+python3.12 -m pip install uv==0.11.19
+uv sync --frozen --group dev
+```
+
+This installs the complete development toolchain (pytest, Ruff, and mypy) from
+`uv.lock`; normal development and QA must not rely on implicit `uv run --with`
+downloads. The deterministic harness entry points are under `.agents/scripts/`.
+
+### Codex Cloud
+
+Codex Cloud can consume the same repository-defined contract without Docker or a
+real music library:
+
+```bash
+./.codex/cloud/setup.sh
+./.codex/cloud/maintenance.sh
+./.codex/cloud/check.sh --runtime
+```
+
+`setup.sh` provisions FFmpeg, FFprobe, ExifTool, and the pinned `uv` tool, then
+synchronizes the active lockfile. `maintenance.sh` repeats the lockfile sync for
+warm starts and branch changes. The runtime check creates private, synthetic WAV
+fixtures in a temporary directory and exercises the public `doctor`, `refresh`,
+`duplicates`, and `export` commands through SQLite Catalog V9. It never requires
+or exposes the real media library. Docker and Docker Agent remain optional paths
+for image distribution and orchestration; offline development uses the prepared
+environment and local fixtures.
 
 ### Main commands
 
@@ -645,11 +680,11 @@ task transfers. Its main files are:
 - `.docker-agent/scripts/change-summary` for privacy-aware Git summaries;
 - `.docker-agent/scripts/lead-qa` for the Python 3.12 QA gate.
 
-Pass plan paths as plain text rather than attaching the whole file to the lead context:
+Pass a bounded brief path as plain text rather than attaching the whole file to the lead context:
 
 ```text
-Implémente la prochaine tâche de :
-docs/superpowers/plans/2026-08-28-integrated-curator-agent-tasklist.md
+Implémente la prochaine tâche décrite dans le brief local :
+<path-vers-un-brief-borne>
 
 Pas de commit ni de push.
 ```

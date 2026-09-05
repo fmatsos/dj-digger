@@ -9,6 +9,12 @@ grep -q "GPT-5.6 Sol" "$AGENTS"
 grep -q "GPT-5.6 Luna" "$AGENTS"
 grep -q "CodeGraph" "$AGENTS"
 grep -Eq "COMPLETE.*PARTIAL.*BLOCKED" "$AGENTS"
+if grep -R --exclude-dir=__pycache__ -nE '\.codex/(scripts|skills|tests)' "$AGENTS" "$ROOT/.agents" "$ROOT/.docker-agent"; then
+  echo "stale .codex harness reference" >&2
+  exit 1
+fi
+grep -q '"essentia==2.1b6.dev1389"' "$ROOT/pyproject.toml"
+! grep -q '^\[project\.optional-dependencies\]' "$ROOT/pyproject.toml"
 
 for file in \
   src/dj_digger/AGENTS.md \
@@ -28,12 +34,19 @@ grep -q "atomic replacement, one SQLite snapshot" "$ROOT/src/dj_digger/exports/A
 grep -q "observable RED, public composition" "$ROOT/tests/AGENTS.md"
 grep -q "read-only source library" "$ROOT/scripts/AGENTS.md"
 grep -q "tracks.tsv, same export run" "$ROOT/skills/AGENTS.md"
-grep -q "historical plans, explicit staging" "$ROOT/docs/AGENTS.md"
+grep -q "historical plans," "$ROOT/docs/AGENTS.md"
 
 for script in project-env changed-files protect-local
 do
-  test -x "$ROOT/.codex/scripts/$script"
+  test -x "$ROOT/.agents/scripts/$script"
 done
+for script in .codex/cloud/setup.sh .codex/cloud/maintenance.sh .codex/cloud/check.sh .codex/hooks/stop-protect-local
+do
+  test -x "$ROOT/$script"
+done
+test "$(tr -d '[:space:]' < "$ROOT/.codex/cloud/ENVIRONMENT_VERSION")" = "1"
+sh -n "$ROOT/.codex/cloud/setup.sh" "$ROOT/.codex/cloud/maintenance.sh" \
+  "$ROOT/.codex/cloud/check.sh" "$ROOT/.codex/hooks/stop-protect-local"
 test -x "$ROOT/.docker-agent/scripts/qa-gate"
 test -x "$ROOT/.docker-agent/scripts/session-guard"
 test -f "$ROOT/docker-agent.yaml"
@@ -48,9 +61,9 @@ from jsonschema import Draft202012Validator
 for name in ("task-brief.schema.json", "review-result.schema.json"):
     Draft202012Validator.check_schema(json.loads(Path(".docker-agent/schemas", name).read_text()))
 PY
-env_output=$(.codex/scripts/project-env sh -c 'printf "%s|%s" "$UV_CACHE_DIR" "$UV_TOOL_DIR"')
+env_output=$(.agents/scripts/project-env sh -c 'printf "%s|%s" "$UV_CACHE_DIR" "$UV_TOOL_DIR"')
 test "$env_output" = "/tmp/dj-digger-uv-cache|/tmp/dj-digger-uv-tools"
-.codex/scripts/changed-files | LC_ALL=C sort -c
+.agents/scripts/changed-files | LC_ALL=C sort -c
 
 # Test protect-local in isolated mktemp repo
 (
@@ -67,56 +80,55 @@ test "$env_output" = "/tmp/dj-digger-uv-cache|/tmp/dj-digger-uv-tools"
   git commit -q -m "init"
 
   # Test 1: protected files should fail
-  for path in config/local.toml workspace/export.tsv sets/demo.m3u8 catalog.sqlite catalog.sqlite3 docs/superpowers/specs/demo.md
+  for path in config/local.toml workspace/export.tsv sets/demo.m3u8 catalog.sqlite catalog.sqlite3 .specifications/specs/demo.md
   do
     mkdir -p "$(dirname "$path")"
     echo "content" > "$path"
     git add "$path"
   done
-  "$ROOT/.codex/scripts/protect-local" --staged 2>/dev/null && exit 1
+  "$ROOT/.agents/scripts/protect-local" --staged 2>/dev/null && exit 1
 
   # Test 2: reset staging and test with safe file
   git reset -q
   mkdir -p src
   echo "safe" > src/example.py
   git add src/example.py
-  "$ROOT/.codex/scripts/protect-local" --staged
+  "$ROOT/.agents/scripts/protect-local" --staged
 
-  # Test 3: spec file should fail without env var
+  # Test 3: specification archive is never stageable
   git reset -q
-  mkdir -p docs/superpowers/specs
-  echo "spec" > docs/superpowers/specs/demo.md
-  git add docs/superpowers/specs/demo.md
-  "$ROOT/.codex/scripts/protect-local" --staged 2>/dev/null && exit 1
-
-  # Test 4: spec file should pass with DJ_DIGGER_ALLOW_SPEC_STAGE=1
-  DJ_DIGGER_ALLOW_SPEC_STAGE=1 "$ROOT/.codex/scripts/protect-local" --staged
+  mkdir -p .specifications/specs
+  echo "spec" > .specifications/specs/demo.md
+  git add -f .specifications/specs/demo.md
+  "$ROOT/.agents/scripts/protect-local" --staged 2>/dev/null && exit 1
 
   git reset -q
   git add catalog.sqlite3
   git commit -q -m "add protected catalog"
-  ! "$ROOT/.codex/scripts/protect-local" --range HEAD^..HEAD 2>/dev/null
+  ! "$ROOT/.agents/scripts/protect-local" --range HEAD^..HEAD 2>/dev/null
 )
 
 # Test qa-select classification rules
-test "$(printf 'README.md\n' | "$ROOT/.codex/scripts/qa-select")" = "docs"
-test "$(printf 'src/dj_digger/copying/set_copy.py\n' | "$ROOT/.codex/scripts/qa-select")" = "subsystem"
-test "$(printf 'src/dj_digger/catalog/migrations.py\n' | "$ROOT/.codex/scripts/qa-select")" = "catalog"
-test "$(printf 'src/dj_digger/catalog/sql/catalog-v7.sql\n' | "$ROOT/.codex/scripts/qa-select")" = "catalog"
-test "$(printf 'src/dj_digger/analysis/worker_client.py\n' | "$ROOT/.codex/scripts/qa-select")" = "analysis"
-test "$(printf 'src/dj_digger/exports/tracks.py\n' | "$ROOT/.codex/scripts/qa-select")" = "exports"
-test "$(printf 'src/dj_digger/cli.py\n' | "$ROOT/.codex/scripts/qa-select")" = "runtime"
-test "$(printf 'src/dj_digger/cli.py\nsrc/dj_digger/catalog/migrations.py\n' | "$ROOT/.codex/scripts/qa-select")" = "full"
-test "$(printf 'docker-agent.yaml\n' | "$ROOT/.codex/scripts/qa-select")" = "focused"
-test "$(printf '.docker-agent/scripts/qa-gate\n' | "$ROOT/.codex/scripts/qa-select")" = "focused"
+test "$(printf 'README.md\n' | "$ROOT/.agents/scripts/qa-select")" = "docs"
+test "$(printf 'src/dj_digger/copying/set_copy.py\n' | "$ROOT/.agents/scripts/qa-select")" = "subsystem"
+test "$(printf 'src/dj_digger/catalog/migrations.py\n' | "$ROOT/.agents/scripts/qa-select")" = "catalog"
+test "$(printf 'src/dj_digger/catalog/sql/catalog-v7.sql\n' | "$ROOT/.agents/scripts/qa-select")" = "catalog"
+test "$(printf 'src/dj_digger/analysis/worker_client.py\n' | "$ROOT/.agents/scripts/qa-select")" = "analysis"
+test "$(printf 'src/dj_digger/exports/tracks.py\n' | "$ROOT/.agents/scripts/qa-select")" = "exports"
+test "$(printf 'src/dj_digger/cli.py\n' | "$ROOT/.agents/scripts/qa-select")" = "runtime"
+test "$(printf 'src/dj_digger/cli.py\nsrc/dj_digger/catalog/migrations.py\n' | "$ROOT/.agents/scripts/qa-select")" = "full"
+test "$(printf 'docker-agent.yaml\n' | "$ROOT/.agents/scripts/qa-select")" = "focused"
+test "$(printf '.docker-agent/scripts/qa-gate\n' | "$ROOT/.agents/scripts/qa-select")" = "focused"
+test "$(printf '.agents/scripts/qa-run\n' | "$ROOT/.agents/scripts/qa-select")" = "focused"
+test "$(printf '.codex/cloud/check.sh\n' | "$ROOT/.agents/scripts/qa-select")" = "focused"
 
 # Test qa-select does not escalate a docs+single-production-category change to
 # full: docs must be filtered out of the production-category count just like
 # focused is.
-test "$(printf 'README.md\nsrc/dj_digger/catalog/migrations.py\n' | "$ROOT/.codex/scripts/qa-select")" = "catalog"
+test "$(printf 'README.md\nsrc/dj_digger/catalog/migrations.py\n' | "$ROOT/.agents/scripts/qa-select")" = "catalog"
 
 # Test qa-run focused profile (run simple test script)
-test "$("$ROOT/.codex/scripts/qa-run" focused -- "$ROOT/.codex/tests/simple-test.sh")" = "PASS focused"
+test "$("$ROOT/.agents/scripts/qa-run" focused -- "$ROOT/.agents/tests/simple-test.sh")" = "PASS focused"
 
 # Test qa-run reports a real failure (not a false PASS) when the underlying
 # command fails. This is a regression test for the `if ! cmd; then status=$?`
@@ -130,7 +142,7 @@ test "$("$ROOT/.codex/scripts/qa-run" focused -- "$ROOT/.codex/tests/simple-test
   chmod +x "$failing_script"
 
   set +e
-  output=$("$ROOT/.codex/scripts/qa-run" focused -- "$failing_script" 2>/dev/null)
+  output=$("$ROOT/.agents/scripts/qa-run" focused -- "$failing_script" 2>/dev/null)
   rc=$?
   set -e
 
@@ -161,7 +173,7 @@ test "$("$ROOT/.codex/scripts/qa-run" focused -- "$ROOT/.codex/tests/simple-test
   mkdir -p src
   echo "content" > src/example.py
   git add src/example.py
-  "$ROOT/.codex/scripts/staged-check" src/example.py
+  "$ROOT/.agents/scripts/staged-check" src/example.py
   git reset -q
 
   # Test 2: staged-check fails with extra staged path
@@ -169,14 +181,14 @@ test "$("$ROOT/.codex/scripts/qa-run" focused -- "$ROOT/.codex/tests/simple-test
   echo "content" > src/example.py
   echo "extra" > src/extra.py
   git add src/example.py src/extra.py
-  ! "$ROOT/.codex/scripts/staged-check" src/example.py 2>/dev/null
+  ! "$ROOT/.agents/scripts/staged-check" src/example.py 2>/dev/null
   git reset -q
 
   # Test 3: staged-check rejects protected paths via protect-local
   mkdir -p config
   echo "protected" > config/local.toml
   git add config/local.toml
-  ! "$ROOT/.codex/scripts/staged-check" config/local.toml 2>/dev/null
+  ! "$ROOT/.agents/scripts/staged-check" config/local.toml 2>/dev/null
   git reset -q
 
   # Test 4: staged-check rejects conflict markers
@@ -189,7 +201,7 @@ other
 >>>>>>>
 line2" > src/example.py
   git add src/example.py
-  ! "$ROOT/.codex/scripts/staged-check" src/example.py 2>/dev/null
+  ! "$ROOT/.agents/scripts/staged-check" src/example.py 2>/dev/null
 )
 
 # Test handoff script output format
@@ -208,7 +220,7 @@ line2" > src/example.py
   git commit -q -m "init"
 
   # Test handoff output has exactly 6 lines with expected headings
-  output=$("$ROOT/.codex/scripts/handoff")
+  output=$("$ROOT/.agents/scripts/handoff")
   lines=$(printf '%s\n' "$output" | wc -l)
   test "$lines" = 6
 
@@ -240,7 +252,7 @@ line2" > src/example.py
   echo "line2" >> README.md
   git add README.md
 
-  diff_line=$("$ROOT/.codex/scripts/handoff" | grep '^Diff:')
+  diff_line=$("$ROOT/.agents/scripts/handoff" | grep '^Diff:')
   printf '%s\n' "$diff_line" | grep -q "insertion"
   printf '%s\n' "$diff_line" | grep -q "file"
 )
@@ -248,7 +260,7 @@ line2" > src/example.py
 # Test skill structure and content
 for skill in task implement qa runtime-proof sqlite-change native-analysis commit mr ship
 do
-  skill_file="$ROOT/.codex/skills/$skill/SKILL.md"
+  skill_file="$ROOT/.agents/skills/$skill/SKILL.md"
   test -f "$skill_file"
 
   # Check frontmatter starts with ---
@@ -267,6 +279,19 @@ do
   lines=$(wc -l < "$skill_file")
   test "$lines" -le 140
 done
+
+# Skills stay reusable across repository releases and datastore schema versions.
+if grep -R -nEi \
+  '(dj.?digger|python[[:space:]]+3\.12|analysis[[:space:]]+extra|catalog[[:space:]]+v[0-9]+|catalog-v[0-9]+|catalog\.sqlite)' \
+  "$ROOT/.agents/skills"; then
+  echo "skill files contain project- or release-specific assumptions" >&2
+  exit 1
+fi
+if find "$ROOT/skills" -type f -name '*.md' ! -path '*/evals/*' \
+  -exec grep -nEi '(\bV[0-9]+[AB]?\b|schema version[[:space:]]+[0-9]+)' {} +; then
+  echo "skill reference files contain release-specific contract labels" >&2
+  exit 1
+fi
 
 # Verify root AGENTS.md names all nine skills in the Skill routing section
 # (backticked, as they appear there) rather than merely containing common
@@ -295,7 +320,7 @@ grep -q "if command -v codegraph" "$hooks_file"
 
 # Test 3: Stop has protect-local --staged
 grep -q "Stop" "$hooks_file"
-grep -q "protect-local --staged" "$hooks_file"
+grep -q "stop-protect-local" "$hooks_file"
 
 # Test 4: No PreToolUse hook anywhere in hooks.json
 ! grep -q "PreToolUse" "$hooks_file"

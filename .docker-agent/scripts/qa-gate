@@ -15,12 +15,12 @@ cd "$root"
 
 if [ -n "$base" ]; then
   changed=$(git diff --name-only "$base"...HEAD)
-  working=$("$root/.codex/scripts/changed-files")
+  working=$("$root/.agents/scripts/changed-files")
   changed=$(printf '%s\n%s\n' "$changed" "$working" | sed '/^$/d' | LC_ALL=C sort -u)
 else
-  changed=$("$root/.codex/scripts/changed-files")
+  changed=$("$root/.agents/scripts/changed-files")
 fi
-profile=$(printf '%s\n' "$changed" | "$root/.codex/scripts/qa-select")
+profile=$(printf '%s\n' "$changed" | "$root/.agents/scripts/qa-select")
 
 set +e
 log=$(mktemp "${TMPDIR:-/tmp}/dj-digger-qa-gate.XXXXXX.log")
@@ -28,7 +28,7 @@ if [ "$profile" = "focused" ]; then
   targets=""
   while IFS= read -r path; do
     case "$path" in
-      tests/*.py|.codex/tests/*.sh)
+      tests/*.py|.agents/tests/*.sh)
         [ -f "$root/$path" ] && targets="$targets $root/$path"
         ;;
     esac
@@ -37,12 +37,12 @@ $changed
 EOF
   if [ -n "$targets" ]; then
     # shellcheck disable=SC2086
-    "$root/.codex/scripts/qa-run" focused -- $targets >"$log" 2>&1
+    "$root/.agents/scripts/qa-run" focused -- $targets >"$log" 2>&1
   else
-    "$root/.codex/scripts/qa-run" focused -- "$root/.codex/tests/simple-test.sh" >"$log" 2>&1
+    "$root/.agents/scripts/qa-run" focused -- "$root/.agents/tests/simple-test.sh" >"$log" 2>&1
   fi
 else
-  "$root/.codex/scripts/qa-run" "$profile" >"$log" 2>&1
+  "$root/.agents/scripts/qa-run" "$profile" >"$log" 2>&1
 fi
 status=$?
 set -e
