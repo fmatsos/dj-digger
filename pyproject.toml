@@ -16,6 +16,7 @@ dependencies = [
     "essentia==2.1b6.dev1389",
     "mcp>=2,<3",
     "pydantic>=2.11,<3",
+    "sqlite-utils>=3.35,<4",
 ]
 
 [project.scripts]
