@@ -232,6 +232,8 @@ def duplicates(
     analyze: Annotated[bool, typer.Option("--analyze")] = False,
     list_: Annotated[bool, typer.Option("--list")] = False,
     mark_best_quality: Annotated[bool, typer.Option("--mark-best-quality")] = False,
+    mastering: Annotated[bool, typer.Option("--mastering")] = False,
+    dj_review: Annotated[bool, typer.Option("--dj-review")] = False,
     source: Annotated[str | None, typer.Option()] = None,
     workers: PositiveWorkersOption = 1,
     track_timeout: TrackTimeoutOption = 1800.0,
@@ -245,6 +247,10 @@ def duplicates(
         raise typer.BadParameter("--analyze and --list are mutually exclusive")
     if list_ and mark_best_quality:
         raise typer.BadParameter("--list and --mark-best-quality are mutually exclusive")
+    if mastering and not analyze:
+        raise typer.BadParameter("--mastering is only valid with --analyze")
+    if dj_review and not list_:
+        raise typer.BadParameter("--dj-review is only valid with --list")
     if not analyze:
         if _was_passed_on_command_line(ctx, "workers"):
             raise typer.BadParameter("--workers is only valid with --analyze")
@@ -260,6 +266,8 @@ def duplicates(
         argv += ["--workers", str(workers), "--track-timeout", str(track_timeout)]
         if mark_best_quality:
             argv.append("--mark-best-quality")
+        if mastering:
+            argv.append("--mastering")
         if json_output:
             argv.append("--json")
         _run_in_background(config, "duplicates", argv, json_output=json_output)
@@ -268,6 +276,13 @@ def duplicates(
     def action(service: WorkspaceApplication) -> dict[str, Any]:
         if list_:
             groups = service.duplicates_list(source)
+            if dj_review:
+                groups = [
+                    group
+                    for group in groups
+                    if getattr(group, "dj_review_recommended", None) is True
+                ]
+                groups.sort(key=lambda group: _review_sort_key(group))
             return {
                 "event": "duplicates",
                 "status": "succeeded",
@@ -280,6 +295,7 @@ def duplicates(
                     workers=workers,
                     track_timeout=track_timeout,
                     mark_best_quality=mark_best_quality,
+                    mastering=mastering,
                     progress=progress,
                 )
             return {
@@ -306,6 +322,10 @@ def _was_passed_on_command_line(ctx: typer.Context, name: str) -> bool:
 def _group_json(group: Any) -> dict[str, Any]:
     return {
         "group_id": group.group_id,
+        "mastering_variant": getattr(group, "mastering_variant", None),
+        "dj_review_recommended": getattr(group, "dj_review_recommended", None),
+        "analysis_complete": getattr(group, "analysis_complete", False),
+        "comparison_status": getattr(group, "comparison_status", "missing_best_quality"),
         "members": [
             {
                 "source": member.source_id,
@@ -313,10 +333,45 @@ def _group_json(group: Any) -> dict[str, Any]:
                 "relative_path": member.relative_path,
                 "technical_facts": member.technical_facts,
                 "best_quality": member.best_quality,
+                "audio_analysis": getattr(member, "audio_analysis", None),
+                "dj_analysis": getattr(member, "dj_analysis", None),
+                "mastering_comparison": (
+                    None
+                    if getattr(member, "mastering_comparison", None) is None
+                    else member.mastering_comparison.__dict__
+                ),
             }
             for member in group.members
         ],
     }
+
+
+def _review_sort_key(group: Any) -> tuple[int, float, float, str]:
+    deficits = [
+        member.dj_analysis.get("gain_deficit_db")
+        for member in group.members
+        if member.dj_analysis is not None and member.dj_analysis.get("gain_deficit_db") is not None
+    ]
+    deltas = []
+    for member in group.members:
+        comparison = member.mastering_comparison
+        if comparison is None:
+            continue
+        for name in (
+            "active_loudness_delta_db",
+            "true_peak_delta_db",
+            "plr_delta_db",
+            "gain_deficit_delta_db",
+        ):
+            value = getattr(comparison, name)
+            if value is not None:
+                deltas.append(abs(value))
+    return (
+        0 if deficits else 1,
+        -(max(deficits) if deficits else 0.0),
+        -(max(deltas) if deltas else 0.0),
+        group.group_id,
+    )
 
 
 @app.command()

@@ -70,7 +70,7 @@ class SnapshotExporter:
             "schema_version": 1,
             "created_at": self._created_at().isoformat(),
             "catalog_schema_version": 1,
-            "tracks_export_schema_version": 1,
+            "tracks_export_schema_version": 2,
             "analysis_schema_version": 2,
             "sources": [
                 {
@@ -113,9 +113,11 @@ class SnapshotExporter:
         os.close(fd)
         temporary = Path(temporary_name)
         try:
-            with temporary.open("wb") as raw, gzip.GzipFile(
-                fileobj=raw, mode="wb", filename="", mtime=0
-            ) as compressed, tarfile.open(fileobj=compressed, mode="w") as archive:
+            with (
+                temporary.open("wb") as raw,
+                gzip.GzipFile(fileobj=raw, mode="wb", filename="", mtime=0) as compressed,
+                tarfile.open(fileobj=compressed, mode="w") as archive,
+            ):
                 for path in sorted(directory.iterdir(), key=lambda item: item.name):
                     info = archive.gettarinfo(str(path), arcname=f"snapshot/{path.name}")
                     info.uid = info.gid = 0

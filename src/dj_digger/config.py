@@ -109,6 +109,43 @@ class DspConfig:
 
 
 @dataclass(frozen=True)
+class ComparisonThresholds:
+    """Thresholds used for descriptive duplicate comparisons."""
+
+    active_loudness_db: float | None = None
+    true_peak_db: float | None = None
+    plr_db: float | None = None
+    integrated_lufs_db: float | None = None
+    lra_lu: float | None = None
+    gain_deficit_db: float | None = None
+
+
+VARIANT_DEFAULTS = ComparisonThresholds(
+    active_loudness_db=1.5,
+    true_peak_db=1.0,
+    plr_db=2.0,
+    integrated_lufs_db=1.5,
+    lra_lu=1.5,
+)
+REVIEW_DEFAULTS = ComparisonThresholds(
+    active_loudness_db=1.5,
+    true_peak_db=1.0,
+    plr_db=2.0,
+    gain_deficit_db=1.5,
+)
+
+
+@dataclass(frozen=True)
+class MasteringConfig:
+    """Optional targets and comparison thresholds for mastering analysis."""
+
+    dj_target_lufs: float = -9.0
+    dj_target_true_peak_dbtp: float = -1.0
+    variant_thresholds: ComparisonThresholds = VARIANT_DEFAULTS
+    review_thresholds: ComparisonThresholds = REVIEW_DEFAULTS
+
+
+@dataclass(frozen=True)
 class WorkspaceConfig:
     """Immutable configuration for a DJ Digger workspace."""
 
@@ -117,6 +154,7 @@ class WorkspaceConfig:
     sources: tuple[LibrarySourceConfig, ...]
     dsp: DspConfig = field(default_factory=DspConfig.canonical)
     dsp_path: Path | None = None
+    mastering: MasteringConfig = field(default_factory=MasteringConfig)
 
     @classmethod
     def load(cls, path: Path, *, dsp_path: Path | None = None) -> "WorkspaceConfig":
@@ -170,12 +208,14 @@ class WorkspaceConfig:
         # Keep loading the workspace possible so `doctor` can report malformed DSP
         # configuration as a structured diagnostic instead of aborting config parsing.
         dsp = DspConfig.canonical()
+        mastering = _mastering_config(raw_config.get("mastering"))
         return cls(
             database,
             exports,
             tuple(sources),
             dsp,
             configured_dsp,
+            mastering,
         )
 
 
@@ -210,6 +250,53 @@ def _number(value: object, name: str) -> float:
     if not isinstance(value, int | float) or isinstance(value, bool) or not isfinite(value):
         raise ValueError(f"{name} must be a finite number")
     return float(value)
+
+
+def _optional_number(value: object, name: str) -> float | None:
+    if value is None:
+        return None
+    return _number(value, name)
+
+
+def _thresholds(value: object, name: str, defaults: ComparisonThresholds) -> ComparisonThresholds:
+    table = {} if value is None else _mapping(value, name)
+    fields = (
+        "active_loudness_db",
+        "true_peak_db",
+        "plr_db",
+        "integrated_lufs_db",
+        "lra_lu",
+        "gain_deficit_db",
+    )
+    parsed: dict[str, float | None] = {}
+    for field_name in fields:
+        raw = table.get(field_name, getattr(defaults, field_name))
+        parsed_value = _optional_number(raw, f"{name}.{field_name}")
+        parsed[field_name] = parsed_value
+        if parsed_value is not None and parsed_value < 0:
+            raise ValueError(f"{name}.{field_name} must not be negative")
+    return ComparisonThresholds(**parsed)
+
+
+def _mastering_config(value: object) -> MasteringConfig:
+    if value is None:
+        return MasteringConfig()
+    table = _mapping(value, "mastering")
+    target_lufs = _number(table.get("dj_target_lufs", -9.0), "mastering.dj_target_lufs")
+    target_peak = _number(
+        table.get("dj_target_true_peak_dbtp", -1.0),
+        "mastering.dj_target_true_peak_dbtp",
+    )
+    return MasteringConfig(
+        dj_target_lufs=target_lufs,
+        dj_target_true_peak_dbtp=target_peak,
+        variant_thresholds=_thresholds(
+            table.get("variant_thresholds"), "mastering.variant_thresholds", VARIANT_DEFAULTS
+        ),
+        review_thresholds=_thresholds(
+            table.get("review_thresholds"), "mastering.review_thresholds", REVIEW_DEFAULTS
+        ),
+    )
 
 
 def _is_within(path: Path, root: Path) -> bool:

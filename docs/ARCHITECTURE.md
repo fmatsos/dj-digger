@@ -1,6 +1,6 @@
 # Architecture
 
-This document describes the current DJ Digger runtime after the Catalog V7
+This document describes the current DJ Digger runtime after the Catalog V9
 upgrade. It is an implementation guide, not a historical plan. Measured V7
 qualification results and their limitations live in
 [the implementation requalification record](acceptance/implementation-requalification.md).
@@ -15,7 +15,7 @@ from their authoritative inputs.
 ```mermaid
 flowchart LR
     Sources[Configured music sources] --> Scan[Scan and metadata]
-    Scan --> Catalog[(SQLite Catalog V7)]
+    Scan --> Catalog[(SQLite Catalog V9)]
     Sources --> Workers[Per-track analysis workers]
     Workers --> Parent[Parent analysis pipeline]
     Parent --> Catalog
@@ -48,9 +48,9 @@ library root, playlist or explicit tracks, and output directory directly; it nei
 loads workspace configuration nor opens SQLite. It publishes a safely renumbered
 playlist, copied tracks, and manifest without modifying the source library.
 
-## Catalog V7 data model
+## Catalog V9 data model
 
-Catalog V7 deliberately separates canonical facts and history from optimized read
+Catalog V9 deliberately separates canonical facts and history from optimized read
 projections.
 
 ### Canonical state and history
@@ -244,10 +244,22 @@ Changes must preserve these boundaries:
 7. Every SQLite connection enables the required pragmas, and write transactions stay
    bounded enough for WAL readers and serialized writers.
 
-For Catalog V8, add an ordered `7 -> 8` packaged migration and a fresh V8 schema,
-advance `CURRENT_VERSION`, and keep the migration transactional, version-checked,
-foreign-key-clean, and wheel-installable. Any new materialized projection needs an
-atomic write path, a deterministic rebuild command or routine, query-plan coverage,
-and preservation tests for the V7-to-V8 upgrade. Public view or export changes also
-require explicit schema/consumer compatibility decisions rather than silent column or
-semantic changes.
+Catalog V9 extends the V8 append-only catalog with mastering attempts and the
+rebuildable current mastering and DJ projections. The `8 -> 9` packaged migration
+and fresh V9 schema are transactional, version-checked, foreign-key-clean, and
+wheel-installable. Any new materialized projection needs an atomic write path, a
+deterministic rebuild command or routine, query-plan coverage, and preservation tests.
+Public view or export changes also require explicit schema/consumer compatibility
+decisions rather than silent column or semantic changes.
+
+# Mastering and DJ review (V9)
+
+The V9 catalog stores append-only FFmpeg EBU R128 attempts and rebuildable
+current mastering and target-dependent DJ projections. `duplicates
+--analyze --mastering` measures only present members of exact Chromaprint
+groups; compatible successes are reused. `--list --dj-review` computes signed
+deltas against the explicitly marked technical `best_quality` member and
+returns only groups recommended for listening review. Missing measurements are
+represented as null, and failed per-track attempts yield partial command
+results. DJ targets default to -9 LUFS and -1 dBTP. No audio is modified and
+no DJ candidate is selected.

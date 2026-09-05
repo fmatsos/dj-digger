@@ -1,5 +1,12 @@
 version: 15
 
+mcps:
+  codegraph:
+    command: "codegraph"
+    args:
+      - "serve"
+      - "--mcp"
+
 models:
   luna_low:
     provider: chatgpt
@@ -11,17 +18,137 @@ models:
     model: gpt-5.6-sol
     thinking_budget: medium
 
+budgets:
+  lead_runtime:
+    max_time: 10m
+  review_runtime:
+    max_time: 5m
+
 agents:
   lead:
     model: luna_low
-    description: Classify and orchestrate bounded DJ Digger tasks
+    description: Scope and orchestrate bounded DJ Digger tasks; delegate implementation to Codex
     instruction_file: .docker-agent/instructions/lead.md
+
+    sub_agents:
+      - codex-worker
+      - reviewer
+
+    toolsets:
+      # Keep normal read/search/list/tree capabilities, but physically confine
+      # filesystem access to the active repository workspace.
+      - type: filesystem
+        readonly: true
+        allow_list:
+          - "."
+        deny_list:
+          - "./config/local.toml"
+          - "./workspace"
+          - "./sets"
+
+      # Read-only history when it is genuinely useful. Working-tree state is
+      # obtained through repo_state so protected/private paths are redacted.
+      - type: git
+        tools:
+          - git_log
+          - git_show
+          - git_blame
+
+      # Deterministic operations replace the unrestricted shell.
+      - type: script
+        shell:
+          repo_state:
+            cmd: "./.docker-agent/scripts/change-summary"
+            description: Return compact branch/worktree state with protected and media paths redacted. Use once before delegation.
+
+          next_plan_task:
+            cmd: './.docker-agent/scripts/next-plan-task "${plan}"'
+            description: Return only the next unchecked task section from a Markdown implementation plan. Prefer this over reading a whole plan/tasklist.
+            args:
+              plan:
+                type: string
+                description: Repository-relative Markdown plan path
+                pattern: '^[A-Za-z0-9_./-]+\.md$'
+            required:
+              - plan
+
+          qa_gate:
+            cmd: "./.docker-agent/scripts/lead-qa"
+            description: Run the deterministic DJ Digger QA gate with UV_PYTHON forced to 3.12. Use after Codex returns and after bounded repairs.
+
+      # One focused structural query only when ownership is not already known.
+      - type: mcp
+        ref: codegraph
+        tools:
+          - codegraph_explore
+
+    budgets:
+      - lead_runtime
+
+    redact_secrets: true
+
+    max_iterations: 12
+    max_consecutive_tool_calls: 4
+    max_tool_result_tokens: 1800
+    max_old_tool_call_tokens: 3000
+    num_history_items: 6
+
+    session_compaction: true
+    compaction_threshold: 0.65
+
+    hooks:
+      session_start:
+        - type: command
+          command: ./.docker-agent/scripts/session-guard
+
+      stop:
+        - type: command
+          command: ./.codex/scripts/protect-local --staged
+
   codex-worker:
     description: Bounded Luna-medium Codex implementation worker
     harness:
       type: codex
       model: gpt-5.6-luna
+
   reviewer:
     model: sol_medium
-    description: Fresh Sol-medium read-only risk reviewer for elevated-risk changes
+    description: Fresh bounded risk reviewer for elevated-risk changes
     instruction_file: .docker-agent/instructions/reviewer.md
+
+    # Effective read-only surface: no shell, no write filesystem tools, no MCP.
+    toolsets:
+      - type: filesystem
+        readonly: true
+        allow_list:
+          - "."
+        deny_list:
+          - "./config/local.toml"
+          - "./workspace"
+          - "./sets"
+
+      - type: git
+        tools:
+          - git_log
+          - git_show
+          - git_blame
+
+      - type: script
+        shell:
+          review_diff:
+            cmd: "./.docker-agent/scripts/change-summary --diff --max-chars 12000"
+            description: Return privacy-aware working-tree summary plus a bounded diff for review. Call once at review start.
+
+    budgets:
+      - review_runtime
+
+    redact_secrets: true
+
+    max_iterations: 5
+    max_consecutive_tool_calls: 3
+    max_tool_result_tokens: 2500
+    max_old_tool_call_tokens: 3000
+    num_history_items: 4
+
+    session_compaction: true
+    compaction_threshold: 0.65
