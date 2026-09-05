@@ -26,7 +26,9 @@ $apt_cmd update
 DEBIAN_FRONTEND=noninteractive $apt_cmd install -y --no-install-recommends \
   ffmpeg libimage-exiftool-perl libchromaprint-tools unzip curl ca-certificates python3-pip
 
+cd /workspace/dj-digger
+
 python3 -m pip install "uv==$uv_version"
 uv --version
 uv sync --frozen --group dev
-exec "$root/.codex/cloud/check.sh" --quick
+exec .codex/cloud/check.sh" --quick
