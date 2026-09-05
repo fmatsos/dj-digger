@@ -83,8 +83,7 @@ def _create_v6_catalog(path: Path, *, invalid_foreign_key: bool = False) -> None
     if invalid_foreign_key:
         connection.execute("PRAGMA foreign_keys = OFF")
         connection.execute(
-            "INSERT INTO track_events VALUES "
-            "(83, 999, '2026-01-04', NULL, NULL, 'invalid', NULL)"
+            "INSERT INTO track_events VALUES (83, 999, '2026-01-04', NULL, NULL, 'invalid', NULL)"
         )
         connection.commit()
     connection.close()
@@ -183,8 +182,8 @@ def _normalized_schema(connection: sqlite3.Connection) -> dict[tuple[str, str], 
 
 def test_current_schema_copy_matches_packaged_schema() -> None:
     root = Path(__file__).parents[1]
-    assert (root / "schemas/catalog-v8.sql").read_bytes() == (
-        root / "src/dj_digger/catalog/sql/catalog-v8.sql"
+    assert (root / "schemas/catalog-v9.sql").read_bytes() == (
+        root / "src/dj_digger/catalog/sql/catalog-v9.sql"
     ).read_bytes()
 
 
@@ -199,9 +198,9 @@ def test_wheel_migrates_without_the_checkout_schema(tmp_path: Path) -> None:
     isolated_package = tmp_path / "installed"
     with zipfile.ZipFile(wheel) as archive:
         packaged_files = set(archive.namelist())
-        assert "dj_digger/catalog/sql/catalog-v8.sql" in packaged_files
+        assert "dj_digger/catalog/sql/catalog-v9.sql" in packaged_files
         assert "dj_digger/catalog/sql/migrate-v6-to-v7.sql" in packaged_files
-        assert "dj_digger/catalog/sql/migrate-v7-to-v8.sql" in packaged_files
+        assert "dj_digger/catalog/sql/migrate-v8-to-v9.sql" in packaged_files
         archive.extractall(isolated_package)
 
     result = subprocess.run(
@@ -250,7 +249,7 @@ def test_isolated_wheel_upgrades_a_v6_catalog(tmp_path: Path) -> None:
             "from dj_digger.catalog.database import Database; "
             "database = Database.open(Path('catalog.sqlite')); "
             "database.migrate(); "
-            "assert database.scalar('PRAGMA user_version') == 8; "
+            "assert database.scalar('PRAGMA user_version') == 9; "
             "assert database.scalar('SELECT audio_analysis_id FROM current_track_analysis') == 61",
         ],
         check=False,
@@ -283,8 +282,12 @@ def test_wheel_contains_valid_analysis_schemas_outside_checkout(tmp_path: Path) 
         "('dj-analysis.schema.json','dj-sections.schema.json','dj-analysis-run.schema.json')]"
     )
     result = subprocess.run(
-        [sys.executable, "-c", script], cwd=tmp_path, env={"PYTHONPATH": str(isolated)},
-        check=False, capture_output=True, text=True,
+        [sys.executable, "-c", script],
+        cwd=tmp_path,
+        env={"PYTHONPATH": str(isolated)},
+        check=False,
+        capture_output=True,
+        text=True,
     )
     assert result.returncode == 0, result.stderr
 
@@ -295,14 +298,14 @@ def test_catalog_migration_is_idempotent_after_reopening(tmp_path: Path) -> None
     database.migrate()
     database.migrate()
 
-    assert database.scalar("PRAGMA user_version") == 8
+    assert database.scalar("PRAGMA user_version") == 9
     assert database.scalar("PRAGMA foreign_keys") == 1
     assert database.table_exists("tracks")
     assert database.table_exists("track_events")
 
     reopened = Database.open(database_path)
     reopened.migrate()
-    assert reopened.scalar("PRAGMA user_version") == 8
+    assert reopened.scalar("PRAGMA user_version") == 9
     assert reopened.table_exists("library_sources")
 
 
@@ -321,7 +324,7 @@ def test_current_schema_has_embedded_metadata_input_facts(tmp_path: Path) -> Non
         row[1]: row for row in database.execute("PRAGMA table_info(embedded_metadata)").fetchall()
     }
 
-    assert database.scalar("PRAGMA user_version") == 8
+    assert database.scalar("PRAGMA user_version") == 9
     assert {"input_size_bytes", "input_mtime_ns", "normalization_version"} <= columns.keys()
     assert columns["input_size_bytes"][3] == 0
     assert columns["input_mtime_ns"][3] == 0
@@ -339,7 +342,7 @@ def test_v6_upgrade_preserves_all_rows_and_backfills_latest_success(tmp_path: Pa
     database.migrate()
 
     assert _snapshot_v6_rows(database._connection) == before
-    assert database.scalar("PRAGMA user_version") == 8
+    assert database.scalar("PRAGMA user_version") == 9
     assert database.execute("PRAGMA foreign_key_check").fetchall() == []
     assert database.execute(
         "SELECT track_id, audio_analysis_id, analysis_schema_version, analyzer_version, "
@@ -391,10 +394,13 @@ def test_current_schema_has_duplicate_detection_tables(tmp_path: Path) -> None:
         "input_mtime_ns",
         "fingerprinted_at",
     }
-    assert database.scalar(
-        "SELECT 1 FROM sqlite_master WHERE type = 'index' "
-        "AND name = 'audio_fingerprints_group_idx'"
-    ) == 1
+    assert (
+        database.scalar(
+            "SELECT 1 FROM sqlite_master WHERE type = 'index' "
+            "AND name = 'audio_fingerprints_group_idx'"
+        )
+        == 1
+    )
 
     assert database.table_exists("duplicate_quality_selections")
     selection_columns = {
@@ -421,7 +427,7 @@ def test_v7_upgrade_preserves_all_rows_and_adds_duplicate_schema(tmp_path: Path)
     database.migrate()
 
     assert _snapshot_v7_rows(database._connection) == before
-    assert database.scalar("PRAGMA user_version") == 8
+    assert database.scalar("PRAGMA user_version") == 9
     assert database.execute("PRAGMA foreign_key_check").fetchall() == []
     assert database.table_exists("audio_fingerprints")
     assert database.execute("SELECT * FROM audio_fingerprints").fetchall() == []
@@ -456,9 +462,12 @@ def test_v6_upgrade_rolls_back_ddl_and_version_on_foreign_key_failure(tmp_path: 
 
     assert database.scalar("PRAGMA user_version") == 6
     assert not database.table_exists("current_track_analysis")
-    assert database.scalar(
-        "SELECT 1 FROM sqlite_master WHERE type = 'view' AND name = 'library_tracks'"
-    ) is None
+    assert (
+        database.scalar(
+            "SELECT 1 FROM sqlite_master WHERE type = 'view' AND name = 'library_tracks'"
+        )
+        is None
+    )
 
 
 def test_fresh_and_upgraded_catalogs_have_equivalent_application_schema(tmp_path: Path) -> None:
@@ -489,6 +498,7 @@ def test_current_schema_enforces_one_running_scan_per_source(tmp_path: Path) -> 
     database.commit()
 
     assert runs.start("djing", scanner_version="test") != first
+
 
 def test_source_root_relocation_preserves_track_identity(tmp_path: Path) -> None:
     database = Database.open(tmp_path / "catalog.sqlite")

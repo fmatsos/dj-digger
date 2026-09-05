@@ -48,22 +48,24 @@ def test_fresh_catalog_initializes_consolidated_current_schema(tmp_path: Path) -
 
     database.migrate()
 
-    assert database.scalar("PRAGMA user_version") == 8
+    assert database.scalar("PRAGMA user_version") == 9
     assert database.table_exists("library_sources")
     assert database.table_exists("track_sections")
     assert {
         row[1] for row in database.execute("PRAGMA table_info(embedded_metadata)").fetchall()
     } >= {"input_size_bytes", "input_mtime_ns", "normalization_version"}
-    assert database.scalar(
-        "SELECT 1 FROM sqlite_master WHERE type = 'index' "
-        "AND name = 'scan_runs_one_running_per_source'"
-    ) == 1
+    assert (
+        database.scalar(
+            "SELECT 1 FROM sqlite_master WHERE type = 'index' "
+            "AND name = 'scan_runs_one_running_per_source'"
+        )
+        == 1
+    )
     assert {
         row[2] for row in database.execute("PRAGMA foreign_key_list(track_sections)").fetchall()
     } == {"audio_analysis"}
     assert {
-        row[1]
-        for row in database.execute("PRAGMA table_info(current_track_analysis)").fetchall()
+        row[1] for row in database.execute("PRAGMA table_info(current_track_analysis)").fetchall()
     } == {
         "track_id",
         "audio_analysis_id",
@@ -88,9 +90,12 @@ def test_fresh_catalog_initializes_consolidated_current_schema(tmp_path: Path) -
         ("tracks", "track_id", "id", "CASCADE"),
         ("audio_analysis", "audio_analysis_id", "id", "NO ACTION"),
     }
-    assert database.scalar(
-        "SELECT 1 FROM sqlite_master WHERE type = 'view' AND name = 'library_tracks'"
-    ) == 1
+    assert (
+        database.scalar(
+            "SELECT 1 FROM sqlite_master WHERE type = 'view' AND name = 'library_tracks'"
+        )
+        == 1
+    )
     assert {
         "set_eligible",
         "analysis_enabled",
@@ -98,9 +103,7 @@ def test_fresh_catalog_initializes_consolidated_current_schema(tmp_path: Path) -
         "audio_analysis_id",
         "key",
         "low_mid_energy",
-    } <= {
-        row[1] for row in database.execute("PRAGMA table_info(library_tracks)").fetchall()
-    }
+    } <= {row[1] for row in database.execute("PRAGMA table_info(library_tracks)").fetchall()}
     expected_indexes = {
         "idx_audio_analysis_success_lookup",
         "idx_audio_analysis_run_status",
@@ -155,7 +158,7 @@ def test_current_catalog_migration_is_a_no_op(tmp_path: Path) -> None:
 
     database.migrate()
 
-    assert database.scalar("PRAGMA user_version") == 8
+    assert database.scalar("PRAGMA user_version") == 9
     assert database.scalar("SELECT value FROM migration_sentinel") == "preserved"
 
 

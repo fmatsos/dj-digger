@@ -1,0 +1,155 @@
+#!/usr/bin/env python3
+"""Emit a compact, privacy-aware working-tree summary and optional bounded diff."""
+
+from __future__ import annotations
+
+import argparse
+import json
+import subprocess
+import sys
+from pathlib import Path
+
+PROTECTED_PREFIXES = ("workspace/", "sets/")
+PROTECTED_FILES = {"config/local.toml"}
+DATABASE_SUFFIXES = (".sqlite", ".sqlite3", ".db")
+MEDIA_SUFFIXES = {
+    ".aac", ".aif", ".aiff", ".alac", ".flac", ".m4a", ".mp3", ".ogg", ".opus", ".wav", ".wma"
+}
+EXCLUDE_PATHSPECS = (
+    ":(exclude)config/local.toml",
+    ":(exclude)workspace/**",
+    ":(exclude)sets/**",
+    ":(exclude)**/*.sqlite",
+    ":(exclude)**/*.sqlite3",
+    ":(exclude)**/*.db",
+    ":(exclude)**/*.aac",
+    ":(exclude)**/*.aif",
+    ":(exclude)**/*.aiff",
+    ":(exclude)**/*.alac",
+    ":(exclude)**/*.flac",
+    ":(exclude)**/*.m4a",
+    ":(exclude)**/*.mp3",
+    ":(exclude)**/*.ogg",
+    ":(exclude)**/*.opus",
+    ":(exclude)**/*.wav",
+    ":(exclude)**/*.wma",
+)
+
+
+def git(*args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(["git", *args], text=True, capture_output=True, check=check)
+
+
+def fail(message: str) -> "NoReturn":
+    print(f"change-summary: {message}", file=sys.stderr)
+    raise SystemExit(2)
+
+
+def root_and_cwd() -> tuple[Path, Path]:
+    result = git("rev-parse", "--show-toplevel", check=False)
+    if result.returncode != 0:
+        fail("current working directory is not inside a Git repository")
+    root = Path(result.stdout.strip()).resolve()
+    cwd = Path.cwd().resolve()
+    try:
+        cwd.relative_to(root)
+    except ValueError:
+        fail("working directory is outside repository")
+    return root, cwd
+
+
+def redact(path: str) -> str:
+    normalized = path.replace("\\", "/")
+    if normalized in PROTECTED_FILES:
+        return normalized
+    if any(normalized.startswith(prefix) for prefix in PROTECTED_PREFIXES):
+        return normalized.split("/", 1)[0] + "/**"
+    suffix = Path(normalized).suffix.lower()
+    if suffix in MEDIA_SUFFIXES:
+        return "<media-file>"
+    if normalized.endswith(DATABASE_SUFFIXES):
+        return "<database-file>"
+    return normalized
+
+
+def status_entries() -> list[dict[str, str]]:
+    result = git("status", "--porcelain=v1", "-z", "--untracked-files=all")
+    raw = result.stdout.split("\0")
+    entries: list[dict[str, str]] = []
+    index = 0
+    seen: set[tuple[str, str]] = set()
+    while index < len(raw):
+        record = raw[index]
+        index += 1
+        if not record:
+            continue
+        status = record[:2]
+        path = record[3:]
+        if status[0] in {"R", "C"} and index < len(raw):
+            path = raw[index]
+            index += 1
+        safe = redact(path)
+        key = (status, safe)
+        if key not in seen:
+            entries.append({"status": status, "path": safe})
+            seen.add(key)
+    return entries
+
+
+def diff_stat(cached: bool) -> str:
+    args = ["diff"]
+    if cached:
+        args.append("--cached")
+    args += ["--stat", "--", ".", *EXCLUDE_PATHSPECS]
+    return git(*args).stdout.strip()
+
+
+def bounded_diff(max_chars: int) -> tuple[str, bool]:
+    chunks: list[str] = []
+    for cached in (False, True):
+        args = ["diff"]
+        label = "working"
+        if cached:
+            args.append("--cached")
+            label = "staged"
+        args += ["--no-ext-diff", "--unified=3", "--", ".", *EXCLUDE_PATHSPECS]
+        content = git(*args).stdout
+        if content:
+            chunks.append(f"--- {label} diff ---\n{content}")
+    combined = "\n".join(chunks)
+    if len(combined) <= max_chars:
+        return combined, False
+    return combined[:max_chars] + "\n... <diff truncated>\n", True
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--diff", action="store_true")
+    parser.add_argument("--max-chars", type=int, default=12000)
+    args = parser.parse_args()
+    if not 2000 <= args.max_chars <= 30000:
+        fail("--max-chars must be between 2000 and 30000")
+
+    root, _ = root_and_cwd()
+    branch = git("branch", "--show-current").stdout.strip() or "(detached)"
+    entries = status_entries()
+    payload = {
+        "root": root.name,
+        "branch": branch,
+        "dirty": bool(entries),
+        "changes": entries,
+        "working_stat": diff_stat(False),
+        "staged_stat": diff_stat(True),
+    }
+    print(json.dumps(payload, ensure_ascii=False, separators=(",", ":")))
+    if args.diff:
+        patch, truncated = bounded_diff(args.max_chars)
+        if patch:
+            print(patch, end="" if patch.endswith("\n") else "\n")
+        if truncated:
+            print("change-summary: diff output truncated", file=sys.stderr)
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

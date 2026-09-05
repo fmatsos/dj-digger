@@ -69,9 +69,7 @@ class Database:
     def table_exists(self, name: str) -> bool:
         """Return whether a SQLite table exists."""
         return bool(
-            self.scalar(
-                "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?", (name,)
-            )
+            self.scalar("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?", (name,))
         )
 
     def execute(self, query: str, parameters: Sequence[Any] = ()) -> sqlite3.Cursor:
@@ -153,7 +151,7 @@ class Database:
     @contextmanager
     def transaction(self) -> Iterator[None]:
         """Execute a group of catalog mutations atomically."""
-        self._connection.execute("BEGIN")
+        self._connection.execute("BEGIN IMMEDIATE")
         try:
             yield
         except BaseException:

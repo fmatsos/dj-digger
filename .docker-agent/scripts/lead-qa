@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+root="$(git rev-parse --show-toplevel 2>/dev/null)" || {
+  echo 'lead-qa: current working directory is not inside a Git repository' >&2
+  exit 2
+}
+cd "$root"
+
+qa_gate="$root/.docker-agent/scripts/qa-gate"
+if [[ ! -x "$qa_gate" ]]; then
+  echo 'lead-qa: .docker-agent/scripts/qa-gate is missing or not executable' >&2
+  exit 2
+fi
+
+# uv documents UV_PYTHON as the environment equivalent of an explicit
+# Python request. Force DJ Digger QA onto its canonical Python 3.12 runtime.
+export UV_PYTHON=3.12
+export PYTHONUNBUFFERED=1
+
+exec "$qa_gate" "$@"

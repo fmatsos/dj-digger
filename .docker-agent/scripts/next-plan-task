@@ -1,0 +1,132 @@
+#!/usr/bin/env python3
+"""Return a bounded JSON excerpt for the next unchecked task in a Markdown plan."""
+
+from __future__ import annotations
+
+import argparse
+import json
+import re
+import subprocess
+import sys
+from pathlib import Path
+
+CHECKBOX = re.compile(r"^\s*-\s*\[\s\]\s+(?P<text>.+?)\s*$")
+HEADING = re.compile(r"^(?P<marks>#{1,6})\s+(?P<title>.+?)\s*$")
+
+
+def fail(message: str, code: int = 2) -> "NoReturn":
+    print(f"next-plan-task: {message}", file=sys.stderr)
+    raise SystemExit(code)
+
+
+def git_root() -> Path:
+    result = subprocess.run(
+        ["git", "rev-parse", "--show-toplevel"],
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        fail("current working directory is not inside a Git repository")
+    return Path(result.stdout.strip()).resolve()
+
+
+def resolve_inside(root: Path, raw: str) -> Path:
+    candidate = Path(raw)
+    if not candidate.is_absolute():
+        candidate = root / candidate
+    candidate = candidate.resolve()
+    try:
+        candidate.relative_to(root)
+    except ValueError:
+        fail("plan path is outside repository")
+    if not candidate.is_file():
+        fail("plan path is not a regular file inside repository")
+    return candidate
+
+
+def section_bounds(lines: list[str], item_index: int) -> tuple[int, int, str | None]:
+    heading_index: int | None = None
+    heading_level: int | None = None
+    heading_title: str | None = None
+
+    for index in range(item_index, -1, -1):
+        match = HEADING.match(lines[index])
+        if match:
+            heading_index = index
+            heading_level = len(match.group("marks"))
+            heading_title = match.group("title")
+            break
+
+    if heading_index is None or heading_level is None:
+        return max(0, item_index - 8), min(len(lines), item_index + 40), None
+
+    end = len(lines)
+    for index in range(heading_index + 1, len(lines)):
+        match = HEADING.match(lines[index])
+        if match and len(match.group("marks")) <= heading_level:
+            end = index
+            break
+    return heading_index, end, heading_title
+
+
+def bounded_excerpt(lines: list[str], start: int, end: int, item_index: int, max_lines: int) -> tuple[int, int, str]:
+    if end - start <= max_lines:
+        excerpt_start = start
+        excerpt_end = end
+    else:
+        before = min(12, max_lines // 3)
+        excerpt_start = max(start, item_index - before)
+        excerpt_end = min(end, excerpt_start + max_lines)
+        if excerpt_end - excerpt_start < max_lines:
+            excerpt_start = max(start, excerpt_end - max_lines)
+
+    numbered = [f"{index + 1}: {lines[index]}" for index in range(excerpt_start, excerpt_end)]
+    return excerpt_start + 1, excerpt_end, "\n".join(numbered)
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("plan")
+    parser.add_argument("--max-lines", type=int, default=80)
+    args = parser.parse_args()
+    if not 20 <= args.max_lines <= 160:
+        fail("--max-lines must be between 20 and 160")
+
+    root = git_root()
+    plan = resolve_inside(root, args.plan)
+    try:
+        text = plan.read_text(encoding="utf-8")
+    except UnicodeDecodeError:
+        fail("plan is not valid UTF-8 text")
+    if len(text) > 2_000_000:
+        fail("plan is larger than 2 MB")
+
+    lines = text.splitlines()
+    unchecked = [(index, match.group("text")) for index, line in enumerate(lines) if (match := CHECKBOX.match(line))]
+    relative = plan.relative_to(root).as_posix()
+
+    if not unchecked:
+        print(json.dumps({"status": "complete", "plan": relative, "remaining_unchecked": 0}, ensure_ascii=False))
+        return 0
+
+    item_index, item_text = unchecked[0]
+    start, end, heading = section_bounds(lines, item_index)
+    excerpt_start, excerpt_end, excerpt = bounded_excerpt(lines, start, end, item_index, args.max_lines)
+    payload = {
+        "status": "pending",
+        "plan": relative,
+        "heading": heading,
+        "first_unchecked_line": item_index + 1,
+        "first_unchecked": item_text,
+        "section_lines": [start + 1, end],
+        "excerpt_lines": [excerpt_start, excerpt_end],
+        "remaining_unchecked": len(unchecked),
+        "excerpt": excerpt,
+    }
+    print(json.dumps(payload, ensure_ascii=False, separators=(",", ":")))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

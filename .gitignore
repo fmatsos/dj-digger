@@ -1,4 +1,9 @@
+/.agent-benchmarks/
+/.idea/
+/.codegraph
+/.venv/
+/.worktrees/
+
 **/__pycache__
-.codegraph
-.worktrees/
-.agent-benchmarks/
+/music/
+/workspace/
