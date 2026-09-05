@@ -3,7 +3,6 @@
 import csv
 import json
 from datetime import datetime
-from importlib.resources import files
 from pathlib import Path
 from typing import Any, cast
 
@@ -20,20 +19,16 @@ from dj_digger.exports.formats import (
     write_rows,
 )
 from dj_digger.exports.tracks import PublishedFacet
+from dj_digger.resources import read_text
 
 
 class AuditExporter:
     def __init__(self, database: Database, *, artifacts_schema_path: Path | None = None) -> None:
         self._database = database
-        packaged_schema = files("dj_digger").joinpath("schemas/library-artifacts.schema.json")
         schema_text = (
             artifacts_schema_path.read_text(encoding="utf-8")
             if artifacts_schema_path is not None
-            else packaged_schema.read_text("utf-8")
-            if packaged_schema.is_file()
-            else (
-                Path(__file__).resolve().parents[3] / "schemas/library-artifacts.schema.json"
-            ).read_text(encoding="utf-8")
+            else read_text("schemas/library-artifacts.schema.json")
         )
         schema = json.loads(schema_text)
         Draft202012Validator.check_schema(schema)

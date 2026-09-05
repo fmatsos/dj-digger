@@ -84,3 +84,6 @@ jobs:
 
       - name: Build wheel and source distribution
         run: uv build
+
+      - name: Verify installed wheel through uvx
+        run: ./.agents/scripts/package-check

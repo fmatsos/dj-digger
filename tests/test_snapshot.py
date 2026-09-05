@@ -1,10 +1,6 @@
 import hashlib
 import json
-import os
-import subprocess
-import sys
 import tarfile
-import zipfile
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -79,36 +75,3 @@ def test_snapshot_archive_is_reproducible_for_one_database_view(tmp_path: Path) 
 
     assert first.archive is not None and second.archive is not None
     assert first.archive.read_bytes() == second.archive.read_bytes()
-
-
-def test_wheel_contains_snapshot_schema_for_resource_lookup(tmp_path: Path) -> None:
-    distribution = tmp_path / "dist"
-    subprocess.run(
-        ["uv", "build", "--no-build-isolation", "--wheel", "--out-dir", str(distribution)],
-        check=True,
-        cwd=Path(__file__).parents[1],
-        env={**os.environ, "UV_CACHE_DIR": str(tmp_path / "uv-cache")},
-    )
-    wheel = next(distribution.glob("*.whl"))
-    with zipfile.ZipFile(wheel) as archive:
-        archive.extractall(tmp_path / "installed")
-
-    result = subprocess.run(
-        [
-            sys.executable,
-            "-c",
-            "from pathlib import Path; "
-            "from dj_digger.catalog.database import Database; "
-            "from dj_digger.exports.snapshot import SnapshotExporter; "
-            "database = Database.open(Path('catalog.sqlite')); "
-            "database.migrate(); "
-            "SnapshotExporter(database).create(Path('snapshot'), archive=False)",
-        ],
-        check=False,
-        cwd=tmp_path,
-        env={"PYTHONPATH": str(tmp_path / "installed")},
-        capture_output=True,
-        text=True,
-    )
-
-    assert result.returncode == 0, result.stderr

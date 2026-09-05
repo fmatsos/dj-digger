@@ -10,8 +10,8 @@ Provides evidence of real analysis worker behavior and Python limitations. Check
 ## Checks
 
 1. **Runtime compatibility**: Use the interpreter and dependency set declared by
-   the repository; do not assume a fixed language version or optional feature
-   extra.
+   the repository; do not assume a fixed language version or optional
+   analysis dependencies.
 2. **OOM evidence**: Worker crash logs or observed memory usage are checked; not assumed. Bounded memory is a requirement, evidenced rather than claimed.
 3. **Fresh workers**: A fresh child process is used per track.
 4. **IPC**: Bounded, versioned JSON IPC between parent and worker.

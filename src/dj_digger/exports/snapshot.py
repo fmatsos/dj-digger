@@ -10,7 +10,6 @@ import tempfile
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from importlib.resources import files
 from pathlib import Path
 from typing import Any
 
@@ -20,6 +19,7 @@ from dj_digger.catalog.database import Database
 from dj_digger.catalog.repositories import SourceRepository
 from dj_digger.exports.audit import AuditExporter
 from dj_digger.exports.tracks import TracksExporter
+from dj_digger.resources import read_text
 
 
 @dataclass(frozen=True)
@@ -91,15 +91,10 @@ class SnapshotExporter:
         }
 
     def _validator(self) -> Draft202012Validator:
-        packaged_schema = files("dj_digger").joinpath("schemas/snapshot-manifest.schema.json")
         schema_text = (
             self._schema_path.read_text(encoding="utf-8")
             if self._schema_path is not None
-            else packaged_schema.read_text("utf-8")
-            if packaged_schema.is_file()
-            else (
-                Path(__file__).resolve().parents[3] / "schemas/snapshot-manifest.schema.json"
-            ).read_text(encoding="utf-8")
+            else read_text("schemas/snapshot-manifest.schema.json")
         )
         schema = json.loads(schema_text)
         Draft202012Validator.check_schema(schema)

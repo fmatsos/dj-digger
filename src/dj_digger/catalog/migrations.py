@@ -106,4 +106,9 @@ def _execute_script(connection: sqlite3.Connection, script: str) -> None:
 
 
 def _load_sql(filename: str) -> str:
-    return (files("dj_digger.catalog") / "sql" / filename).read_text(encoding="utf-8")
+    resource = files("dj_digger.catalog").joinpath("sql", filename)
+    if not resource.is_file():
+        raise FileNotFoundError(
+            f"required packaged resource missing: dj_digger.catalog/sql/{filename}"
+        )
+    return resource.read_text(encoding="utf-8")

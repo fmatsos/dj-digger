@@ -6,7 +6,6 @@ import os
 import tempfile
 from collections.abc import Mapping
 from dataclasses import dataclass
-from importlib import resources
 from pathlib import Path
 from typing import Any, cast
 
@@ -22,6 +21,7 @@ from dj_digger.exports.formats import (
     write_rows,
 )
 from dj_digger.exports.tracks import PublishedFacet
+from dj_digger.resources import read_text
 
 
 @dataclass(frozen=True)
@@ -36,14 +36,16 @@ class AnalysisExporter:
 
     def __init__(self, database: Database, *, schemas_directory: Path | None = None) -> None:
         self._database = database
-        directory = schemas_directory or Path(__file__).resolve().parents[3] / "schemas"
-        if not directory.exists():
-            package_schemas = resources.files("dj_digger").joinpath("schemas")
-            # Materialize package resources only when a filesystem path is needed.
-            directory = Path(str(package_schemas))
         self._schemas = _Schemas(
             **{
-                name: cast(dict[str, Any], json.loads((directory / filename).read_text("utf-8")))
+                name: cast(
+                    dict[str, Any],
+                    json.loads(
+                        (schemas_directory / filename).read_text(encoding="utf-8")
+                        if schemas_directory is not None
+                        else read_text(f"schemas/{filename}")
+                    ),
+                )
                 for name, filename in (
                     ("analysis", "dj-analysis.schema.json"),
                     ("sections", "dj-sections.schema.json"),

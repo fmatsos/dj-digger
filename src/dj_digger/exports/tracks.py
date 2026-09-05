@@ -4,7 +4,6 @@ import csv
 import json
 from dataclasses import dataclass
 from datetime import datetime
-from importlib.resources import files
 from pathlib import Path
 from typing import Any
 
@@ -21,6 +20,7 @@ from dj_digger.exports.formats import (
     select_fields,
     write_rows,
 )
+from dj_digger.resources import read_text
 
 ROW_FIELDS = (
     "source_id",
@@ -81,15 +81,10 @@ class TracksExporter:
     def export(
         self, destination: Path, *, format: str | None = None, fields: str | None = None
     ) -> PublishedFacet:
-        packaged_schema = files("dj_digger").joinpath("schemas/tracks.schema.json")
         schema_text = (
             self._schema_path.read_text(encoding="utf-8")
             if self._schema_path is not None
-            else packaged_schema.read_text("utf-8")
-            if packaged_schema.is_file()
-            else (Path(__file__).resolve().parents[3] / "schemas/tracks.schema.json").read_text(
-                encoding="utf-8"
-            )
+            else read_text("schemas/tracks.schema.json")
         )
         schema = json.loads(schema_text)
         Draft202012Validator.check_schema(schema)

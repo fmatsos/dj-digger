@@ -1,0 +1,1206 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dj-digger.local/schemas/v1a/dj-analysis.schema.json",
+  "title": "DJ Digger unified track-level audio analysis row",
+  "description": "Validates one logical row parsed from dj-analysis.tsv.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "source_id",
+    "track_id",
+    "path",
+    "size_bytes",
+    "mtime",
+    "analysis_schema_version",
+    "analyzer_version",
+    "config_hash",
+    "analysis_status",
+    "analysis_confidence",
+    "duration_seconds",
+    "sample_rate",
+    "channels",
+    "codec",
+    "container",
+    "lossless",
+    "bpm",
+    "bpm_confidence",
+    "beat_stability",
+    "key",
+    "key_confidence",
+    "loudness_lufs",
+    "true_peak_db",
+    "dynamic_range",
+    "sub_energy",
+    "low_energy",
+    "low_mid_energy",
+    "kick_strength",
+    "kick_density",
+    "bass_density",
+    "onset_density",
+    "spectral_centroid",
+    "intro_8_available",
+    "intro_8_bpm",
+    "intro_8_beat_stability",
+    "intro_8_sub_energy",
+    "intro_8_low_energy",
+    "intro_8_low_mid_energy",
+    "intro_8_kick_strength",
+    "intro_8_kick_density",
+    "intro_8_bass_density",
+    "intro_8_loudness_lufs",
+    "intro_8_onset_density",
+    "intro_8_spectral_centroid",
+    "intro_16_available",
+    "intro_16_bpm",
+    "intro_16_beat_stability",
+    "intro_16_sub_energy",
+    "intro_16_low_energy",
+    "intro_16_low_mid_energy",
+    "intro_16_kick_strength",
+    "intro_16_kick_density",
+    "intro_16_bass_density",
+    "intro_16_loudness_lufs",
+    "intro_16_onset_density",
+    "intro_16_spectral_centroid",
+    "intro_32_available",
+    "intro_32_bpm",
+    "intro_32_beat_stability",
+    "intro_32_sub_energy",
+    "intro_32_low_energy",
+    "intro_32_low_mid_energy",
+    "intro_32_kick_strength",
+    "intro_32_kick_density",
+    "intro_32_bass_density",
+    "intro_32_loudness_lufs",
+    "intro_32_onset_density",
+    "intro_32_spectral_centroid",
+    "intro_64_available",
+    "intro_64_bpm",
+    "intro_64_beat_stability",
+    "intro_64_sub_energy",
+    "intro_64_low_energy",
+    "intro_64_low_mid_energy",
+    "intro_64_kick_strength",
+    "intro_64_kick_density",
+    "intro_64_bass_density",
+    "intro_64_loudness_lufs",
+    "intro_64_onset_density",
+    "intro_64_spectral_centroid",
+    "outro_8_available",
+    "outro_8_bpm",
+    "outro_8_beat_stability",
+    "outro_8_sub_energy",
+    "outro_8_low_energy",
+    "outro_8_low_mid_energy",
+    "outro_8_kick_strength",
+    "outro_8_kick_density",
+    "outro_8_bass_density",
+    "outro_8_loudness_lufs",
+    "outro_8_onset_density",
+    "outro_8_spectral_centroid",
+    "outro_16_available",
+    "outro_16_bpm",
+    "outro_16_beat_stability",
+    "outro_16_sub_energy",
+    "outro_16_low_energy",
+    "outro_16_low_mid_energy",
+    "outro_16_kick_strength",
+    "outro_16_kick_density",
+    "outro_16_bass_density",
+    "outro_16_loudness_lufs",
+    "outro_16_onset_density",
+    "outro_16_spectral_centroid",
+    "outro_32_available",
+    "outro_32_bpm",
+    "outro_32_beat_stability",
+    "outro_32_sub_energy",
+    "outro_32_low_energy",
+    "outro_32_low_mid_energy",
+    "outro_32_kick_strength",
+    "outro_32_kick_density",
+    "outro_32_bass_density",
+    "outro_32_loudness_lufs",
+    "outro_32_onset_density",
+    "outro_32_spectral_centroid",
+    "outro_64_available",
+    "outro_64_bpm",
+    "outro_64_beat_stability",
+    "outro_64_sub_energy",
+    "outro_64_low_energy",
+    "outro_64_low_mid_energy",
+    "outro_64_kick_strength",
+    "outro_64_kick_density",
+    "outro_64_bass_density",
+    "outro_64_loudness_lufs",
+    "outro_64_onset_density",
+    "outro_64_spectral_centroid"
+  ],
+  "properties": {
+    "source_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "track_id": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "path": {
+      "type": "string",
+      "minLength": 1
+    },
+    "size_bytes": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "mtime": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "analysis_schema_version": {
+      "const": 2
+    },
+    "analyzer_version": {
+      "type": "string",
+      "minLength": 1
+    },
+    "config_hash": {
+      "type": "string",
+      "pattern": "^[A-Fa-f0-9]{64}$"
+    },
+    "analysis_status": {
+      "type": "string",
+      "enum": [
+        "ok",
+        "partial",
+        "failed"
+      ]
+    },
+    "analysis_confidence": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0,
+      "maximum": 1
+    },
+    "duration_seconds": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "exclusiveMinimum": 0
+    },
+    "sample_rate": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 1
+    },
+    "channels": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 1
+    },
+    "codec": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "container": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "lossless": {
+      "type": [
+        "boolean",
+        "null"
+      ]
+    },
+    "bpm": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "exclusiveMinimum": 0
+    },
+    "bpm_confidence": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0,
+      "maximum": 1
+    },
+    "beat_stability": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0,
+      "maximum": 1
+    },
+    "key": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "key_confidence": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0,
+      "maximum": 1
+    },
+    "loudness_lufs": {
+      "type": [
+        "number",
+        "null"
+      ]
+    },
+    "true_peak_db": {
+      "type": [
+        "number",
+        "null"
+      ]
+    },
+    "dynamic_range": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0
+    },
+    "sub_energy": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0,
+      "maximum": 1
+    },
+    "low_energy": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0,
+      "maximum": 1
+    },
+    "low_mid_energy": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0,
+      "maximum": 1
+    },
+    "kick_strength": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0,
+      "maximum": 1
+    },
+    "kick_density": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0,
+      "maximum": 1
+    },
+    "bass_density": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0,
+      "maximum": 1
+    },
+    "onset_density": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0
+    },
+    "spectral_centroid": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0
+    },
+    "intro_8_available": {
+      "type": "boolean"
+    },
+    "intro_8_bpm": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "exclusiveMinimum": 0
+    },
+    "intro_8_beat_stability": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0,
+      "maximum": 1
+    },
+    "intro_8_sub_energy": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0,
+      "maximum": 1
+    },
+    "intro_8_low_energy": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0,
+      "maximum": 1
+    },
+    "intro_8_low_mid_energy": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0,
+      "maximum": 1
+    },
+    "intro_8_kick_strength": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0,
+      "maximum": 1
+    },
+    "intro_8_kick_density": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0,
+      "maximum": 1
+    },
+    "intro_8_bass_density": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0,
+      "maximum": 1
+    },
+    "intro_8_loudness_lufs": {
+      "type": [
+        "number",
+        "null"
+      ]
+    },
+    "intro_8_onset_density": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0
+    },
+    "intro_8_spectral_centroid": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0
+    },
+    "intro_16_available": {
+      "type": "boolean"
+    },
+    "intro_16_bpm": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "exclusiveMinimum": 0
+    },
+    "intro_16_beat_stability": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0,
+      "maximum": 1
+    },
+    "intro_16_sub_energy": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0,
+      "maximum": 1
+    },
+    "intro_16_low_energy": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0,
+      "maximum": 1
+    },
+    "intro_16_low_mid_energy": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0,
+      "maximum": 1
+    },
+    "intro_16_kick_strength": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0,
+      "maximum": 1
+    },
+    "intro_16_kick_density": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0,
+      "maximum": 1
+    },
+    "intro_16_bass_density": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0,
+      "maximum": 1
+    },
+    "intro_16_loudness_lufs": {
+      "type": [
+        "number",
+        "null"
+      ]
+    },
+    "intro_16_onset_density": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0
+    },
+    "intro_16_spectral_centroid": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0
+    },
+    "intro_32_available": {
+      "type": "boolean"
+    },
+    "intro_32_bpm": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "exclusiveMinimum": 0
+    },
+    "intro_32_beat_stability": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0,
+      "maximum": 1
+    },
+    "intro_32_sub_energy": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0,
+      "maximum": 1
+    },
+    "intro_32_low_energy": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0,
+      "maximum": 1
+    },
+    "intro_32_low_mid_energy": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0,
+      "maximum": 1
+    },
+    "intro_32_kick_strength": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0,
+      "maximum": 1
+    },
+    "intro_32_kick_density": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0,
+      "maximum": 1
+    },
+    "intro_32_bass_density": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0,
+      "maximum": 1
+    },
+    "intro_32_loudness_lufs": {
+      "type": [
+        "number",
+        "null"
+      ]
+    },
+    "intro_32_onset_density": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0
+    },
+    "intro_32_spectral_centroid": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0
+    },
+    "intro_64_available": {
+      "type": "boolean"
+    },
+    "intro_64_bpm": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "exclusiveMinimum": 0
+    },
+    "intro_64_beat_stability": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0,
+      "maximum": 1
+    },
+    "intro_64_sub_energy": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0,
+      "maximum": 1
+    },
+    "intro_64_low_energy": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0,
+      "maximum": 1
+    },
+    "intro_64_low_mid_energy": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0,
+      "maximum": 1
+    },
+    "intro_64_kick_strength": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0,
+      "maximum": 1
+    },
+    "intro_64_kick_density": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0,
+      "maximum": 1
+    },
+    "intro_64_bass_density": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0,
+      "maximum": 1
+    },
+    "intro_64_loudness_lufs": {
+      "type": [
+        "number",
+        "null"
+      ]
+    },
+    "intro_64_onset_density": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0
+    },
+    "intro_64_spectral_centroid": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0
+    },
+    "outro_8_available": {
+      "type": "boolean"
+    },
+    "outro_8_bpm": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "exclusiveMinimum": 0
+    },
+    "outro_8_beat_stability": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0,
+      "maximum": 1
+    },
+    "outro_8_sub_energy": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0,
+      "maximum": 1
+    },
+    "outro_8_low_energy": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0,
+      "maximum": 1
+    },
+    "outro_8_low_mid_energy": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0,
+      "maximum": 1
+    },
+    "outro_8_kick_strength": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0,
+      "maximum": 1
+    },
+    "outro_8_kick_density": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0,
+      "maximum": 1
+    },
+    "outro_8_bass_density": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0,
+      "maximum": 1
+    },
+    "outro_8_loudness_lufs": {
+      "type": [
+        "number",
+        "null"
+      ]
+    },
+    "outro_8_onset_density": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0
+    },
+    "outro_8_spectral_centroid": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0
+    },
+    "outro_16_available": {
+      "type": "boolean"
+    },
+    "outro_16_bpm": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "exclusiveMinimum": 0
+    },
+    "outro_16_beat_stability": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0,
+      "maximum": 1
+    },
+    "outro_16_sub_energy": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0,
+      "maximum": 1
+    },
+    "outro_16_low_energy": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0,
+      "maximum": 1
+    },
+    "outro_16_low_mid_energy": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0,
+      "maximum": 1
+    },
+    "outro_16_kick_strength": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0,
+      "maximum": 1
+    },
+    "outro_16_kick_density": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0,
+      "maximum": 1
+    },
+    "outro_16_bass_density": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0,
+      "maximum": 1
+    },
+    "outro_16_loudness_lufs": {
+      "type": [
+        "number",
+        "null"
+      ]
+    },
+    "outro_16_onset_density": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0
+    },
+    "outro_16_spectral_centroid": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0
+    },
+    "outro_32_available": {
+      "type": "boolean"
+    },
+    "outro_32_bpm": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "exclusiveMinimum": 0
+    },
+    "outro_32_beat_stability": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0,
+      "maximum": 1
+    },
+    "outro_32_sub_energy": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0,
+      "maximum": 1
+    },
+    "outro_32_low_energy": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0,
+      "maximum": 1
+    },
+    "outro_32_low_mid_energy": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0,
+      "maximum": 1
+    },
+    "outro_32_kick_strength": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0,
+      "maximum": 1
+    },
+    "outro_32_kick_density": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0,
+      "maximum": 1
+    },
+    "outro_32_bass_density": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0,
+      "maximum": 1
+    },
+    "outro_32_loudness_lufs": {
+      "type": [
+        "number",
+        "null"
+      ]
+    },
+    "outro_32_onset_density": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0
+    },
+    "outro_32_spectral_centroid": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0
+    },
+    "outro_64_available": {
+      "type": "boolean"
+    },
+    "outro_64_bpm": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "exclusiveMinimum": 0
+    },
+    "outro_64_beat_stability": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0,
+      "maximum": 1
+    },
+    "outro_64_sub_energy": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0,
+      "maximum": 1
+    },
+    "outro_64_low_energy": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0,
+      "maximum": 1
+    },
+    "outro_64_low_mid_energy": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0,
+      "maximum": 1
+    },
+    "outro_64_kick_strength": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0,
+      "maximum": 1
+    },
+    "outro_64_kick_density": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0,
+      "maximum": 1
+    },
+    "outro_64_bass_density": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0,
+      "maximum": 1
+    },
+    "outro_64_loudness_lufs": {
+      "type": [
+        "number",
+        "null"
+      ]
+    },
+    "outro_64_onset_density": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0
+    },
+    "outro_64_spectral_centroid": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "analysis_status": {
+            "const": "ok"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "analysis_confidence": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "duration_seconds": {
+            "type": "number",
+            "exclusiveMinimum": 0
+          },
+          "lossless": {
+            "type": "boolean"
+          },
+          "bpm": {
+            "type": "number",
+            "exclusiveMinimum": 0
+          },
+          "beat_stability": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          }
+        }
+      }
+    }
+  ],
+  "x-tabular": {
+    "format": "TSV",
+    "encoding": "UTF-8",
+    "delimiter": "\\t",
+    "header": true,
+    "columns": [
+      "source_id",
+      "track_id",
+      "path",
+      "size_bytes",
+      "mtime",
+      "analysis_schema_version",
+      "analyzer_version",
+      "config_hash",
+      "analysis_status",
+      "analysis_confidence",
+      "duration_seconds",
+      "sample_rate",
+      "channels",
+      "codec",
+      "container",
+      "lossless",
+      "bpm",
+      "bpm_confidence",
+      "beat_stability",
+      "key",
+      "key_confidence",
+      "loudness_lufs",
+      "true_peak_db",
+      "dynamic_range",
+      "sub_energy",
+      "low_energy",
+      "low_mid_energy",
+      "kick_strength",
+      "kick_density",
+      "bass_density",
+      "onset_density",
+      "spectral_centroid",
+      "intro_8_available",
+      "intro_8_bpm",
+      "intro_8_beat_stability",
+      "intro_8_sub_energy",
+      "intro_8_low_energy",
+      "intro_8_low_mid_energy",
+      "intro_8_kick_strength",
+      "intro_8_kick_density",
+      "intro_8_bass_density",
+      "intro_8_loudness_lufs",
+      "intro_8_onset_density",
+      "intro_8_spectral_centroid",
+      "intro_16_available",
+      "intro_16_bpm",
+      "intro_16_beat_stability",
+      "intro_16_sub_energy",
+      "intro_16_low_energy",
+      "intro_16_low_mid_energy",
+      "intro_16_kick_strength",
+      "intro_16_kick_density",
+      "intro_16_bass_density",
+      "intro_16_loudness_lufs",
+      "intro_16_onset_density",
+      "intro_16_spectral_centroid",
+      "intro_32_available",
+      "intro_32_bpm",
+      "intro_32_beat_stability",
+      "intro_32_sub_energy",
+      "intro_32_low_energy",
+      "intro_32_low_mid_energy",
+      "intro_32_kick_strength",
+      "intro_32_kick_density",
+      "intro_32_bass_density",
+      "intro_32_loudness_lufs",
+      "intro_32_onset_density",
+      "intro_32_spectral_centroid",
+      "intro_64_available",
+      "intro_64_bpm",
+      "intro_64_beat_stability",
+      "intro_64_sub_energy",
+      "intro_64_low_energy",
+      "intro_64_low_mid_energy",
+      "intro_64_kick_strength",
+      "intro_64_kick_density",
+      "intro_64_bass_density",
+      "intro_64_loudness_lufs",
+      "intro_64_onset_density",
+      "intro_64_spectral_centroid",
+      "outro_8_available",
+      "outro_8_bpm",
+      "outro_8_beat_stability",
+      "outro_8_sub_energy",
+      "outro_8_low_energy",
+      "outro_8_low_mid_energy",
+      "outro_8_kick_strength",
+      "outro_8_kick_density",
+      "outro_8_bass_density",
+      "outro_8_loudness_lufs",
+      "outro_8_onset_density",
+      "outro_8_spectral_centroid",
+      "outro_16_available",
+      "outro_16_bpm",
+      "outro_16_beat_stability",
+      "outro_16_sub_energy",
+      "outro_16_low_energy",
+      "outro_16_low_mid_energy",
+      "outro_16_kick_strength",
+      "outro_16_kick_density",
+      "outro_16_bass_density",
+      "outro_16_loudness_lufs",
+      "outro_16_onset_density",
+      "outro_16_spectral_centroid",
+      "outro_32_available",
+      "outro_32_bpm",
+      "outro_32_beat_stability",
+      "outro_32_sub_energy",
+      "outro_32_low_energy",
+      "outro_32_low_mid_energy",
+      "outro_32_kick_strength",
+      "outro_32_kick_density",
+      "outro_32_bass_density",
+      "outro_32_loudness_lufs",
+      "outro_32_onset_density",
+      "outro_32_spectral_centroid",
+      "outro_64_available",
+      "outro_64_bpm",
+      "outro_64_beat_stability",
+      "outro_64_sub_energy",
+      "outro_64_low_energy",
+      "outro_64_low_mid_energy",
+      "outro_64_kick_strength",
+      "outro_64_kick_density",
+      "outro_64_bass_density",
+      "outro_64_loudness_lufs",
+      "outro_64_onset_density",
+      "outro_64_spectral_centroid"
+    ],
+    "null_serialization": "",
+    "row_schema": "self"
+  }
+}

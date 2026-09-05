@@ -4,6 +4,7 @@ import hashlib
 import json
 import tomllib
 from dataclasses import dataclass, field
+from importlib.resources import as_file, files
 from math import isfinite
 from pathlib import Path
 from typing import Any
@@ -52,9 +53,11 @@ class DspConfig:
 
     @classmethod
     def canonical(cls) -> "DspConfig":
-        packaged = Path(__file__).with_name("analysis.toml")
-        source_tree = Path(__file__).parents[2] / "config" / "analysis.toml"
-        return cls.load(packaged if packaged.is_file() else source_tree)
+        resource = files("dj_digger").joinpath("analysis.toml")
+        if not resource.is_file():
+            raise FileNotFoundError("required packaged resource missing: dj_digger/analysis.toml")
+        with as_file(resource) as path:
+            return cls.load(path)
 
     @classmethod
     def load(cls, path: Path) -> "DspConfig":

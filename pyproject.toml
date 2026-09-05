@@ -24,13 +24,6 @@ packages = ["src/dj_digger"]
 
 [tool.hatch.build.targets.wheel.force-include]
 "schema-bundle.json" = "dj_digger/schema-bundle.json"
-"config/analysis.toml" = "dj_digger/analysis.toml"
-"schemas/tracks.schema.json" = "dj_digger/schemas/tracks.schema.json"
-"schemas/library-artifacts.schema.json" = "dj_digger/schemas/library-artifacts.schema.json"
-"schemas/snapshot-manifest.schema.json" = "dj_digger/schemas/snapshot-manifest.schema.json"
-"schemas/dj-analysis.schema.json" = "dj_digger/schemas/dj-analysis.schema.json"
-"schemas/dj-sections.schema.json" = "dj_digger/schemas/dj-sections.schema.json"
-"schemas/dj-analysis-run.schema.json" = "dj_digger/schemas/dj-analysis-run.schema.json"
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]

@@ -11,15 +11,19 @@ root=$(git rev-parse --show-toplevel)
   tmpdir=$(mktemp -d)
   trap 'rm -rf "$tmpdir"' EXIT
 
-  # Build wheel using project-env, into a temp dir so nothing lands in the
-  # real dist/ directory
+  # Build wheel and sdist using project-env, into a temp dir so nothing lands
+  # in the real dist/ directory.
   cd "$root"
-  ./.agents/scripts/project-env uv build --no-build-isolation --wheel -q --out-dir "$tmpdir/dist"
+  ./.agents/scripts/project-env uv build -q --out-dir "$tmpdir/dist"
 
   # Find the built wheel (most recently modified)
-  wheel_file=$(ls -t "$tmpdir"/dist/*.whl 2>/dev/null | head -1)
+  wheel_file=$(find "$tmpdir/dist" -maxdepth 1 -name '*.whl' -type f -print -quit)
   if [ -z "$wheel_file" ]; then
     printf 'package-check: no wheel found in dist/\n' >&2
+    exit 1
+  fi
+  if ! find "$tmpdir/dist" -maxdepth 1 -name '*.tar.gz' -type f | grep -q .; then
+    printf 'package-check: no source distribution found in dist/\n' >&2
     exit 1
   fi
 
@@ -27,32 +31,49 @@ root=$(git rev-parse --show-toplevel)
   cd "$tmpdir"
   unzip -q "$wheel_file"
 
-  # Verify required files
+  # Verify every resource read by runtime code is present in the package.
   errors=0
+  required_files='dj_digger/analysis.toml
+dj_digger/schema-bundle.json
+dj_digger/schemas/tracks.schema.json
+dj_digger/schemas/library-artifacts.schema.json
+dj_digger/schemas/snapshot-manifest.schema.json
+dj_digger/schemas/dj-analysis.schema.json
+dj_digger/schemas/dj-sections.schema.json
+dj_digger/schemas/dj-analysis-run.schema.json
+dj_digger/catalog/sql/catalog-v9.sql
+dj_digger/catalog/sql/migrate-v6-to-v7.sql
+dj_digger/catalog/sql/migrate-v7-to-v8.sql
+dj_digger/catalog/sql/migrate-v8-to-v9.sql'
+  while IFS= read -r required; do
+    [ -z "$required" ] && continue
+    if [ ! -f "$required" ]; then
+      printf 'package-check: required resource missing: %s\n' "$required" >&2
+      errors=1
+    fi
+  done <<EOF
+$required_files
+EOF
+  [ "$errors" -eq 0 ] || exit "$errors"
 
-  # Check for analysis.toml in data directory
-  if ! find . -name "analysis.toml" -type f | grep -q .; then
-    printf 'package-check: analysis.toml not found in wheel\n' >&2
-    errors=1
-  fi
+  # Run the installed wheel through its public console entry point from a
+  # directory that contains neither the checkout nor source files.
+  package_workspace="$tmpdir/runtime"
+  mkdir -p "$package_workspace/music" "$package_workspace/exports"
+  cat > "$package_workspace/config.toml" <<'EOF'
+[workspace]
+database = "catalog.sqlite"
+exports = "exports"
 
-  # Check for schema-bundle.json
-  if ! find . -name "schema-bundle.json" -type f | grep -q .; then
-    printf 'package-check: schema-bundle.json not found in wheel\n' >&2
-    errors=1
-  fi
-
-  # Check for packaged schemas (JSON files in schemas directory or similar)
-  if ! find . -path "*/schemas/*.json" -type f | grep -q .; then
-    printf 'package-check: packaged schemas not found in wheel\n' >&2
-    errors=1
-  fi
-
-  # Check for catalog migration SQL
-  if ! find . -name "*.sql" -type f | grep -q .; then
-    printf 'package-check: catalog migration SQL not found in wheel\n' >&2
-    errors=1
-  fi
-
-  exit "$errors"
+[[library.sources]]
+id = "disabled"
+path = "music"
+set_eligible = false
+analyze = false
+enabled = false
+EOF
+  cd "$package_workspace"
+  "$root/.agents/scripts/project-env" uvx --from "$wheel_file" dj-digger --help >/dev/null
+  "$root/.agents/scripts/project-env" uvx --from "$wheel_file" dj-digger doctor \
+    --config "$package_workspace/config.toml" --json >/dev/null
 )
