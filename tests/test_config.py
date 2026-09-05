@@ -27,6 +27,29 @@ def test_workspace_config_uses_mastering_defaults() -> None:
     assert config.mastering.review_thresholds.gain_deficit_db == 1.5
 
 
+def test_workspace_config_reads_explicit_curation_limits() -> None:
+    config = WorkspaceConfig.load(Path("config/dj-digger.example.toml"))
+
+    assert config.curation.base_url == "https://api.openai.com/v1"
+    assert config.curation.model == "gpt-5-mini"
+    assert config.curation.api_key_env == "OPENAI_API_KEY"
+    assert config.curation.max_turns == 8
+    assert config.curation.max_output_tracks == 20
+
+
+def test_workspace_config_rejects_cleartext_curation_secret(tmp_path: Path) -> None:
+    path = tmp_path / "cleartext-secret.toml"
+    source = (FIXTURES / "dj-digger.toml").read_text()
+    secret = "must-not-appear-in-errors"
+    path.write_text(source + f'\n[curation]\napi_key = "{secret}"\n')
+
+    with pytest.raises(ValueError) as captured:
+        WorkspaceConfig.load(path)
+
+    assert "environment variable" in str(captured.value)
+    assert secret not in str(captured.value)
+
+
 def test_workspace_config_reads_mastering_thresholds(tmp_path: Path) -> None:
     path = tmp_path / "mastering.toml"
     path.write_text(

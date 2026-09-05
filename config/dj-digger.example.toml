@@ -2,6 +2,16 @@
 database = "/workspace/dj-digger.sqlite"
 exports = "/workspace/exports"
 
+[curation]
+base_url = "https://api.openai.com/v1"
+model = "gpt-5-mini"
+api_key_env = "OPENAI_API_KEY"
+request_timeout_seconds = 30
+total_timeout_seconds = 120
+max_turns = 8
+max_output_tokens = 2000
+max_output_tracks = 20
+
 [[library.sources]]
 id = "djing"
 path = "/music/djing"
