@@ -84,7 +84,7 @@ def test_snapshot_archive_is_reproducible_for_one_database_view(tmp_path: Path) 
 def test_wheel_contains_snapshot_schema_for_resource_lookup(tmp_path: Path) -> None:
     distribution = tmp_path / "dist"
     subprocess.run(
-        ["uv", "build", "--wheel", "--out-dir", str(distribution)],
+        ["uv", "build", "--no-build-isolation", "--wheel", "--out-dir", str(distribution)],
         check=True,
         cwd=Path(__file__).parents[1],
         env={**os.environ, "UV_CACHE_DIR": str(tmp_path / "uv-cache")},

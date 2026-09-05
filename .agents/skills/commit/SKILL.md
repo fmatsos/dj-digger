@@ -15,14 +15,14 @@ requested file scope.
 1. Confirm the current branch and inspect `git status --short` and the relevant
    `git diff`; preserve unrelated worktree changes.
 2. Run the focused QA required by the changed files. Pipe explicit paths to
-   `.codex/scripts/qa-select`, then run the selected profile with
-   `.codex/scripts/qa-run`.
+   `.agents/scripts/qa-select`, then run the selected profile with
+   `.agents/scripts/qa-run`.
 3. Stage only the requested paths with explicit path arguments. Never use
    `git add .` or `git add -A`.
-4. Run `.codex/scripts/staged-check <path> ...`; inspect `git diff --cached`.
+4. Run `.agents/scripts/staged-check <path> ...`; inspect `git diff --cached`.
    Protected local paths are never staged. Specs require explicit authorization
-   in the current user turn and `DJ_DIGGER_ALLOW_SPEC_STAGE=1`; the environment
-   variable alone is not authorization.
+   in the current user turn. Repository-declared protected paths and ignored
+   files are never force-staged.
 
 ## Commit
 
@@ -35,6 +35,6 @@ the subject alone cannot explain a meaningful change. Do not add
 
 ## Report
 
-Finish with `.codex/scripts/handoff` and report the exact QA command, staged
+Finish with `.agents/scripts/handoff` and report the exact QA command, staged
 paths, commit result, and any residual risk. A commit is not authorization to
 push or open a pull request.

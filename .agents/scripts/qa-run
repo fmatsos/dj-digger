@@ -56,7 +56,7 @@ fi
             *.py)
               # Python test file: run via pytest through project-env
               cmd="uv run pytest $target"
-              "$root/.codex/scripts/project-env" uv run pytest "$target" > "$logdir/focused.$i.log" 2>&1 || status=$?
+              "$root/.agents/scripts/project-env" uv run pytest "$target" > "$logdir/focused.$i.log" 2>&1 || status=$?
               ;;
             *)
               printf 'qa-run focused: unknown target type: %s\n' "$target" >&2
@@ -76,42 +76,42 @@ fi
     subsystem)
       # subsystem profile: relevant pytest + Ruff on changed Python
       cmd="uv run pytest tests/test_subsystem.py && uv run ruff check src/dj_digger"
-      "$root/.codex/scripts/project-env" sh -c 'uv run pytest tests/ -k subsystem && uv run ruff check src/dj_digger' > "$logdir/subsystem.log" 2>&1 || status=$?
+      "$root/.agents/scripts/project-env" sh -c 'uv run pytest tests/ -k subsystem && uv run ruff check src/dj_digger' > "$logdir/subsystem.log" 2>&1 || status=$?
       ;;
 
     catalog)
       # catalog profile: catalog/migration tests + package-check
       cmd="uv run pytest tests/test_catalog.py && package-check"
-      "$root/.codex/scripts/project-env" sh -c 'uv run pytest tests/ -k catalog' > "$logdir/catalog.log" 2>&1 || status=$?
+      "$root/.agents/scripts/project-env" sh -c 'uv run pytest tests/ -k catalog' > "$logdir/catalog.log" 2>&1 || status=$?
       if [ "$status" -eq 0 ]; then
-        "$root/.codex/scripts/package-check" >> "$logdir/catalog.log" 2>&1 || status=$?
+        "$root/.agents/scripts/package-check" >> "$logdir/catalog.log" 2>&1 || status=$?
       fi
       ;;
 
     analysis)
       # analysis profile: worker/pipeline tests + Ruff + mypy
       cmd="uv run pytest tests/test_analysis.py && uv run ruff check src/dj_digger/analysis && uv run mypy src/dj_digger/analysis"
-      "$root/.codex/scripts/project-env" sh -c 'uv run pytest tests/ -k analysis && uv run ruff check src/dj_digger/analysis && uv run mypy src/dj_digger/analysis' > "$logdir/analysis.log" 2>&1 || status=$?
+      "$root/.agents/scripts/project-env" sh -c 'uv run pytest tests/ -k analysis && uv run ruff check src/dj_digger/analysis && uv run mypy src/dj_digger/analysis' > "$logdir/analysis.log" 2>&1 || status=$?
       ;;
 
     exports)
       # exports profile: export/schema tests + fixture validation
       cmd="uv run pytest tests/test_exports.py"
-      "$root/.codex/scripts/project-env" sh -c 'uv run pytest tests/ -k exports' > "$logdir/exports.log" 2>&1 || status=$?
+      "$root/.agents/scripts/project-env" sh -c 'uv run pytest tests/ -k exports' > "$logdir/exports.log" 2>&1 || status=$?
       ;;
 
     runtime)
       # runtime profile: CLI/application tests + Ruff + mypy
       cmd="uv run pytest tests/test_cli.py && uv run ruff check src/dj_digger/cli.py && uv run mypy src/dj_digger"
-      "$root/.codex/scripts/project-env" sh -c 'uv run pytest tests/ -k cli && uv run ruff check src/dj_digger && uv run mypy src/dj_digger' > "$logdir/runtime.log" 2>&1 || status=$?
+      "$root/.agents/scripts/project-env" sh -c 'uv run pytest tests/ -k cli && uv run ruff check src/dj_digger && uv run mypy src/dj_digger' > "$logdir/runtime.log" 2>&1 || status=$?
       ;;
 
     full)
       # full profile: full pytest, Ruff, mypy, fixtures, package-check, diff check
       cmd="uv run pytest + uv run ruff check + uv run mypy + package-check + git diff --check"
-      "$root/.codex/scripts/project-env" sh -c 'uv run pytest tests/ && uv run ruff check src/dj_digger && uv run mypy src/dj_digger' > "$logdir/full.log" 2>&1 || status=$?
+      "$root/.agents/scripts/project-env" sh -c 'uv run pytest tests/ && uv run ruff check src/dj_digger && uv run mypy src/dj_digger' > "$logdir/full.log" 2>&1 || status=$?
       if [ "$status" -eq 0 ]; then
-        "$root/.codex/scripts/package-check" >> "$logdir/full.log" 2>&1 || status=$?
+        "$root/.agents/scripts/package-check" >> "$logdir/full.log" 2>&1 || status=$?
       fi
       if [ "$status" -eq 0 ]; then
         git diff --check >> "$logdir/full.log" 2>&1 || status=$?

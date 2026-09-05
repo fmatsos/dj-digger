@@ -4,20 +4,9 @@ This scope covers project documentation in the `docs/` directory.
 
 ## Document categories
 
-Documentation is organized into four distinct categories:
-
-1. **Current architecture**: Describes the active system as implemented today,
-   including module boundaries, data flow, and interface contracts.
-
-2. **Measured acceptance**: Documents observed behavior, test results, and
-   performance characteristics from real runs.
-
-3. **Designs**: Proposed or under-consideration changes, including architecture
-   alternatives and feature sketches. Designs are explicitly marked as future
-   or exploratory work.
-
-4. **Historical plans**: Records of past planning decisions, executed tasks, and
-   completed work. These provide context for architectural choices.
+Tracked documentation is limited to current technical architecture, functional
+usage, and development operations. Historical plans, specifications, migrations,
+and acceptance records live in the ignored `.specifications/` archive.
 
 ## No rewriting history
 
@@ -26,9 +15,11 @@ diverged from the plan. If implementation differs from a historical plan,
 document the divergence and the reason. Preserve the plan as written, with
 explicit notes on what actually occurred.
 
-## Spec protection
+## Specification archive
 
-The `docs/superpowers/specs/**` directory is protected. historical plans, explicit staging
+The `.specifications/**` directory is ignored by Git and contains historical plans,
+specifications, migrations, and acceptance records. It is not part of the published
+technical or functional documentation surface.
 — changes to this tree require explicit user authorization before staging. Specs
 document the design authority for Claude Code workflows and must not be modified
 without clear intent.

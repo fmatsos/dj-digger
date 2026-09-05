@@ -13,10 +13,8 @@ dependencies = [
     "rich>=14,<16",
     "jsonschema>=4.25,<5",
     "numpy>=2,<3",
+    "essentia==2.1b6.dev1389",
 ]
-
-[project.optional-dependencies]
-analysis = ["essentia==2.1b6.dev1389"]
 
 [project.scripts]
 dj-digger = "dj_digger.cli:app"
@@ -52,5 +50,9 @@ files = ["src"]
 
 [dependency-groups]
 dev = [
+    "hatchling>=1.27,<2",
+    "mypy>=1.17,<2",
+    "pytest>=8,<9",
     "pyright>=1.1.411",
+    "ruff>=0.12,<1",
 ]

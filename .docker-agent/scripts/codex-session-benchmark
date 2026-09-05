@@ -129,7 +129,7 @@ def _read(thread: Thread) -> None:
 
 
 DISCOVERY = {"rg", "grep", "git grep", "find", "fd", "ls", "tree", "sed", "cat", "head", "tail", "codegraph"}
-QA = (".codex/scripts/qa-run", ".docker-agent/scripts/qa-gate", "pytest", "ruff", "mypy", "package-check", "git diff --check", ".codex/tests/test-harness.sh")
+QA = (".agents/scripts/qa-run", ".docker-agent/scripts/qa-gate", "pytest", "ruff", "mypy", "package-check", "git diff --check", ".agents/tests/test-harness.sh")
 CHILD_RE = re.compile(r"(?:child|subagent|sub-agent)", re.I)
 
 

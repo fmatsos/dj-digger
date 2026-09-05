@@ -1,6 +1,6 @@
 # Compatibility engine
 
-## Source-aware candidate identity (V1A)
+## Source-aware candidate identity
 
 `Candidate` identity is source-aware. Its internal key is the pair
 `(source_id, track_id)`; `path` remains the source-relative display and

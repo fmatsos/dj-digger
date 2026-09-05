@@ -21,8 +21,9 @@ SQLite's complete, version-dependent wording.
 Run the focused semantic check with Python 3.12:
 
 ```bash
+uv sync --frozen --group dev
 UV_CACHE_DIR=/tmp/dj-digger-uv-cache UV_TOOL_DIR=/tmp/dj-digger-uv-tools \
-  uv run --python 3.12 --with pytest python -m pytest tests/test_performance_fixtures.py -q
+  uv run --python 3.12 python -m pytest tests/test_performance_fixtures.py -q
 ```
 
 Record machine details, SQLite version, scenario, warm-up policy, repetitions, and median timings
@@ -91,8 +92,9 @@ are signalled in cleanup, and every worker is joined before assertions about fin
 Run the qualification with Python 3.12:
 
 ```bash
+uv sync --frozen --group dev
 UV_CACHE_DIR=/tmp/dj-digger-uv-cache UV_TOOL_DIR=/tmp/dj-digger-uv-tools \
-  uv run --python 3.12 --with pytest python -m pytest tests/test_sqlite_concurrency.py -q
+  uv run --python 3.12 python -m pytest tests/test_sqlite_concurrency.py -q
 ```
 
 The focused qualification passed all four cases on Linux 7.0.0-30-generic x86_64 with Python

@@ -1,7 +1,8 @@
-# Set emission contract (V2)
+# Set emission contract
 
-Machine-readable `.set.json` artifacts use schema version `2`. Every selected
-track and every alternative carries its stable source-aware identity:
+Machine-readable `.set.json` artifacts must use the version declared by the
+repository-provided set schema. Every selected track and every alternative
+carries its stable source-aware identity:
 
 ```json
 {"position":1,"source_id":"djing","track_id":42,"path":"Acid/Track.flac","role":"opener"}

@@ -1,9 +1,7 @@
 # Architecture
 
-This document describes the current DJ Digger runtime after the Catalog V9
-upgrade. It is an implementation guide, not a historical plan. Measured V7
-qualification results and their limitations live in
-[the implementation requalification record](acceptance/implementation-requalification.md).
+This document describes the current DJ Digger runtime and data model. It is a
+technical implementation guide, not a historical plan or acceptance record.
 
 ## System boundaries
 

@@ -1,6 +1,6 @@
 # Curator source contracts
 
-V1B availability is explicitly sourced from `tracks.tsv`. A candidate must be
+Availability is explicitly sourced from `tracks.tsv`. A candidate must be
 a member of that export and have `set_eligible=true` before it enters
 optimization. Analysis never makes an unavailable track available.
 

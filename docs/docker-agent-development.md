@@ -62,11 +62,11 @@ borné et le chemin d’un journal temporaire. Ne pas demander à un modèle de
 réinterpréter un `pass` déterministe.
 
 Les changements du workflow Docker Agent sont classés `focused` par
-`.codex/scripts/qa-select`. Pour les tests locaux du workflow :
+`.agents/scripts/qa-select`. Pour les tests locaux du workflow :
 
 ```sh
 python3 -m pytest tests/test_agent_benchmark.py tests/test_agent_benchmark_compare.py -q
-sh .codex/tests/test-harness.sh
+sh .agents/tests/test-harness.sh
 ```
 
 ## Benchmark avant/après
@@ -97,7 +97,7 @@ La livraison reste manuelle et explicite :
 
 ```sh
 git status --short
-./.codex/scripts/protect-local --staged
+./.agents/scripts/protect-local --staged
 git diff --cached --check
 git commit -m "<subject>"
 git push origin <branch>

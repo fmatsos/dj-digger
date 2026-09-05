@@ -190,7 +190,7 @@ def test_current_schema_copy_matches_packaged_schema() -> None:
 def test_wheel_migrates_without_the_checkout_schema(tmp_path: Path) -> None:
     distribution = tmp_path / "dist"
     subprocess.run(
-        ["uv", "build", "--wheel", "--out-dir", str(distribution)],
+        ["uv", "build", "--no-build-isolation", "--wheel", "--out-dir", str(distribution)],
         check=True,
         cwd=Path(__file__).parents[1],
     )
@@ -232,7 +232,7 @@ def test_isolated_wheel_upgrades_a_v6_catalog(tmp_path: Path) -> None:
     _create_v6_catalog(catalog_path)
     distribution = tmp_path / "dist"
     subprocess.run(
-        ["uv", "build", "--wheel", "--out-dir", str(distribution)],
+        ["uv", "build", "--no-build-isolation", "--wheel", "--out-dir", str(distribution)],
         check=True,
         cwd=Path(__file__).parents[1],
     )
@@ -265,7 +265,7 @@ def test_isolated_wheel_upgrades_a_v6_catalog(tmp_path: Path) -> None:
 def test_wheel_contains_valid_analysis_schemas_outside_checkout(tmp_path: Path) -> None:
     distribution = tmp_path / "dist"
     subprocess.run(
-        ["uv", "build", "--wheel", "--out-dir", str(distribution)],
+        ["uv", "build", "--no-build-isolation", "--wheel", "--out-dir", str(distribution)],
         check=True,
         cwd=Path(__file__).parents[1],
     )

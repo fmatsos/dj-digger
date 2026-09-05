@@ -14,7 +14,7 @@ root=$(git rev-parse --show-toplevel)
   # Build wheel using project-env, into a temp dir so nothing lands in the
   # real dist/ directory
   cd "$root"
-  ./.agents/scripts/project-env uv build --wheel -q --out-dir "$tmpdir/dist"
+  ./.agents/scripts/project-env uv build --no-build-isolation --wheel -q --out-dir "$tmpdir/dist"
 
   # Find the built wheel (most recently modified)
   wheel_file=$(ls -t "$tmpdir"/dist/*.whl 2>/dev/null | head -1)

@@ -24,14 +24,14 @@ with the worker and `.docker-agent/scripts/qa-gate` owns final external QA.
 ## Usage
 
 ```sh
-.codex/scripts/qa-select < changed-files.txt > profile.txt
-.codex/scripts/qa-run "$(cat profile.txt)" -- test-command
+.agents/scripts/qa-select < changed-files.txt > profile.txt
+.agents/scripts/qa-run "$(cat profile.txt)" -- test-command
 ```
 
 ## Workflow
 
-1. **Select**: Run `.codex/scripts/qa-select` on stdin (one file path per line).
-2. **Run**: Execute `.codex/scripts/qa-run <profile> -- <test-command>`.
+1. **Select**: Run `.agents/scripts/qa-select` on stdin (one file path per line).
+2. **Run**: Execute `.agents/scripts/qa-run <profile> -- <test-command>`.
 3. **Report**: Output indicates PASS or FAIL with profile name.
 4. **Assess**: If FAIL, report specific test failure and residual risk.
 

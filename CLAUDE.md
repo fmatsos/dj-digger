@@ -49,7 +49,7 @@ directory may proceed without reading that directory's closest `CLAUDE.md` first
 - Private library facts (musician names, track titles, local paths) must never
   appear in committed files, logs, agent reports, or staged diffs.
 - Protected paths (`config/local.toml`, `workspace/`, `sets/`, `*.sqlite*`,
-  `docs/superpowers/specs/**`) require explicit scoped authorization before any
+  `.specifications/**`) require explicit scoped authorization before any
   modification or staging.
 - No automatic commits, pushes, file deletes, stash operations, or resets without
   explicit and specific user instructions.

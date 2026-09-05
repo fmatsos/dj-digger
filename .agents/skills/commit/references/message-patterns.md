@@ -5,8 +5,8 @@ Use English and the subject form:
 `type[(scope[, scope2, ...])]: imperative summary`
 
 - Type: `feat`, `fix`, `refactor`, `chore`, or `docs`.
-- Scope is optional. Use it only when one concise DJ Digger area clarifies the
-  change, such as `cli`, `catalog`, `analysis`, `exports`, `copy`, or `codex`.
+- Scope is optional. Use it only when one concise repository area clarifies the
+  change, such as `cli`, `catalog`, `analysis`, `exports`, `copy`, or `agent`.
   The repository commonly uses unscoped subjects such as `feat: ...` and
   `docs: ...`; do not invent a scope for consistency theatre.
 - Keep the summary lowercase, imperative, and specific; wrap identifiers and

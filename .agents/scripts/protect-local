@@ -35,11 +35,9 @@ while IFS= read -r path; do
       printf 'protected local path: %s\n' "$path" >&2
       failed=1
       ;;
-    docs/superpowers/specs/*)
-      if test "${DJ_DIGGER_ALLOW_SPEC_STAGE:-0}" != 1; then
-        printf 'spec staging requires DJ_DIGGER_ALLOW_SPEC_STAGE=1: %s\n' "$path" >&2
-        failed=1
-      fi
+    .specifications/*)
+      printf 'protected specification archive path: %s\n' "$path" >&2
+      failed=1
       ;;
   esac
 done <<EOF
