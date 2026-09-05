@@ -1,7 +1,7 @@
 #!/bin/sh
 set -eu
 
-root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
-cd "$root"
+cd /workspace/dj-digger
+
 uv sync --frozen --group dev
-exec "$root/.codex/cloud/check.sh" --quick
+exec /.codex/cloud/check.sh --quick
