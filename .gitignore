@@ -10,3 +10,4 @@
 /workspace/
 /config/local.toml
 /.specifications/
+/tests/fixtures/workspace/
