@@ -82,6 +82,9 @@ jobs:
       - name: Sync development environment
         run: uv sync --frozen --group dev
 
+      - name: Install package-check runtime dependency
+        run: sudo apt-get update && sudo apt-get install --no-install-recommends -y libimage-exiftool-perl
+
       - name: Build wheel and source distribution
         run: uv build
 
