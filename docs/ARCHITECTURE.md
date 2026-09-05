@@ -107,22 +107,31 @@ it publishes the newest attempt for each present track, including a failed newes
 attempt when applicable, so consumers can see current uncertainty. Its three facets
 are read from one SQLite snapshot and validated before any of them is replaced.
 
-## V6 to V7 lifecycle
+## Catalog migration lifecycle
 
-`src/dj_digger/catalog/migrations.py` supports exactly these paths:
+`src/dj_digger/catalog/migrations.py` registers every catalog transition with
+`sqlite_utils.migrations.Migrations`. It supports exactly these paths:
 
 - an empty, unversioned database (`user_version = 0`) is initialized directly from
-  `catalog-v7.sql`;
+  `catalog-v9.sql`;
 - a V6 catalog is upgraded in place with `migrate-v6-to-v7.sql`;
-- an existing V7 catalog is left unchanged;
-- V1 through V5, unversioned non-empty databases, and versions newer than V7 are
+- V7 and V8 catalogs continue through their ordered packaged migrations;
+- an existing V9 catalog is adopted into the sqlite-utils migration ledger without
+  replaying schema changes;
+- V1 through V5, unversioned non-empty databases, and versions newer than V9 are
   rejected rather than guessed at or partially upgraded.
 
-The V6-to-V7 migration preserves the V6 tables and history, adds seven targeted
-indexes, creates and backfills `current_track_analysis` from the latest successful
-attempt per track, and creates `library_tracks`. Initialization and upgrades run under
-`BEGIN IMMEDIATE`, verify the expected starting version, run `foreign_key_check`, set
-`user_version` only after validation, and roll back the complete change on error.
+The migration registry records applied steps in `_sqlite_utils_migrations`; migration
+functions remain ordered, deterministic adapters around packaged SQL resources. This
+ledger is the sole mechanism for all future catalog migrations. `user_version` remains
+the application compatibility boundary so older catalogs can be adopted safely and
+unsupported catalogs can be rejected before sqlite-utils mutates them.
+
+Each schema-changing step runs under `BEGIN IMMEDIATE`, verifies its expected starting
+version, runs `foreign_key_check`, sets `user_version` only after validation, and rolls
+back the complete schema change on error. The V6-to-V7 migration preserves the V6
+tables and history, adds targeted indexes, creates and backfills
+`current_track_analysis`, and creates `library_tracks`.
 
 The packaged SQL files are runtime resources. A wheel does not depend on the source
 checkout to initialize or upgrade a catalog.
@@ -142,6 +151,26 @@ use `Database.transaction()`, which commits as a unit and rolls back on any exce
 Exports that require a consistent multi-query view use `read_transaction()` and end
 the read snapshot with a rollback. Migrations use their stricter immediate
 transaction described above.
+
+### sqlite-utils usage policy
+
+The project deliberately uses the narrow sqlite-utils surfaces that reinforce the
+catalog boundary:
+
+- `Migrations` owns migration ordering and its applied-migration ledger;
+- the `sqlite-utils` CLI is useful during development for read-only schema inspection
+  (`tables`, `schema`, and `indexes`) and for exporting ad-hoc JSON/CSV diagnostics;
+- `Database` table introspection can simplify future maintenance checks where it
+  replaces hand-written `sqlite_master` queries without changing behavior.
+
+Automatic table creation, inferred column types, direct CLI writes, and high-level
+row mutation helpers are not used in production. They would bypass packaged SQL,
+explicit constraints, repository transactions, and the append-only fact model.
+Schema transformation helpers such as `transform()` are appropriate only while
+authoring a migration: their emitted SQL must be reviewed and committed as a packaged,
+deterministic migration before runtime use. The existing `sqlite3` connection remains
+the shared runtime connection so WAL, foreign keys, busy timeout, `BEGIN IMMEDIATE`,
+and repository transaction semantics stay under application control.
 
 WAL allows independent reader connections to keep reading their pre-write snapshot
 during a bounded write. It does not turn SQLite into a multi-writer service: competing

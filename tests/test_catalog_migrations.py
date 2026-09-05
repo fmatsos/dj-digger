@@ -309,6 +309,38 @@ def test_catalog_migration_is_idempotent_after_reopening(tmp_path: Path) -> None
     assert reopened.table_exists("library_sources")
 
 
+def test_catalog_migrations_are_recorded_by_sqlite_utils(tmp_path: Path) -> None:
+    database = Database.open(tmp_path / "catalog.sqlite")
+
+    database.migrate()
+
+    assert database.table_exists("_sqlite_utils_migrations")
+    assert database.execute(
+        "SELECT migration FROM _sqlite_utils_migrations WHERE name = 'dj-digger' ORDER BY migration"
+    ).fetchall() == [
+        ("dj_digger_000_initialize_v9",),
+        ("dj_digger_006_to_007",),
+        ("dj_digger_007_to_008",),
+        ("dj_digger_008_to_009",),
+    ]
+
+
+def test_existing_current_catalog_is_adopted_by_sqlite_utils(tmp_path: Path) -> None:
+    path = tmp_path / "catalog.sqlite"
+    connection = sqlite3.connect(path)
+    root = Path(__file__).parents[1]
+    connection.executescript((root / "schemas/catalog-v9.sql").read_text(encoding="utf-8"))
+    connection.execute("PRAGMA user_version = 9")
+    connection.commit()
+    connection.close()
+
+    database = Database.open(path)
+    database.migrate()
+
+    assert database.scalar("PRAGMA user_version") == 9
+    assert database.scalar("SELECT COUNT(*) FROM _sqlite_utils_migrations") == 4
+
+
 def test_current_sections_reference_current_analysis_table(tmp_path: Path) -> None:
     database = Database.open(tmp_path / "catalog.sqlite")
     database.migrate()

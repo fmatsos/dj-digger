@@ -3,56 +3,69 @@
 import sqlite3
 from importlib.resources import files
 
+from sqlite_utils import Database
+from sqlite_utils.migrations import Migrations
+
 CURRENT_VERSION = 9
 CURRENT_SCHEMA = "catalog-v9.sql"
-MIGRATIONS = {
-    6: "migrate-v6-to-v7.sql",
-    7: "migrate-v7-to-v8.sql",
-    8: "migrate-v8-to-v9.sql",
-}
+MIGRATIONS = Migrations("dj-digger")
+
+
+@MIGRATIONS()
+def dj_digger_000_initialize_v9(database: Database) -> None:
+    """Initialize an empty catalog directly at the current schema."""
+    connection = database.conn
+    if _version(connection) == 0:
+        _run_script_transaction(
+            connection,
+            expected_version=0,
+            target_version=CURRENT_VERSION,
+            filename=CURRENT_SCHEMA,
+            require_empty=True,
+        )
+
+
+@MIGRATIONS()
+def dj_digger_006_to_007(database: Database) -> None:
+    """Upgrade a V6 catalog to V7."""
+    _upgrade_if_current(database.conn, 6, "migrate-v6-to-v7.sql")
+
+
+@MIGRATIONS()
+def dj_digger_007_to_008(database: Database) -> None:
+    """Upgrade a V7 catalog to V8."""
+    _upgrade_if_current(database.conn, 7, "migrate-v7-to-v8.sql")
+
+
+@MIGRATIONS()
+def dj_digger_008_to_009(database: Database) -> None:
+    """Upgrade a V8 catalog to V9."""
+    _upgrade_if_current(database.conn, 8, "migrate-v8-to-v9.sql")
 
 
 def migrate(connection: sqlite3.Connection) -> None:
-    """Initialize a fresh catalog or upgrade a supported catalog in place."""
-    current = int(connection.execute("PRAGMA user_version").fetchone()[0])
-    if current == CURRENT_VERSION:
-        return
-    if current == 0:
-        _initialize_fresh(connection)
-        return
+    """Initialize or upgrade a catalog using the sqlite-utils migration registry."""
+    current = _version(connection)
     if current > CURRENT_VERSION:
         raise RuntimeError(f"legacy catalog version {current} is unsupported; recreate the catalog")
-
-    while current < CURRENT_VERSION:
-        filename = MIGRATIONS.get(current)
-        if filename is None:
-            raise RuntimeError(
-                f"legacy catalog version {current} is unsupported; recreate the catalog"
-            )
-        _run_migration(connection, current, current + 1, filename)
-        current += 1
+    if 0 < current < 6:
+        raise RuntimeError(f"legacy catalog version {current} is unsupported; recreate the catalog")
+    MIGRATIONS.apply(Database(connection))
 
 
-def _initialize_fresh(connection: sqlite3.Connection) -> None:
-    _run_script_transaction(
-        connection,
-        expected_version=0,
-        target_version=CURRENT_VERSION,
-        filename=CURRENT_SCHEMA,
-        require_empty=True,
-    )
+def _upgrade_if_current(connection: sqlite3.Connection, from_version: int, filename: str) -> None:
+    if _version(connection) == from_version:
+        _run_script_transaction(
+            connection,
+            expected_version=from_version,
+            target_version=from_version + 1,
+            filename=filename,
+            require_empty=False,
+        )
 
 
-def _run_migration(
-    connection: sqlite3.Connection, from_version: int, to_version: int, filename: str
-) -> None:
-    _run_script_transaction(
-        connection,
-        expected_version=from_version,
-        target_version=to_version,
-        filename=filename,
-        require_empty=False,
-    )
+def _version(connection: sqlite3.Connection) -> int:
+    return int(connection.execute("PRAGMA user_version").fetchone()[0])
 
 
 def _run_script_transaction(
@@ -74,7 +87,8 @@ def _run_script_transaction(
             )
         if require_empty:
             existing_objects = connection.execute(
-                "SELECT 1 FROM sqlite_master WHERE name NOT LIKE 'sqlite_%' LIMIT 1"
+                "SELECT 1 FROM sqlite_master "
+                "WHERE name NOT LIKE 'sqlite_%' AND name != '_sqlite_utils_migrations' LIMIT 1"
             ).fetchone()
             if existing_objects is not None:
                 raise RuntimeError(
