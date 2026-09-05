@@ -40,7 +40,7 @@ def test_overview_exposes_bounded_v1_data(tmp_path: Path) -> None:
     overview = CurationCatalog(path).overview()
 
     assert overview.contract_version == "curation/v1"
-    assert overview.catalog_version == 9
+    assert overview.catalog_version == 10
     assert overview.available_tracks == 1
     assert overview.candidates == 1
     assert overview.latest_analysis.status is None
