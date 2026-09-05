@@ -159,15 +159,27 @@ def test_successive_tools_and_catalog_regrounding(
             ]
         ),
         _reply(
-            content=json.dumps(
-                {"selections": [{"source_id": "source-a", "track_id": 1, "rationale": "Fits."}]}
-            )
+            calls=[
+                _call(
+                    "four",
+                    "create_curation",
+                    {
+                        "name": "Opening set",
+                        "kind": "set",
+                        "user_prompt": "model-rewritten prompt",
+                        "report_markdown": "# Selection\nFits.",
+                        "tracks": [{"source_id": "source-a", "track_id": 1}],
+                    },
+                )
+            ]
         ),
     ]
 
     result = _run(_workspace(tmp_path / "catalog.sqlite", url))
 
     assert result.tracks[0].catalog.discovery.title == "Catalog Title"
+    assert result.creation.status == "draft"
+    assert result.creation.user_prompt == "Build a set"
     assert [request["messages"][-1]["role"] for request in handler.requests] == [
         "user",
         "tool",
@@ -178,6 +190,7 @@ def test_successive_tools_and_catalog_regrounding(
         "get_library_overview",
         "search_curation_candidates",
         "get_curation_candidates",
+        "create_curation",
     }
 
 
@@ -202,6 +215,7 @@ def test_custom_system_prompt_is_subordinate_and_cannot_expand_tools(
         "get_library_overview",
         "search_curation_candidates",
         "get_curation_candidates",
+        "create_curation",
     }
 
 
@@ -221,7 +235,7 @@ def test_custom_system_prompt_is_subordinate_and_cannot_expand_tools(
                 content='{"selections":[{"source_id":"source-a","track_id":1,'
                 '"rationale":"Fits.","title":"Contradictory Title"}]}'
             ),
-            CurationResponseError,
+            CurationGroundingError,
         ),
     ],
 )
@@ -235,6 +249,45 @@ def test_rejects_malformed_invented_or_catalog_contradicting_output(
     handler.replies = [final]
     with pytest.raises(error):
         _run(_workspace(tmp_path / "catalog.sqlite", url))
+
+
+def test_plain_text_result_cannot_bypass_mcp_creation(
+    tmp_path: Path, endpoint: tuple[str, type[_Handler]]
+) -> None:
+    url, handler = endpoint
+    path = tmp_path / "catalog.sqlite"
+    handler.replies = [_reply(content='{"selections":[]}')]
+
+    with pytest.raises(CurationGroundingError, match="must create.*create_curation"):
+        _run(_workspace(path, url))
+
+    with Database.open_read_only(path) as database:
+        assert database.scalar("SELECT count(*) FROM curation_creations") == 0
+
+
+def test_creation_write_must_be_the_only_tool_call(
+    tmp_path: Path, endpoint: tuple[str, type[_Handler]]
+) -> None:
+    url, handler = endpoint
+    path = tmp_path / "catalog.sqlite"
+    creation = _call(
+        "write",
+        "create_curation",
+        {
+            "name": "Draft",
+            "kind": "set",
+            "user_prompt": "Build a set",
+            "report_markdown": "# Report",
+            "tracks": [{"source_id": "source-a", "track_id": 1}],
+        },
+    )
+    handler.replies = [_reply(calls=[creation, _call("read", "get_library_overview", {})])]
+
+    with pytest.raises(CurationGroundingError, match="only tool call"):
+        _run(_workspace(path, url))
+
+    with Database.open_read_only(path) as database:
+        assert database.scalar("SELECT count(*) FROM curation_creations") == 0
 
 
 def test_turn_limit_is_enforced(tmp_path: Path, endpoint: tuple[str, type[_Handler]]) -> None:

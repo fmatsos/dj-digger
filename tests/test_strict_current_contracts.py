@@ -48,7 +48,7 @@ def test_fresh_catalog_initializes_consolidated_current_schema(tmp_path: Path) -
 
     database.migrate()
 
-    assert database.scalar("PRAGMA user_version") == 9
+    assert database.scalar("PRAGMA user_version") == 10
     assert database.table_exists("library_sources")
     assert database.table_exists("track_sections")
     assert {
@@ -158,7 +158,7 @@ def test_current_catalog_migration_is_a_no_op(tmp_path: Path) -> None:
 
     database.migrate()
 
-    assert database.scalar("PRAGMA user_version") == 9
+    assert database.scalar("PRAGMA user_version") == 10
     assert database.scalar("SELECT value FROM migration_sentinel") == "preserved"
 
 

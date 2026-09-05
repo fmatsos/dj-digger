@@ -45,7 +45,7 @@ def test_database_reports_runtime_file_and_health_diagnostics(tmp_path: Path) ->
 
     assert diagnostics["path"] == str(path.resolve())
     assert diagnostics["sqlite_version"]
-    assert diagnostics["schema_version"] == 9
+    assert diagnostics["schema_version"] == 10
     assert diagnostics["journal_mode"] == "wal"
     assert diagnostics["foreign_keys"] == 1
     assert diagnostics["synchronous"] == 1
