@@ -27,8 +27,14 @@ MAX_RESPONSE_BYTES = 64 * 1024 * 1024
 MAX_STDERR_BYTES = 1024 * 1024
 _STAGES: frozenset[str] = frozenset(
     {
-        "decode", "technical", "rhythm", "spectrum", "windows", "segmentation",
-        "semantics", "aggregation",
+        "decode",
+        "technical",
+        "rhythm",
+        "spectrum",
+        "windows",
+        "segmentation",
+        "semantics",
+        "aggregation",
     }
 )
 
@@ -235,10 +241,7 @@ class IsolatedAnalysisExtractor(TimedAnalysisExtractor):
             or not isinstance(sections, Mapping)
             or (
                 confidence is not None
-                and (
-                    not isinstance(confidence, int | float)
-                    or isinstance(confidence, bool)
-                )
+                and (not isinstance(confidence, int | float) or isinstance(confidence, bool))
             )
             or result_status != "succeeded"
         ):

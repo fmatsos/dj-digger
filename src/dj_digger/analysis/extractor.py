@@ -45,6 +45,7 @@ class AnalysisExtractionError(RuntimeError):
         self.stage = stage
         self.cause = cause
 
+
 T = TypeVar("T")
 
 
@@ -56,8 +57,18 @@ class AudioDecoder:
 
     def decode(self, path: Path) -> np.ndarray:
         argv = [
-            self._ffmpeg, "-v", "error", "-i", str(path), "-f", "f32le",
-            "-ac", "1", "-ar", "48000", "pipe:1",
+            self._ffmpeg,
+            "-v",
+            "error",
+            "-i",
+            str(path),
+            "-f",
+            "f32le",
+            "-ac",
+            "1",
+            "-ar",
+            "48000",
+            "pipe:1",
         ]
         try:
             result = subprocess.run(argv, check=True, capture_output=True)
@@ -158,15 +169,17 @@ class CompositeAudioExtractor:
         self._semantics = semantics or SemanticClassifier(dsp.semantic_min_confidence)
 
     def extract(
-        self, path: Path, *, source_id: str = "source", track_id: int = 1,
-        relative_path: str | None = None
+        self,
+        path: Path,
+        *,
+        source_id: str = "source",
+        track_id: int = 1,
+        relative_path: str | None = None,
     ) -> AnalysisExtractionResult:
         try:
             samples = self._stage("decode", lambda: self._decoder.decode(path))
             technical = self._stage("technical", lambda: self._probe.probe(path))
-            rhythm = self._stage(
-                "rhythm", lambda: self._rhythm.analyze(samples, 48_000)
-            )
+            rhythm = self._stage("rhythm", lambda: self._rhythm.analyze(samples, 48_000))
             spectrum = self._stage("spectrum", lambda: self._spectrum.analyze(samples, 48_000))
             windows = self._stage("windows", lambda: self._planner.plan(rhythm.beat_positions))
             frames = self._stage("spectrum", lambda: self._frames(samples, rhythm))
@@ -175,17 +188,24 @@ class CompositeAudioExtractor:
             payload = self._stage(
                 "aggregation",
                 lambda: self._payload(
-                    path, source_id, track_id, technical, rhythm, spectrum, windows, samples,
+                    path,
+                    source_id,
+                    track_id,
+                    technical,
+                    rhythm,
+                    spectrum,
+                    windows,
+                    samples,
                     relative_path,
                 ),
             )
-            rows = tuple(
-                self._section_row(i, s, labels[i], rhythm)
-                for i, s in enumerate(sections)
-            )
+            rows = tuple(self._section_row(i, s, labels[i], rhythm) for i, s in enumerate(sections))
             section_doc = {
-                "source_id": source_id, "track_id": track_id, "path": relative_path or str(path),
-                "analysis_schema_version": 2, "sections": list(rows),
+                "source_id": source_id,
+                "track_id": track_id,
+                "path": relative_path or str(path),
+                "analysis_schema_version": 2,
+                "sections": list(rows),
             }
             return AnalysisExtractionResult(
                 payload, section_doc, self._confidence(rhythm, labels), "succeeded"
@@ -229,35 +249,62 @@ class CompositeAudioExtractor:
     ) -> dict[str, object]:
         stat = path.stat()
         payload: dict[str, object] = {
-            "source_id": source_id, "track_id": track_id, "path": relative_path or str(path),
-            "size_bytes": stat.st_size, "mtime": stat.st_mtime_ns, "analysis_schema_version": 2,
+            "source_id": source_id,
+            "track_id": track_id,
+            "path": relative_path or str(path),
+            "size_bytes": stat.st_size,
+            "mtime": stat.st_mtime_ns,
+            "analysis_schema_version": 2,
             "analyzer_version": self.identity.analyzer_version,
             "config_hash": self.identity.config_hash,
-            "analysis_status": "ok", "analysis_confidence": rhythm.bpm_confidence,
+            "analysis_status": "ok",
+            "analysis_confidence": rhythm.bpm_confidence,
             "duration_seconds": technical.duration_seconds,
             "sample_rate": technical.sample_rate or 48000,
-            "channels": technical.channels or 1, "codec": technical.codec,
-            "container": technical.container, "lossless": technical.lossless,
-            "bpm": rhythm.bpm, "bpm_confidence": rhythm.bpm_confidence,
-            "beat_stability": rhythm.beat_stability, "key": rhythm.key,
+            "channels": technical.channels or 1,
+            "codec": technical.codec,
+            "container": technical.container,
+            "lossless": technical.lossless,
+            "bpm": rhythm.bpm,
+            "bpm_confidence": rhythm.bpm_confidence,
+            "beat_stability": rhythm.beat_stability,
+            "key": rhythm.key,
             "key_confidence": rhythm.key_confidence,
-            "loudness_lufs": technical.loudness_lufs, "true_peak_db": technical.true_peak_db,
-            "dynamic_range": technical.dynamic_range, "sub_energy": spectrum.sub,
-            "low_energy": spectrum.low, "low_mid_energy": spectrum.low_mid,
-            "kick_strength": spectrum.kick, "kick_density": spectrum.kick,
-            "bass_density": spectrum.bass, "onset_density": spectrum.onset,
+            "loudness_lufs": technical.loudness_lufs,
+            "true_peak_db": technical.true_peak_db,
+            "dynamic_range": technical.dynamic_range,
+            "sub_energy": spectrum.sub,
+            "low_energy": spectrum.low,
+            "low_mid_energy": spectrum.low_mid,
+            "kick_strength": spectrum.kick,
+            "kick_density": spectrum.kick,
+            "bass_density": spectrum.bass,
+            "onset_density": spectrum.onset,
             "spectral_centroid": spectrum.spectral_centroid,
         }
         for side in ("intro", "outro"):
             for bars in (8, 16, 32, 64):
-                payload.update({
-                    f"{side}_{bars}_available": False,
-                    **{f"{side}_{bars}_{name}": None for name in (
-                        "bpm", "beat_stability", "sub_energy", "low_energy", "low_mid_energy",
-                        "kick_strength", "kick_density", "bass_density", "loudness_lufs",
-                        "onset_density", "spectral_centroid",
-                    )},
-                })
+                payload.update(
+                    {
+                        f"{side}_{bars}_available": False,
+                        **{
+                            f"{side}_{bars}_{name}": None
+                            for name in (
+                                "bpm",
+                                "beat_stability",
+                                "sub_energy",
+                                "low_energy",
+                                "low_mid_energy",
+                                "kick_strength",
+                                "kick_density",
+                                "bass_density",
+                                "loudness_lufs",
+                                "onset_density",
+                                "spectral_centroid",
+                            )
+                        },
+                    }
+                )
         stable = rhythm.bpm is not None and rhythm.beat_stability >= 0.8
         for bars, window in windows.items():
             for side, interval in (("intro", window.intro), ("outro", window.outro)):
@@ -265,19 +312,24 @@ class CompositeAudioExtractor:
                     continue
                 prefix = f"{side}_{bars}_"
                 local = self._spectrum.analyze(
-                    samples[int(interval.start * 48000):int(interval.end * 48000)], 48000
+                    samples[int(interval.start * 48000) : int(interval.end * 48000)], 48000
                 )
-                payload.update({
-                    prefix + "available": True, prefix + "bpm": rhythm.bpm,
-                    prefix + "beat_stability": rhythm.beat_stability,
-                    prefix + "sub_energy": local.sub, prefix + "low_energy": local.low,
-                    prefix + "low_mid_energy": local.low_mid,
-                    prefix + "kick_strength": local.kick, prefix + "kick_density": local.kick,
-                    prefix + "bass_density": local.bass,
-                    prefix + "loudness_lufs": technical.loudness_lufs,
-                    prefix + "onset_density": local.onset,
-                    prefix + "spectral_centroid": local.spectral_centroid,
-                })
+                payload.update(
+                    {
+                        prefix + "available": True,
+                        prefix + "bpm": rhythm.bpm,
+                        prefix + "beat_stability": rhythm.beat_stability,
+                        prefix + "sub_energy": local.sub,
+                        prefix + "low_energy": local.low,
+                        prefix + "low_mid_energy": local.low_mid,
+                        prefix + "kick_strength": local.kick,
+                        prefix + "kick_density": local.kick,
+                        prefix + "bass_density": local.bass,
+                        prefix + "loudness_lufs": technical.loudness_lufs,
+                        prefix + "onset_density": local.onset,
+                        prefix + "spectral_centroid": local.spectral_centroid,
+                    }
+                )
         return payload
 
     def _section_row(
@@ -299,19 +351,33 @@ class CompositeAudioExtractor:
             else None
         )
         facts_doc = {
-            "bpm": facts.bpm, "beat_stability": facts.beat_stability,
-            "kick_present": not s.derived.kick_absent, "kick_strength": facts.kick_strength,
-            "kick_density": facts.kick_strength, "bass_density": facts.bass_energy,
-            "sub_energy": facts.sub_energy, "low_energy": facts.low_energy,
-            "low_mid_energy": facts.low_mid_energy, "loudness_lufs": None,
-            "onset_density": facts.onset_energy, "spectral_centroid": facts.spectral_centroid,
-            "energy_slope": 1.0 if s.derived.energy_rising else -1.0
-            if s.derived.energy_falling else 0.0,
+            "bpm": facts.bpm,
+            "beat_stability": facts.beat_stability,
+            "kick_present": not s.derived.kick_absent,
+            "kick_strength": facts.kick_strength,
+            "kick_density": facts.kick_strength,
+            "bass_density": facts.bass_energy,
+            "sub_energy": facts.sub_energy,
+            "low_energy": facts.low_energy,
+            "low_mid_energy": facts.low_mid_energy,
+            "loudness_lufs": None,
+            "onset_density": facts.onset_energy,
+            "spectral_centroid": facts.spectral_centroid,
+            "energy_slope": 1.0
+            if s.derived.energy_rising
+            else -1.0
+            if s.derived.energy_falling
+            else 0.0,
         }
         return {
-            "index": index, "start_seconds": s.start, "end_seconds": s.end,
-            "start_bar": start_bar, "end_bar": end_bar, "bars": bars,
-            "facts": facts_doc, "derived": s.derived.__dict__,
+            "index": index,
+            "start_seconds": s.start,
+            "end_seconds": s.end,
+            "start_bar": start_bar,
+            "end_bar": end_bar,
+            "bars": bars,
+            "facts": facts_doc,
+            "derived": s.derived.__dict__,
             "semantic": {"label": label.label, "confidence": label.confidence},
             "transition_suitability_in": label.confidence,
             "transition_suitability_out": label.confidence,

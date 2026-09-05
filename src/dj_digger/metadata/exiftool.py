@@ -17,8 +17,20 @@ from dj_digger.catalog.repositories import (
 )
 
 EMBEDDED_FIELDS = (
-    "Title", "Artist", "AlbumArtist", "Album", "Track", "DiscNumber", "Genre", "Date",
-    "Year", "Composer", "Comment", "BPM", "InitialKey", "Grouping",
+    "Title",
+    "Artist",
+    "AlbumArtist",
+    "Album",
+    "Track",
+    "DiscNumber",
+    "Genre",
+    "Date",
+    "Year",
+    "Composer",
+    "Comment",
+    "BPM",
+    "InitialKey",
+    "Grouping",
 )
 
 
@@ -171,16 +183,20 @@ class ExifToolExtractor:
         except (TypeError, ValueError):
             tag_bpm = None
         return EmbeddedMetadata(
-            title=_text(tags.get("Title")), artist=_text(tags.get("Artist")),
-            album_artist=_text(tags.get("AlbumArtist")), album=_text(tags.get("Album")),
-            track_number=_text(tags.get("Track")), disc_number=_text(tags.get("DiscNumber")),
+            title=_text(tags.get("Title")),
+            artist=_text(tags.get("Artist")),
+            album_artist=_text(tags.get("AlbumArtist")),
+            album=_text(tags.get("Album")),
+            track_number=_text(tags.get("Track")),
+            disc_number=_text(tags.get("DiscNumber")),
             genre=_text(tags.get("Genre")),
             date=_text(tags.get("Date")),
             year=_text(tags.get("Year")),
             composer=_text(tags.get("Composer")),
             comment=_text(tags.get("Comment")),
             tag_bpm=tag_bpm,
-            tag_initial_key=_text(tags.get("InitialKey")), grouping=_text(tags.get("Grouping")),
+            tag_initial_key=_text(tags.get("InitialKey")),
+            grouping=_text(tags.get("Grouping")),
         )
 
     @staticmethod
@@ -279,8 +295,13 @@ class MetadataService:
                     continue
                 values = _metadata_values(metadata)
                 previous = self._metadata.current(track.id)
-                self._metadata.upsert(track, values, extracted_at=_now(), extractor_version=version,
-                                      normalization_version=self.NORMALIZATION_VERSION)
+                self._metadata.upsert(
+                    track,
+                    values,
+                    extracted_at=_now(),
+                    extractor_version=version,
+                    normalization_version=self.NORMALIZATION_VERSION,
+                )
                 changed = _changed_fields(previous, values)
                 if changed:
                     payload = json.dumps({"changed_fields": changed}, separators=(",", ":"))
@@ -293,22 +314,51 @@ class MetadataService:
         )
 
     def _record_failure(self, track_id: int, error: str) -> None:
-        self._events.append(track_id, None, "embedded_metadata_failed",
-                            json.dumps({"error": error}, separators=(",", ":")), _now())
+        self._events.append(
+            track_id,
+            None,
+            "embedded_metadata_failed",
+            json.dumps({"error": error}, separators=(",", ":")),
+            _now(),
+        )
 
 
 def _metadata_values(metadata: EmbeddedMetadata) -> tuple[object, ...]:
     return (
-        metadata.title, metadata.artist, metadata.album_artist, metadata.album,
-        metadata.track_number, metadata.disc_number, metadata.genre, metadata.date,
-        metadata.year, metadata.composer, metadata.comment, metadata.tag_bpm,
-        metadata.tag_initial_key, metadata.grouping,
+        metadata.title,
+        metadata.artist,
+        metadata.album_artist,
+        metadata.album,
+        metadata.track_number,
+        metadata.disc_number,
+        metadata.genre,
+        metadata.date,
+        metadata.year,
+        metadata.composer,
+        metadata.comment,
+        metadata.tag_bpm,
+        metadata.tag_initial_key,
+        metadata.grouping,
     )
 
 
 def _changed_fields(previous: tuple[object, ...] | None, current: tuple[object, ...]) -> list[str]:
-    names = ("title", "artist", "album_artist", "album", "track_number", "disc_number", "genre",
-             "date", "year", "composer", "comment", "tag_bpm", "tag_initial_key", "grouping")
+    names = (
+        "title",
+        "artist",
+        "album_artist",
+        "album",
+        "track_number",
+        "disc_number",
+        "genre",
+        "date",
+        "year",
+        "composer",
+        "comment",
+        "tag_bpm",
+        "tag_initial_key",
+        "grouping",
+    )
     if previous is None:
         return [name for name, value in zip(names, current, strict=True) if value is not None]
     return [name for name, old, new in zip(names, previous, current, strict=True) if old != new]

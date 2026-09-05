@@ -45,9 +45,17 @@ def analysis_fixture(track: Track) -> AnalysisExtractionResult:
             prefix = f"{side}_{bars}_"
             payload[prefix + "available"] = False
             for name in (
-                "bpm", "beat_stability", "sub_energy", "low_energy", "low_mid_energy",
-                "kick_strength", "kick_density", "bass_density", "loudness_lufs",
-                "onset_density", "spectral_centroid",
+                "bpm",
+                "beat_stability",
+                "sub_energy",
+                "low_energy",
+                "low_mid_energy",
+                "kick_strength",
+                "kick_density",
+                "bass_density",
+                "loudness_lufs",
+                "onset_density",
+                "spectral_centroid",
             ):
                 payload[prefix + name] = None
     return AnalysisExtractionResult(

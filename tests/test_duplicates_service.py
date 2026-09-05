@@ -37,9 +37,7 @@ class FakeExtractor:
 def _track(
     database: Database, source_id: str, path: str, *, size_bytes: int = 10, mtime_ns: int = 20
 ) -> Track:
-    if database.scalar(
-        "SELECT 1 FROM library_sources WHERE source_id = ?", (source_id,)
-    ) is None:
+    if database.scalar("SELECT 1 FROM library_sources WHERE source_id = ?", (source_id,)) is None:
         with database.transaction():
             SourceRepository(database).upsert(
                 source_id, Path(f"/{source_id}"), set_eligible=True, analyze=True, enabled=True
@@ -61,7 +59,9 @@ def _track(
 
 def _service(database: Database, extractor: FakeExtractor) -> DuplicateService:
     return DuplicateService(
-        database, {"one": Path("/one"), "two": Path("/two")}, extractor=extractor  # type: ignore[arg-type]
+        database,
+        {"one": Path("/one"), "two": Path("/two")},
+        extractor=extractor,  # type: ignore[arg-type]
     )
 
 
@@ -122,9 +122,7 @@ def test_analyze_reextracts_when_input_identity_changes(tmp_path: Path) -> None:
     _service(database, extractor).analyze()
 
     with database.transaction():
-        database.execute(
-            "UPDATE tracks SET mtime_ns = 99 WHERE id = ?", (track.id,)
-        )
+        database.execute("UPDATE tracks SET mtime_ns = 99 WHERE id = ?", (track.id,))
 
     result = _service(database, extractor).analyze()
 
@@ -153,9 +151,7 @@ def test_groups_return_deterministic_order(tmp_path: Path) -> None:
     _track(database, "one", "Z.flac")
     _track(database, "one", "A.flac")
     _track(database, "one", "M.flac")
-    extractor = FakeExtractor(
-        {"Z.flac": "hash-1", "A.flac": "hash-1", "M.flac": "hash-2"}
-    )
+    extractor = FakeExtractor({"Z.flac": "hash-1", "A.flac": "hash-1", "M.flac": "hash-2"})
 
     service = _service(database, extractor)
     service.analyze()
@@ -168,9 +164,7 @@ def test_groups_return_deterministic_order(tmp_path: Path) -> None:
         group.fingerprint_hash for group in groups
     )
     first_group = next(
-        g
-        for g in groups
-        if len(g.members) == 2 and g.members[0].track.relative_path == "A.flac"
+        g for g in groups if len(g.members) == 2 and g.members[0].track.relative_path == "A.flac"
     )
     assert [m.track.relative_path for m in first_group.members] == ["A.flac", "Z.flac"]
 
@@ -200,7 +194,9 @@ def test_analyze_never_runs_more_extractions_than_workers(tmp_path: Path) -> Non
             return Fingerprint(path.name, path.name, FINGERPRINT_VERSION)
 
     result = DuplicateService(
-        database, {"one": Path("/one")}, extractor=BoundedExtractor()  # type: ignore[arg-type]
+        database,
+        {"one": Path("/one")},
+        extractor=BoundedExtractor(),  # type: ignore[arg-type]
     ).analyze(workers=2)
 
     assert peak_active == 2

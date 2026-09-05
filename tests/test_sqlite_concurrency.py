@@ -21,9 +21,7 @@ def _initialize_catalog(factory: DatabaseFactory) -> None:
         database.commit()
 
 
-def _capture_thread_errors(
-    errors: Queue[BaseException], operation: Callable[[], None]
-) -> None:
+def _capture_thread_errors(errors: Queue[BaseException], operation: Callable[[], None]) -> None:
     try:
         operation()
     except BaseException as error:

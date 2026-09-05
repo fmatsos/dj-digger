@@ -72,9 +72,7 @@ def test_worker_preserves_structured_python_failure_stage_and_message(tmp_path: 
 
 
 @pytest.mark.parametrize("status", ["partial", "failed"])
-def test_worker_rejects_non_success_extraction_results(
-    tmp_path: Path, status: str
-) -> None:
+def test_worker_rejects_non_success_extraction_results(tmp_path: Path, status: str) -> None:
     class Extractor:
         def extract(self, *args: object, **kwargs: object) -> AnalysisExtractionResult:
             return AnalysisExtractionResult({}, {"sections": []}, None, status)  # type: ignore[arg-type]

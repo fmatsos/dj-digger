@@ -48,12 +48,26 @@ def catalog_with_two_tracks(
     tracks = TrackRepository(database)
     with database.transaction():
         first = tracks.insert(
-            source_id="source", relative_path="A.flac", filename="A.flac", extension=".flac",
-            size_bytes=1, mtime_ns=2, scan_id=run_id,
+            source_id="source",
+            relative_path="A.flac",
+            filename="A.flac",
+            extension=".flac",
+            size_bytes=1,
+            mtime_ns=2,
+            scan_id=run_id,
         )
-        second = first if one_track else tracks.insert(
-            source_id="source", relative_path="B.flac", filename="B.flac", extension=".flac",
-            size_bytes=3, mtime_ns=4, scan_id=run_id,
+        second = (
+            first
+            if one_track
+            else tracks.insert(
+                source_id="source",
+                relative_path="B.flac",
+                filename="B.flac",
+                extension=".flac",
+                size_bytes=3,
+                mtime_ns=4,
+                scan_id=run_id,
+            )
         )
     return database, first, second
 
@@ -183,9 +197,11 @@ def test_nonzero_exiftool_batch_keeps_success_and_reports_only_bad_track(
             (),
             {
                 "stdout": (
-                    '[{"SourceFile":"' + str(tmp_path / "source" / "A.flac")
+                    '[{"SourceFile":"'
+                    + str(tmp_path / "source" / "A.flac")
                     + '","Title":"Acid"},{"SourceFile":"'
-                    + str(tmp_path / "source" / "B.flac") + '","Error":"bad tag"}]'
+                    + str(tmp_path / "source" / "B.flac")
+                    + '","Error":"bad tag"}]'
                 ),
                 "returncode": 1,
             },
@@ -196,12 +212,14 @@ def test_nonzero_exiftool_batch_keeps_success_and_reports_only_bad_track(
 
     assert result.extracted == 1
     assert result.failed == 1
-    assert database.scalar(
-        "SELECT title FROM embedded_metadata WHERE track_id = ?", (first.id,)
-    ) == "Acid"
-    assert database.scalar(
-        "SELECT presence_status FROM tracks WHERE id = ?", (second.id,)
-    ) == "present"
+    assert (
+        database.scalar("SELECT title FROM embedded_metadata WHERE track_id = ?", (first.id,))
+        == "Acid"
+    )
+    assert (
+        database.scalar("SELECT presence_status FROM tracks WHERE id = ?", (second.id,))
+        == "present"
+    )
     assert database.execute("SELECT event_type FROM track_events ORDER BY id").fetchall() == [
         ("embedded_metadata_changed",),
         ("embedded_metadata_failed",),
@@ -220,8 +238,7 @@ def test_exiftool_reported_version_changes_refresh_eligibility(tmp_path: Path, m
             (),
             {
                 "stdout": (
-                    '[{"SourceFile":"' + str(tmp_path / "source" / "A.flac")
-                    + '","Title":"Acid"}]'
+                    '[{"SourceFile":"' + str(tmp_path / "source" / "A.flac") + '","Title":"Acid"}]'
                 ),
                 "returncode": 0,
             },
@@ -230,9 +247,12 @@ def test_exiftool_reported_version_changes_refresh_eligibility(tmp_path: Path, m
     monkeypatch.setattr("dj_digger.metadata.exiftool.subprocess.run", run)
     assert MetadataService(database, ExifToolExtractor()).refresh("source").extracted == 1
     assert MetadataService(database, ExifToolExtractor()).refresh("source").extracted == 1
-    assert database.scalar(
-        "SELECT extractor_version FROM embedded_metadata WHERE track_id = ?", (first.id,)
-    ) == "12.99"
+    assert (
+        database.scalar(
+            "SELECT extractor_version FROM embedded_metadata WHERE track_id = ?", (first.id,)
+        )
+        == "12.99"
+    )
 
 
 def test_version_probe_failure_records_each_present_track_failure(tmp_path: Path) -> None:
@@ -311,12 +331,22 @@ def test_metadata_refresh_is_incremental_records_changes_and_keeps_failures_pres
     tracks = TrackRepository(database)
     with database.transaction():
         first = tracks.insert(
-            source_id="source", relative_path="A.flac", filename="A.flac", extension=".flac",
-            size_bytes=1, mtime_ns=2, scan_id=run_id,
+            source_id="source",
+            relative_path="A.flac",
+            filename="A.flac",
+            extension=".flac",
+            size_bytes=1,
+            mtime_ns=2,
+            scan_id=run_id,
         )
         second = tracks.insert(
-            source_id="source", relative_path="B.flac", filename="B.flac", extension=".flac",
-            size_bytes=3, mtime_ns=4, scan_id=run_id,
+            source_id="source",
+            relative_path="B.flac",
+            filename="B.flac",
+            extension=".flac",
+            size_bytes=3,
+            mtime_ns=4,
+            scan_id=run_id,
         )
 
     class Extractor:
@@ -348,9 +378,7 @@ def test_metadata_refresh_is_incremental_records_changes_and_keeps_failures_pres
         database.scalar("SELECT presence_status FROM tracks WHERE id = ?", (second.id,))
         == "present"
     )
-    assert database.execute(
-        "SELECT event_type FROM track_events ORDER BY id"
-    ).fetchall() == [
+    assert database.execute("SELECT event_type FROM track_events ORDER BY id").fetchall() == [
         ("embedded_metadata_changed",),
         ("embedded_metadata_failed",),
         ("embedded_metadata_failed",),

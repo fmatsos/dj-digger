@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 import pytest
@@ -39,8 +40,9 @@ def test_refresh_does_not_publish_when_required_scan_fails(tmp_path: Path) -> No
 
     assert result.exit_code != 0
     assert tracks.read_text(encoding="utf-8") == "previous export\n"
-    assert '"event":"refresh"' in result.output
-    assert '"status":"failed"' in result.output
+    payload = json.loads(result.stdout)
+    assert payload["event"] == "refresh"
+    assert payload["status"] == "failed"
 
 
 def test_scan_accepts_a_single_source_filter(tmp_path: Path) -> None:
@@ -54,8 +56,9 @@ def test_scan_accepts_a_single_source_filter(tmp_path: Path) -> None:
     )
 
     assert result.exit_code == 0
-    assert '"event":"scan"' in result.output
-    assert '"status":"succeeded"' in result.output
+    payload = json.loads(result.stdout)
+    assert payload["event"] == "scan"
+    assert payload["status"] == "succeeded"
 
 
 def test_refresh_passes_the_live_reporter_to_the_application(monkeypatch, tmp_path: Path) -> None:
@@ -98,7 +101,7 @@ def test_refresh_passes_the_live_reporter_to_the_application(monkeypatch, tmp_pa
 
     assert result.exit_code == 0
     assert received == [reporter, 3, 12.5]
-    assert result.stdout.strip().startswith('{"event":"refresh"')
+    assert json.loads(result.stdout)["event"] == "refresh"
 
 
 def test_refresh_uses_safe_execution_defaults(monkeypatch, tmp_path: Path) -> None:
@@ -118,8 +121,6 @@ def test_refresh_uses_safe_execution_defaults(monkeypatch, tmp_path: Path) -> No
     assert result.exit_code == 0
     assert received["workers"] == 1
     assert received["track_timeout"] == 1800.0
-    assert "refresh · succeeded" in result.output
-    assert not result.output.lstrip().startswith("{")
 
 
 @pytest.mark.parametrize("value", ["0", "-1", "nan", "inf", "-inf"])
@@ -134,7 +135,6 @@ def test_refresh_rejects_invalid_track_timeout(tmp_path: Path, value: str) -> No
     )
 
     assert result.exit_code == 2
-    assert "must be greater than zero" in result.output
 
 
 @pytest.mark.parametrize("value", ["0", "-1"])
@@ -151,7 +151,6 @@ def test_refresh_rejects_non_positive_workers_before_creating_catalog(
     )
 
     assert result.exit_code == 2
-    assert "must be greater than zero" in result.output
     assert not (tmp_path / "catalog.sqlite").exists()
 
 

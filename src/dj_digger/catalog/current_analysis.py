@@ -66,9 +66,7 @@ class CurrentAnalysisProjector:
 
     def advance(self, audio_analysis_id: int) -> bool:
         """Project one successful attempt when it is newer than the current one."""
-        cursor = self._database.execute(
-            UPSERT_CURRENT, (audio_analysis_id, audio_analysis_id)
-        )
+        cursor = self._database.execute(UPSERT_CURRENT, (audio_analysis_id, audio_analysis_id))
         return cursor.rowcount == 1
 
     def rebuild(self) -> int:

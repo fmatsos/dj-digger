@@ -87,9 +87,7 @@ def test_incremental_lifecycle_persists_outcome_and_derives_interrupted_status(
     ).fetchone() == ("finish", "partial", 1, 0)
 
 
-def test_incremental_outcome_rolls_back_attempt_sections_event_and_counter(
-    database, track
-) -> None:
+def test_incremental_outcome_rolls_back_attempt_sections_event_and_counter(database, track) -> None:
     from dj_digger.analysis.extractor import AnalysisExtractionResult
     from dj_digger.analysis.persistence import AnalysisOutcome, AnalysisPersistence
 
@@ -132,17 +130,13 @@ def test_reconcile_running_run_refreshes_attempt_counters_without_new_history(
 
     persistence = AnalysisPersistence(database)
     ident = identity("f" * 64)
-    run_id = persistence.start_run(
-        ident, eligible=eligible, reused=reused, started_at="start"
-    )
+    run_id = persistence.start_run(ident, eligible=eligible, reused=reused, started_at="start")
     if outcome_kind == "success":
         outcome = AnalysisOutcome(track, {"bpm": 128.0}, None, "aggregation")
     else:
         outcome = AnalysisOutcome(track, {}, "controlled failure", "decode")
     persistence.persist_outcome(run_id, ident, outcome, occurred_at="one")
-    database.execute(
-        "UPDATE analysis_runs SET analyzed = 99, failed = 98 WHERE id = ?", (run_id,)
-    )
+    database.execute("UPDATE analysis_runs SET analyzed = 99, failed = 98 WHERE id = ?", (run_id,))
     database.commit()
     attempts_before = database.scalar("SELECT COUNT(*) FROM audio_analysis")
     events_before = database.scalar("SELECT COUNT(*) FROM track_events")

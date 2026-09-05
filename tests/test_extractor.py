@@ -101,16 +101,25 @@ class _Fail:
 @pytest.mark.parametrize(
     "stage",
     (
-        "decode", "technical", "rhythm", "spectrum", "windows", "segmentation",
-        "semantics", "aggregation",
+        "decode",
+        "technical",
+        "rhythm",
+        "spectrum",
+        "windows",
+        "segmentation",
+        "semantics",
+        "aggregation",
     ),
 )
 def test_composite_reports_each_stage(stage: str, tmp_path: Path) -> None:
     from dj_digger.analysis.extractor import CompositeAudioExtractor
 
     common = {
-        "decoder": _Decoder(), "probe": _Probe(), "rhythm": _Rhythm(),
-        "spectrum": _Spectrum(), "planner": _Planner(),
+        "decoder": _Decoder(),
+        "probe": _Probe(),
+        "rhythm": _Rhythm(),
+        "spectrum": _Spectrum(),
+        "planner": _Planner(),
     }
     failing = _Fail(stage)
     if stage == "decode":

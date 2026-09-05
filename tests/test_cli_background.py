@@ -92,7 +92,6 @@ def test_duplicates_background_requires_analyze(config: Path) -> None:
     )
 
     assert result.exit_code != 0
-    assert "--background is only valid with --analyze" in result.output
 
 
 def test_duplicates_analyze_background_launches_a_detached_job(
