@@ -165,9 +165,7 @@ def test_export_reports_the_three_duplicate_quality_states(
         winner = insert_track(
             database, source_id="src", relative_path="Dup/Winner.flac", mtime_ns=1
         )
-        loser = insert_track(
-            database, source_id="src", relative_path="Dup/Loser.mp3", mtime_ns=1
-        )
+        loser = insert_track(database, source_id="src", relative_path="Dup/Loser.mp3", mtime_ns=1)
         unmarked_a = insert_track(
             database, source_id="src", relative_path="Unmarked/A.flac", mtime_ns=1
         )

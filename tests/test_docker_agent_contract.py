@@ -1,6 +1,5 @@
 from pathlib import Path
 
-
 ROOT = Path(__file__).parents[1]
 
 
@@ -8,8 +7,14 @@ def test_docker_agent_config_uses_explicit_model_routing() -> None:
     text = (ROOT / "docker-agent.yaml").read_text()
 
     assert text.startswith("version: 15\n")
-    assert "luna_low:\n    provider: chatgpt\n    model: gpt-5.6-luna\n    thinking_budget: low" in text
-    assert "sol_medium:\n    provider: chatgpt\n    model: gpt-5.6-sol\n    thinking_budget: medium" in text
+    assert (
+        "luna_low:\n    provider: chatgpt\n    model: gpt-5.6-luna\n"
+        "    thinking_budget: low" in text
+    )
+    assert (
+        "sol_medium:\n    provider: chatgpt\n    model: gpt-5.6-sol\n"
+        "    thinking_budget: medium" in text
+    )
     assert "provider: openai" not in text
     assert "gpt-5-mini" not in text
     assert "lead:\n    model: luna_low" in text

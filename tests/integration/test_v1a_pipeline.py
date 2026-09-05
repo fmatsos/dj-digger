@@ -38,9 +38,12 @@ def validate_snapshot(snapshot: SnapshotResult) -> bool:
     )
     Draft202012Validator(schema, format_checker=FormatChecker()).validate(manifest)
     for facet in manifest["facets"]:
-        assert facet["sha256"] == hashlib.sha256(
-            (snapshot.directory / facet["relative_path"]).read_bytes()
-        ).hexdigest()
+        assert (
+            facet["sha256"]
+            == hashlib.sha256(
+                (snapshot.directory / facet["relative_path"]).read_bytes()
+            ).hexdigest()
+        )
     return True
 
 

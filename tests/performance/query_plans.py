@@ -10,8 +10,7 @@ _SCAN = re.compile(r"^\s*SCAN\s+(?P<table>\S+)", re.IGNORECASE)
 def explain(database: Database, sql: str, parameters: tuple[object, ...] = ()) -> list[str]:
     """Return only normalized detail strings from ``EXPLAIN QUERY PLAN``."""
     return [
-        str(row[3]).strip()
-        for row in database.execute(f"EXPLAIN QUERY PLAN {sql}", parameters)
+        str(row[3]).strip() for row in database.execute(f"EXPLAIN QUERY PLAN {sql}", parameters)
     ]
 
 

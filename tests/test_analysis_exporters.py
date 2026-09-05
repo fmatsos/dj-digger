@@ -116,8 +116,13 @@ def test_export_rolls_back_all_previous_facets_when_second_publish_replace_fails
     scan_id = ScanRunRepository(database).start("djing", scanner_version="test")
     with database.transaction():
         track = TrackRepository(database).insert(
-            source_id="djing", relative_path="A.flac", filename="A.flac", extension=".flac",
-            size_bytes=10, mtime_ns=20, scan_id=scan_id,
+            source_id="djing",
+            relative_path="A.flac",
+            filename="A.flac",
+            extension=".flac",
+            size_bytes=10,
+            mtime_ns=20,
+            scan_id=scan_id,
         )
     run = database.execute(
         """

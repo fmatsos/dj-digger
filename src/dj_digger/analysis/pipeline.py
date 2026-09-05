@@ -31,7 +31,13 @@ class TimedAnalysisExtractor(ABC):
 
 _STAGES = frozenset(
     {
-        "decode", "technical", "rhythm", "spectrum", "windows", "segmentation", "semantics",
+        "decode",
+        "technical",
+        "rhythm",
+        "spectrum",
+        "windows",
+        "segmentation",
+        "semantics",
         "aggregation",
     }
 )
@@ -111,9 +117,7 @@ class AnalysisPipeline:
                     started_at=started,
                 )
                 self._extract_all(run_id, pending, workers, track_timeout)
-                status, analyzed, failed = self._persistence.finish_run(
-                    run_id, finished_at=_now()
-                )
+                status, analyzed, failed = self._persistence.finish_run(run_id, finished_at=_now())
                 return AnalysisRunResult(
                     run_id, len(selected), analyzed, len(reusable), failed, status
                 )
@@ -139,23 +143,26 @@ class AnalysisPipeline:
         return [Track(*row) for row in self._database.execute(query, parameters).fetchall()]
 
     def _is_reusable(self, track: Track) -> bool:
-        return self._database.scalar(
-            """
+        return (
+            self._database.scalar(
+                """
             SELECT 1 FROM audio_analysis
             WHERE track_id = ? AND input_size_bytes = ? AND input_mtime_ns = ?
               AND analysis_schema_version = ? AND analyzer_version = ? AND config_hash = ?
               AND analysis_status = 'succeeded'
             LIMIT 1
             """,
-            (
-                track.id,
-                track.size_bytes,
-                track.mtime_ns,
-                self._identity.schema_version,
-                self._identity.analyzer_version,
-                self._identity.config_hash,
-            ),
-        ) is not None
+                (
+                    track.id,
+                    track.size_bytes,
+                    track.mtime_ns,
+                    self._identity.schema_version,
+                    self._identity.analyzer_version,
+                    self._identity.config_hash,
+                ),
+            )
+            is not None
+        )
 
     def _extract_all(
         self, run_id: int, tracks: list[Track], workers: int, track_timeout: float
@@ -204,6 +211,7 @@ class AnalysisPipeline:
                     except StopIteration:
                         continue
                     futures.add(executor.submit(extract, track))
+
 
 def _now() -> str:
     return datetime.now(UTC).isoformat()

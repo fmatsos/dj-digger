@@ -253,9 +253,7 @@ def _insert_analysis_history(
     _executemany_in_chunks(connection, sql, rows())
 
 
-def _insert_events(
-    connection: sqlite3.Connection, tracks: int, analyses_per_track: int
-) -> None:
+def _insert_events(connection: sqlite3.Connection, tracks: int, analyses_per_track: int) -> None:
     sql = """
         INSERT INTO track_events (
             id, track_id, occurred_at, scan_run_id, analysis_run_id, event_type, payload_json

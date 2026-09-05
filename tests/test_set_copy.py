@@ -24,8 +24,7 @@ def test_copy_set_preserves_playlist_order_groups_and_appended_tracks(tmp_path: 
     third = _track(library, "three.flac", b"three")
     playlist = tmp_path / "selection.m3u8"
     playlist.write_text(
-        "\ufeff#EXTM3U\n#EXTGRP: Closing / Acid \n"
-        "one.flac\n# ignored\nnested/two.flac\n",
+        "\ufeff#EXTM3U\n#EXTGRP: Closing / Acid \none.flac\n# ignored\nnested/two.flac\n",
         encoding="utf-8",
     )
     output = tmp_path / "output"
@@ -336,10 +335,9 @@ def test_crlf_file_uri_remote_scheme_and_group_transitions(tmp_path: Path) -> No
     first = _track(library, "one.flac", b"one")
     _track(library, "two.flac", b"two")
     playlist = tmp_path / "selection.m3u8"
-    playlist.write_bytes((
-        f"#EXTM3U\r\n#EXTGRP:First\r\nfile://{first}\r\n"
-        "#EXTGRP:Second\r\ntwo.flac\r\n"
-    ).encode())
+    playlist.write_bytes(
+        (f"#EXTM3U\r\n#EXTGRP:First\r\nfile://{first}\r\n#EXTGRP:Second\r\ntwo.flac\r\n").encode()
+    )
 
     result = copy_set(
         library=library,
@@ -350,8 +348,7 @@ def test_crlf_file_uri_remote_scheme_and_group_transitions(tmp_path: Path) -> No
         ownership_setter=lambda _path, _uid, _gid: None,
     )
     assert result.playlist.read_text() == (
-        "#EXTM3U\n#EXTGRP:First\nFirst/01 - one.flac\n"
-        "#EXTGRP:Second\nSecond/02 - two.flac\n"
+        "#EXTM3U\n#EXTGRP:First\nFirst/01 - one.flac\n#EXTGRP:Second\nSecond/02 - two.flac\n"
     )
 
     playlist.write_text("s3://bucket/track.flac\n", encoding="utf-8")

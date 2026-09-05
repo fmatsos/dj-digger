@@ -31,12 +31,18 @@ class ChromaprintExtractor:
         """Run FFmpeg's Chromaprint muxer on one file, bounded by timeout seconds."""
         argv = [
             self._ffmpeg,
-            "-v", "error",
-            "-i", str(path),
-            "-map", "0:a:0",
-            "-f", "chromaprint",
-            "-algorithm", "1",
-            "-fp_format", "base64",
+            "-v",
+            "error",
+            "-i",
+            str(path),
+            "-map",
+            "0:a:0",
+            "-f",
+            "chromaprint",
+            "-algorithm",
+            "1",
+            "-fp_format",
+            "base64",
             "-",
         ]
         try:

@@ -13,9 +13,7 @@ from dj_digger.duplicates.fingerprint import (
 
 
 def _fake_result(*, returncode: int = 0, stdout: bytes = b"", stderr: bytes = b"") -> object:
-    return type(
-        "Result", (), {"returncode": returncode, "stdout": stdout, "stderr": stderr}
-    )()
+    return type("Result", (), {"returncode": returncode, "stdout": stdout, "stderr": stderr})()
 
 
 def test_extract_invokes_ffmpeg_without_a_shell(monkeypatch) -> None:
@@ -35,8 +33,20 @@ def test_extract_invokes_ffmpeg_without_a_shell(monkeypatch) -> None:
     assert len(calls) == 1
     argv, kwargs = calls[0]
     assert argv == [
-        "ffmpeg", "-v", "error", "-i", str(path), "-map", "0:a:0",
-        "-f", "chromaprint", "-algorithm", "1", "-fp_format", "base64", "-",
+        "ffmpeg",
+        "-v",
+        "error",
+        "-i",
+        str(path),
+        "-map",
+        "0:a:0",
+        "-f",
+        "chromaprint",
+        "-algorithm",
+        "1",
+        "-fp_format",
+        "base64",
+        "-",
     ]
     assert kwargs.get("timeout") == 30
     assert "shell" not in kwargs
@@ -98,8 +108,14 @@ def _require_ffmpeg_chromaprint() -> None:
 def _generate_signal(path: Path) -> None:
     subprocess.run(
         [
-            "ffmpeg", "-y", "-v", "error", "-f", "lavfi",
-            "-i", "aevalsrc=0.4*sin(2*PI*t*(220+220*t)):s=44100:d=6",
+            "ffmpeg",
+            "-y",
+            "-v",
+            "error",
+            "-f",
+            "lavfi",
+            "-i",
+            "aevalsrc=0.4*sin(2*PI*t*(220+220*t)):s=44100:d=6",
             str(path),
         ],
         check=True,
@@ -117,11 +133,13 @@ def test_wav_flac_mp3_encodings_of_the_same_signal_fingerprint_identically(
     _generate_signal(wav_path)
     subprocess.run(
         ["ffmpeg", "-y", "-v", "error", "-i", str(wav_path), str(flac_path)],
-        check=True, capture_output=True,
+        check=True,
+        capture_output=True,
     )
     subprocess.run(
         ["ffmpeg", "-y", "-v", "error", "-i", str(wav_path), "-b:a", "320k", str(mp3_path)],
-        check=True, capture_output=True,
+        check=True,
+        capture_output=True,
     )
 
     extractor = ChromaprintExtractor()
@@ -139,22 +157,37 @@ def test_distinct_signals_fingerprint_differently(tmp_path: Path) -> None:
     second = tmp_path / "second.wav"
     subprocess.run(
         [
-            "ffmpeg", "-y", "-v", "error", "-f", "lavfi",
-            "-i", "aevalsrc=0.4*sin(2*PI*t*(220+220*t)):s=44100:d=6",
+            "ffmpeg",
+            "-y",
+            "-v",
+            "error",
+            "-f",
+            "lavfi",
+            "-i",
+            "aevalsrc=0.4*sin(2*PI*t*(220+220*t)):s=44100:d=6",
             str(first),
         ],
-        check=True, capture_output=True,
+        check=True,
+        capture_output=True,
     )
     subprocess.run(
         [
-            "ffmpeg", "-y", "-v", "error", "-f", "lavfi",
-            "-i", "aevalsrc=0.4*sin(2*PI*t*(880+880*t)):s=44100:d=6",
+            "ffmpeg",
+            "-y",
+            "-v",
+            "error",
+            "-f",
+            "lavfi",
+            "-i",
+            "aevalsrc=0.4*sin(2*PI*t*(880+880*t)):s=44100:d=6",
             str(second),
         ],
-        check=True, capture_output=True,
+        check=True,
+        capture_output=True,
     )
 
     extractor = ChromaprintExtractor()
-    assert extractor.extract(first, timeout=30).fingerprint_hash != extractor.extract(
-        second, timeout=30
-    ).fingerprint_hash
+    assert (
+        extractor.extract(first, timeout=30).fingerprint_hash
+        != extractor.extract(second, timeout=30).fingerprint_hash
+    )

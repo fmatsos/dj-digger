@@ -68,7 +68,8 @@ class FFmpegProbe:
             payload = {}
         stream = next(
             (
-                item for item in payload.get("streams", [])
+                item
+                for item in payload.get("streams", [])
                 if isinstance(item, dict) and item.get("codec_type") == "audio"
             ),
             {},

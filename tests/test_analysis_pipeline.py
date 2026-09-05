@@ -166,9 +166,7 @@ def test_pipeline_progress_advances_after_every_persisted_outcome(tmp_path: Path
 
 
 @pytest.mark.parametrize("timeout", [0, -1, float("nan"), float("inf")])
-def test_pipeline_rejects_non_positive_track_timeout(
-    tmp_path: Path, timeout: float
-) -> None:
+def test_pipeline_rejects_non_positive_track_timeout(tmp_path: Path, timeout: float) -> None:
     database = Database.open(tmp_path / "catalog.sqlite")
     database.migrate()
 
@@ -190,9 +188,7 @@ def test_pipeline_continues_after_isolated_worker_failure(tmp_path: Path) -> Non
                 raise AnalysisExtractionError("aggregation", "worker terminated by SIGSEGV")
             return {"path": track.relative_path}
 
-    result = AnalysisPipeline(database, IDENTITY, TimedExtractor()).run(
-        workers=1, track_timeout=7
-    )
+    result = AnalysisPipeline(database, IDENTITY, TimedExtractor()).run(workers=1, track_timeout=7)
 
     assert calls == ["House/crash.flac", "House/next.flac"]
     assert (result.status, result.analyzed, result.failed) == ("partial", 1, 1)
@@ -262,9 +258,7 @@ json.dump({
         {"one": tmp_path}, DspConfig.canonical(), worker_module="controlled_worker"
     )
 
-    result = AnalysisPipeline(database, IDENTITY, extractor).run(
-        workers=1, track_timeout=10
-    )
+    result = AnalysisPipeline(database, IDENTITY, extractor).run(workers=1, track_timeout=10)
 
     assert (result.status, result.analyzed, result.failed) == ("partial", 1, 1)
     failure = database.execute(
@@ -425,9 +419,7 @@ def test_pipeline_reconciles_interrupted_run_before_pending_selection(tmp_path: 
     first_track = _track(database, "one", "House/A.flac")
     _track(database, "one", "House/B.flac")
     persistence = AnalysisPersistence(database)
-    old_run_id = persistence.start_run(
-        IDENTITY, eligible=2, reused=0, started_at="old-start"
-    )
+    old_run_id = persistence.start_run(IDENTITY, eligible=2, reused=0, started_at="old-start")
     persistence.persist_outcome(
         old_run_id,
         IDENTITY,
@@ -468,9 +460,9 @@ def test_pipeline_propagates_outcome_persistence_error_and_leaves_run_running(
     with pytest.raises(ValueError, match="analysis section must be an object"):
         AnalysisPipeline(database, IDENTITY, extract).run()
 
-    assert database.execute(
-        "SELECT status, analyzed, failed FROM analysis_runs"
-    ).fetchall() == [("running", 0, 0)]
+    assert database.execute("SELECT status, analyzed, failed FROM analysis_runs").fetchall() == [
+        ("running", 0, 0)
+    ]
     assert database.scalar("SELECT COUNT(*) FROM audio_analysis") == 0
 
 
@@ -496,10 +488,13 @@ def test_concurrent_pipeline_fails_without_reconciling_the_active_run(tmp_path: 
         with pytest.raises(RuntimeError, match="already held"):
             _pipeline(competing_database, calls).run()
 
-    assert competing_database.execute(
-        "SELECT status, eligible, analyzed, reused, failed, finished_at "
-        "FROM analysis_runs WHERE id = ?",
-        (run_id,),
-    ).fetchone() == active_row
+    assert (
+        competing_database.execute(
+            "SELECT status, eligible, analyzed, reused, failed, finished_at "
+            "FROM analysis_runs WHERE id = ?",
+            (run_id,),
+        ).fetchone()
+        == active_row
+    )
     assert calls == []
     assert competing_database.scalar("SELECT COUNT(*) FROM analysis_runs") == 1

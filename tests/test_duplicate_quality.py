@@ -16,9 +16,7 @@ from dj_digger.duplicates.repository import DuplicateRepository
 def _track(
     database: Database, source_id: str, path: str, *, size_bytes: int = 10, mtime_ns: int = 20
 ) -> Track:
-    if database.scalar(
-        "SELECT 1 FROM library_sources WHERE source_id = ?", (source_id,)
-    ) is None:
+    if database.scalar("SELECT 1 FROM library_sources WHERE source_id = ?", (source_id,)) is None:
         with database.transaction():
             SourceRepository(database).upsert(
                 source_id, Path(f"/{source_id}"), set_eligible=True, analyze=True, enabled=True

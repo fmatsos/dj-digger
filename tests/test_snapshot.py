@@ -43,16 +43,14 @@ def test_snapshot_contains_hashed_canonical_facets_and_archive(tmp_path: Path) -
 
     manifest_path = result.directory / "snapshot-manifest.json"
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-    Draft202012Validator(json.loads(Path("schemas/snapshot-manifest.schema.json").read_text())).validate(
-        manifest
-    )
+    Draft202012Validator(
+        json.loads(Path("schemas/snapshot-manifest.schema.json").read_text())
+    ).validate(manifest)
     facets = {facet["name"]: facet for facet in manifest["facets"]}
     assert set(facets) == {"tracks.tsv", "library-artifacts.tsv"}
     for name, facet in facets.items():
         assert facet["relative_path"] == name
-        assert facet["sha256"] == hashlib.sha256(
-            (result.directory / name).read_bytes()
-        ).hexdigest()
+        assert facet["sha256"] == hashlib.sha256((result.directory / name).read_bytes()).hexdigest()
     assert manifest["sources"] == [
         {
             "source_id": "src",

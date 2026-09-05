@@ -67,15 +67,13 @@ def test_percival_tempo_drives_bpm_and_beat_grid() -> None:
         beat_grid_adapter=PercivalAlignedBeatGridAdapter(),
     )
 
-    facts = RhythmAnalyzer(
-        rhythm_adapter=rhythm_adapter, key_adapter=FixedKeyAdapter()
-    ).analyze(np.zeros(2048), 48_000)
+    facts = RhythmAnalyzer(rhythm_adapter=rhythm_adapter, key_adapter=FixedKeyAdapter()).analyze(
+        np.zeros(2048), 48_000
+    )
 
     assert facts.bpm == 140.0
     assert facts.bpm_confidence == pytest.approx(0.95)
-    assert facts.beat_positions == pytest.approx(
-        (0.0, 60.0 / 140.0, 120.0 / 140.0, 180.0 / 140.0)
-    )
+    assert facts.beat_positions == pytest.approx((0.0, 60.0 / 140.0, 120.0 / 140.0, 180.0 / 140.0))
     assert facts.beat_stability == pytest.approx(1.0)
 
 
@@ -104,9 +102,9 @@ def test_no_beats_normalizes_to_empty_rhythm_facts() -> None:
 
 def test_adapter_error_is_reported_with_stage_context() -> None:
     class BrokenRhythmAdapter:
-        def extract(self, samples: np.ndarray, sample_rate: int) -> tuple[
-            float, tuple[float, ...], float, tuple[float, ...]
-        ]:
+        def extract(
+            self, samples: np.ndarray, sample_rate: int
+        ) -> tuple[float, tuple[float, ...], float, tuple[float, ...]]:
             raise ValueError("bad audio")
 
     with pytest.raises(RuntimeError, match="rhythm adapter failed"):
@@ -158,7 +156,9 @@ def test_essentia_logging_is_suppressed_before_standard_module_load(monkeypatch)
     def fake_import(name: str):
         if name == "essentia":
             return essentia
-        events.append(f"standard:{essentia.log.infoActive}:{essentia.log.warningActive}:{essentia.log.errorActive}")
+        events.append(
+            f"standard:{essentia.log.infoActive}:{essentia.log.warningActive}:{essentia.log.errorActive}"
+        )
         return standard
 
     monkeypatch.setattr("dj_digger.analysis.rhythm.importlib.import_module", fake_import)

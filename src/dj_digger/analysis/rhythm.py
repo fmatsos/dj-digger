@@ -68,9 +68,7 @@ class EssentiaBeatGridAdapter:
         cartesian_to_polar = es.CartesianToPolar()
         onset = es.OnsetDetection(method="complex")
         novelty = []
-        for frame in es.FrameGenerator(
-            samples, frameSize=self._FRAME_SIZE, hopSize=self._HOP_SIZE
-        ):
+        for frame in es.FrameGenerator(samples, frameSize=self._FRAME_SIZE, hopSize=self._HOP_SIZE):
             magnitude, phase = cartesian_to_polar(fft(window(frame)))
             novelty.append(float(onset(magnitude, phase)))
 
@@ -99,9 +97,7 @@ class EssentiaRhythmAdapter:
         self, samples: Samples, sample_rate: int
     ) -> tuple[float, tuple[float, ...], float, tuple[float, ...]]:
         bpm = self._tempo_adapter.extract(samples, sample_rate)
-        beats, confidence, intervals = self._beat_grid_adapter.extract(
-            samples, sample_rate, bpm
-        )
+        beats, confidence, intervals = self._beat_grid_adapter.extract(samples, sample_rate, bpm)
         return bpm, beats, confidence, intervals
 
 

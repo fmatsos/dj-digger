@@ -54,8 +54,16 @@ def test_ffmpeg_normalizes_facts_and_uses_read_only_argv(monkeypatch) -> None:
     assert calls == [
         ["ffprobe", "-v", "error", "-show_streams", "-show_format", "-of", "json", str(path)],
         [
-            "ffmpeg", "-v", "info", "-i", str(path), "-filter:a", "ebur128=peak=true",
-            "-f", "null", "-",
+            "ffmpeg",
+            "-v",
+            "info",
+            "-i",
+            str(path),
+            "-filter:a",
+            "ebur128=peak=true",
+            "-f",
+            "null",
+            "-",
         ],
     ]
 
@@ -158,8 +166,14 @@ def test_technical_audio_metadata_repository_upserts_current_probe(tmp_path: Pat
         "VALUES ('source', 'now', 'running', 'test')"
     )
     track = Track(
-        id=1, source_id="source", relative_path="track.flac", filename="track.flac",
-        extension=".flac", size_bytes=4, mtime_ns=5, presence_status="present"
+        id=1,
+        source_id="source",
+        relative_path="track.flac",
+        filename="track.flac",
+        extension=".flac",
+        size_bytes=4,
+        mtime_ns=5,
+        presence_status="present",
     )
     database.execute(
         "INSERT INTO tracks (id, source_id, relative_path, filename, extension, size_bytes, "
@@ -197,8 +211,14 @@ def test_upsert_facts_preserves_existing_loudness_measurements(tmp_path: Path) -
         "VALUES ('source', 'now', 'running', 'test')"
     )
     track = Track(
-        id=1, source_id="source", relative_path="track.flac", filename="track.flac",
-        extension=".flac", size_bytes=4, mtime_ns=5, presence_status="present"
+        id=1,
+        source_id="source",
+        relative_path="track.flac",
+        filename="track.flac",
+        extension=".flac",
+        size_bytes=4,
+        mtime_ns=5,
+        presence_status="present",
     )
     database.execute(
         "INSERT INTO tracks (id, source_id, relative_path, filename, extension, size_bytes, "

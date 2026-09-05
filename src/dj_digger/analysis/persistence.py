@@ -180,8 +180,14 @@ class AnalysisPersistence:
         return len(runs)
 
     def _insert_attempt(
-        self, track: Track, identity: AnalysisIdentity, run_id: int, status: str,
-        payload: Mapping[str, Any], now: str, confidence: float | None,
+        self,
+        track: Track,
+        identity: AnalysisIdentity,
+        run_id: int,
+        status: str,
+        payload: Mapping[str, Any],
+        now: str,
+        confidence: float | None,
     ) -> int:
         cursor = self._database.execute(
             """INSERT INTO audio_analysis
@@ -190,9 +196,17 @@ class AnalysisPersistence:
              payload_json, created_at)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
-                track.id, run_id, identity.schema_version, identity.analyzer_version,
-                identity.config_hash, track.size_bytes, track.mtime_ns, status, confidence,
-                canonical_json(payload), now,
+                track.id,
+                run_id,
+                identity.schema_version,
+                identity.analyzer_version,
+                identity.config_hash,
+                track.size_bytes,
+                track.mtime_ns,
+                status,
+                confidence,
+                canonical_json(payload),
+                now,
             ),
         )
         if cursor.lastrowid is None:
@@ -230,6 +244,7 @@ class AnalysisPersistence:
             """,
             (track_id, now, run_id, event_type, canonical_json(payload)),
         )
+
 
 def _derive_status(eligible: int, analyzed: int, reused: int, failed: int) -> str:
     completed = analyzed + reused

@@ -68,9 +68,7 @@ class SpectrumAnalyzer:
         self._adapter = adapter
         self._config = config
 
-    def analyze(
-        self, samples: Sequence[float] | np.ndarray, sample_rate: int
-    ) -> SpectrumFacts:
+    def analyze(self, samples: Sequence[float] | np.ndarray, sample_rate: int) -> SpectrumFacts:
         extracted = self._adapter.extract(samples, sample_rate)
         normalized = {name: self._normalize(extracted.get(name)) for name in FACT_NAMES}
         centroid = extracted.get("spectral_centroid")

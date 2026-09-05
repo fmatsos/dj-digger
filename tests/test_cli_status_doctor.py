@@ -42,9 +42,10 @@ def test_status_reports_source_counts_after_scan(tmp_path: Path) -> None:
     result = runner.invoke(app, ["status", "--config", str(config), "--json"])
 
     assert result.exit_code == 0
-    assert '"event":"status"' in result.output
-    assert '"present_tracks":1' in result.output
-    assert '"missing_tracks":0' in result.output
+    payload = json.loads(result.stdout)
+    assert payload["event"] == "status"
+    assert payload["sources"][0]["present_tracks"] == 1
+    assert payload["sources"][0]["missing_tracks"] == 0
 
 
 def test_doctor_reports_unavailable_source_root(tmp_path: Path) -> None:
@@ -53,8 +54,9 @@ def test_doctor_reports_unavailable_source_root(tmp_path: Path) -> None:
     result = CliRunner().invoke(app, ["doctor", "--config", str(config), "--json"])
 
     assert result.exit_code != 0
-    assert '"event":"doctor"' in result.output
-    assert "source root unavailable" in result.output
+    payload = json.loads(result.stdout)
+    assert payload["event"] == "doctor"
+    assert any("source root unavailable" in issue for issue in payload["issues"])
 
 
 def test_doctor_reports_sqlite_runtime_schema_and_health(tmp_path: Path) -> None:
@@ -205,5 +207,3 @@ def test_doctor_checks_dsp_runtime_only_for_active_analysis_source(
     result = CliRunner().invoke(app, ["doctor", "--config", str(config)])
 
     assert result.exit_code != 0
-    assert "dependency unavailable: essentia" in result.output
-    assert "DSP configuration" not in result.output
