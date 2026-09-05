@@ -17,6 +17,7 @@ from dj_digger.curation.agent import (
     CurationAgent,
     CurationGroundingError,
     CurationRequest,
+    CurationResult,
     CurationTurnLimitError,
 )
 from dj_digger.curation.client import (
@@ -66,7 +67,14 @@ def endpoint() -> Iterator[tuple[str, type[_Handler]]]:
         thread.join()
 
 
-def _workspace(path: Path, endpoint: str, **overrides: object) -> WorkspaceConfig:
+def _workspace(
+    path: Path,
+    endpoint: str,
+    *,
+    request_timeout_seconds: float = 1.0,
+    total_timeout_seconds: float = 5.0,
+    max_turns: int = 5,
+) -> WorkspaceConfig:
     with Database.open(path) as database:
         database.migrate()
         database.execute(
@@ -88,21 +96,19 @@ def _workspace(path: Path, endpoint: str, **overrides: object) -> WorkspaceConfi
             "extractor_version) VALUES (1, 'Catalog Title', 'Catalog Artist', '2026-01-01', 'test')"
         )
         database.commit()
-    values: dict[str, object] = {
-        "base_url": endpoint,
-        "model": "local-model",
-        "request_timeout_seconds": 1.0,
-        "total_timeout_seconds": 5.0,
-        "max_turns": 5,
-        "max_output_tokens": 1_000,
-        "max_output_tracks": 10,
-    }
-    values.update(overrides)
     return WorkspaceConfig(
         database=path,
         exports=path.parent / "exports",
         sources=(),
-        curation=CurationConfig(**values),
+        curation=CurationConfig(
+            base_url=endpoint,
+            model="local-model",
+            request_timeout_seconds=request_timeout_seconds,
+            total_timeout_seconds=total_timeout_seconds,
+            max_turns=max_turns,
+            max_output_tokens=1_000,
+            max_output_tracks=10,
+        ),
     )
 
 
@@ -128,7 +134,7 @@ def _call(identifier: str, name: str, arguments: dict[str, Any]) -> dict[str, An
     }
 
 
-def _run(config: WorkspaceConfig, *, custom_system_prompt: str | None = None) -> object:
+def _run(config: WorkspaceConfig, *, custom_system_prompt: str | None = None) -> CurationResult:
     client = OpenAICompatibleClient(config.curation, "test-credential")
     return anyio.run(
         CurationAgent(config, client).run,
