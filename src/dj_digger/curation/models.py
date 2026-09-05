@@ -199,3 +199,52 @@ class CandidateDetails(_Model):
 class CandidateDetailsV1(_Model):
     contract_version: Literal["curation/v1"] = "curation/v1"
     candidates: tuple[CandidateDetails, ...]
+
+
+CurationKind = Literal["set", "playlist"]
+CurationStatus = Literal["draft", "validated"]
+
+
+class CurationTrack(_Model):
+    """A canonical catalog track at its one-based position in a creation."""
+
+    track_id: int = Field(gt=0)
+    position: int = Field(gt=0)
+
+
+class CreateCurationDraft(_Model):
+    """Complete draft input; model configuration must contain no secrets."""
+
+    id: str = Field(min_length=1)
+    name: str = Field(min_length=1)
+    kind: CurationKind
+    user_prompt: str
+    report_markdown: str
+    model_config_data: dict[str, object]
+    tracks: tuple[CurationTrack, ...]
+
+    @model_validator(mode="after")
+    def validate_track_uniqueness(self) -> CreateCurationDraft:
+        positions = [track.position for track in self.tracks]
+        track_ids = [track.track_id for track in self.tracks]
+        if len(positions) != len(set(positions)):
+            raise ValueError("track positions must be unique")
+        if len(track_ids) != len(set(track_ids)):
+            raise ValueError("tracks must be unique")
+        return self
+
+
+class CurationCreation(_Model):
+    """A persisted curation creation and its ordered canonical tracks."""
+
+    id: str
+    name: str
+    kind: CurationKind
+    user_prompt: str
+    report_markdown: str
+    status: CurationStatus
+    created_at: str
+    updated_at: str
+    validated_at: str | None
+    model_config_data: dict[str, object]
+    tracks: tuple[CurationTrack, ...]

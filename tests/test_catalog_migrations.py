@@ -182,8 +182,8 @@ def _normalized_schema(connection: sqlite3.Connection) -> dict[tuple[str, str], 
 
 def test_current_schema_copy_matches_packaged_schema() -> None:
     root = Path(__file__).parents[1]
-    assert (root / "schemas/catalog-v9.sql").read_bytes() == (
-        root / "src/dj_digger/catalog/sql/catalog-v9.sql"
+    assert (root / "schemas/catalog-v10.sql").read_bytes() == (
+        root / "src/dj_digger/catalog/sql/catalog-v10.sql"
     ).read_bytes()
 
 
@@ -198,7 +198,8 @@ def test_wheel_migrates_without_the_checkout_schema(tmp_path: Path) -> None:
     isolated_package = tmp_path / "installed"
     with zipfile.ZipFile(wheel) as archive:
         packaged_files = set(archive.namelist())
-        assert "dj_digger/catalog/sql/catalog-v9.sql" in packaged_files
+        assert "dj_digger/catalog/sql/catalog-v10.sql" in packaged_files
+        assert "dj_digger/catalog/sql/migrate-v9-to-v10.sql" in packaged_files
         assert "dj_digger/catalog/sql/migrate-v6-to-v7.sql" in packaged_files
         assert "dj_digger/catalog/sql/migrate-v8-to-v9.sql" in packaged_files
         archive.extractall(isolated_package)
@@ -249,7 +250,7 @@ def test_isolated_wheel_upgrades_a_v6_catalog(tmp_path: Path) -> None:
             "from dj_digger.catalog.database import Database; "
             "database = Database.open(Path('catalog.sqlite')); "
             "database.migrate(); "
-            "assert database.scalar('PRAGMA user_version') == 9; "
+            "assert database.scalar('PRAGMA user_version') == 10; "
             "assert database.scalar('SELECT audio_analysis_id FROM current_track_analysis') == 61",
         ],
         check=False,
@@ -298,14 +299,14 @@ def test_catalog_migration_is_idempotent_after_reopening(tmp_path: Path) -> None
     database.migrate()
     database.migrate()
 
-    assert database.scalar("PRAGMA user_version") == 9
+    assert database.scalar("PRAGMA user_version") == 10
     assert database.scalar("PRAGMA foreign_keys") == 1
     assert database.table_exists("tracks")
     assert database.table_exists("track_events")
 
     reopened = Database.open(database_path)
     reopened.migrate()
-    assert reopened.scalar("PRAGMA user_version") == 9
+    assert reopened.scalar("PRAGMA user_version") == 10
     assert reopened.table_exists("library_sources")
 
 
@@ -324,7 +325,7 @@ def test_current_schema_has_embedded_metadata_input_facts(tmp_path: Path) -> Non
         row[1]: row for row in database.execute("PRAGMA table_info(embedded_metadata)").fetchall()
     }
 
-    assert database.scalar("PRAGMA user_version") == 9
+    assert database.scalar("PRAGMA user_version") == 10
     assert {"input_size_bytes", "input_mtime_ns", "normalization_version"} <= columns.keys()
     assert columns["input_size_bytes"][3] == 0
     assert columns["input_mtime_ns"][3] == 0
@@ -342,7 +343,7 @@ def test_v6_upgrade_preserves_all_rows_and_backfills_latest_success(tmp_path: Pa
     database.migrate()
 
     assert _snapshot_v6_rows(database._connection) == before
-    assert database.scalar("PRAGMA user_version") == 9
+    assert database.scalar("PRAGMA user_version") == 10
     assert database.execute("PRAGMA foreign_key_check").fetchall() == []
     assert database.execute(
         "SELECT track_id, audio_analysis_id, analysis_schema_version, analyzer_version, "
@@ -427,7 +428,7 @@ def test_v7_upgrade_preserves_all_rows_and_adds_duplicate_schema(tmp_path: Path)
     database.migrate()
 
     assert _snapshot_v7_rows(database._connection) == before
-    assert database.scalar("PRAGMA user_version") == 9
+    assert database.scalar("PRAGMA user_version") == 10
     assert database.execute("PRAGMA foreign_key_check").fetchall() == []
     assert database.table_exists("audio_fingerprints")
     assert database.execute("SELECT * FROM audio_fingerprints").fetchall() == []
@@ -599,3 +600,111 @@ def test_source_scoped_observations_reject_a_scan_from_another_source(tmp_path: 
         with pytest.raises(sqlite3.IntegrityError, match="FOREIGN KEY"):
             with database.transaction():
                 database.execute(query, (foreign_scan_id,))
+
+
+def _create_v9_catalog(path: Path) -> None:
+    root = Path(__file__).parents[1]
+    connection = sqlite3.connect(path)
+    connection.executescript(
+        (root / "src/dj_digger/catalog/sql/catalog-v9.sql").read_text(encoding="utf-8")
+    )
+    connection.execute("PRAGMA user_version = 9")
+    connection.commit()
+    connection.close()
+
+
+def test_v10_installs_curation_schema_directly(tmp_path: Path) -> None:
+    database = Database.open(tmp_path / "fresh.sqlite")
+    database.migrate()
+
+    assert database.scalar("PRAGMA user_version") == 10
+    assert database.table_exists("curation_creations")
+    assert database.table_exists("curation_creation_tracks")
+    assert database.execute("PRAGMA foreign_key_check").fetchall() == []
+
+
+def test_v9_upgrade_adds_curation_schema_atomically(tmp_path: Path) -> None:
+    path = tmp_path / "upgraded.sqlite"
+    _create_v9_catalog(path)
+    database = Database.open(path)
+    database.migrate()
+
+    assert database.scalar("PRAGMA user_version") == 10
+    assert database.table_exists("curation_creations")
+    assert database.execute("PRAGMA foreign_key_check").fetchall() == []
+
+
+def test_v9_upgrade_rolls_back_schema_and_version_on_error(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    path = tmp_path / "broken.sqlite"
+    _create_v9_catalog(path)
+    connection = sqlite3.connect(path)
+    connection.execute("PRAGMA foreign_keys = ON")
+
+    from dj_digger.catalog import migrations
+
+    original = migrations._load_sql
+    monkeypatch.setattr(
+        migrations,
+        "_load_sql",
+        lambda filename: original(filename) + "\nCREATE TABLE invalid (;",
+    )
+    with pytest.raises(sqlite3.OperationalError, match="syntax error"):
+        migrate(connection)
+
+    assert connection.execute("PRAGMA user_version").fetchone()[0] == 9
+    assert (
+        connection.execute(
+            "SELECT count(*) FROM sqlite_master WHERE name LIKE 'curation_%'"
+        ).fetchone()[0]
+        == 0
+    )
+
+
+def test_curation_schema_enforces_state_positions_and_history(tmp_path: Path) -> None:
+    database = Database.open(tmp_path / "catalog.sqlite")
+    database.migrate()
+    database.execute(
+        "INSERT INTO library_sources VALUES (?, ?, 1, 1, 1, ?, ?, NULL)",
+        ("fixture", "/fixture", "now", "now"),
+    )
+    database.execute(
+        "INSERT INTO scan_runs (id, source_id, started_at, status, scanner_version) "
+        "VALUES (1, 'fixture', 'now', 'succeeded', 'test')"
+    )
+    database.execute(
+        """INSERT INTO tracks VALUES
+        (1, 'fixture', 'one.flac', 'one.flac', '.flac', 1, 1, 'present',
+         'now', 'now', NULL, NULL, 1, 1)"""
+    )
+    database.execute(
+        """INSERT INTO curation_creations VALUES
+        ('creation', 'Name', 'set', 'prompt', 'report', 'draft',
+         'now', 'now', NULL, '{}')"""
+    )
+    database.execute("INSERT INTO curation_creation_tracks VALUES ('creation', 1, 1)")
+    database.commit()
+
+    for statement in (
+        "UPDATE curation_creations SET status = 'unknown' WHERE id = 'creation'",
+        "UPDATE curation_creations SET status = 'validated' WHERE id = 'creation'",
+        "UPDATE curation_creation_tracks SET position = 0 WHERE creation_id = 'creation'",
+        "INSERT INTO curation_creation_tracks VALUES ('creation', 999, 2)",
+    ):
+        with pytest.raises(sqlite3.IntegrityError):
+            database.execute(statement)
+        database.execute("ROLLBACK")
+
+    database.execute(
+        "UPDATE tracks SET presence_status = 'missing', missing_since = 'later' WHERE id = 1"
+    )
+    database.commit()
+    assert (
+        database.scalar(
+            "SELECT track_id FROM curation_creation_tracks WHERE creation_id = 'creation'"
+        )
+        == 1
+    )
+    with pytest.raises(sqlite3.IntegrityError):
+        database.execute("DELETE FROM tracks WHERE id = 1")

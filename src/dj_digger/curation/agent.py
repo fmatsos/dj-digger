@@ -10,6 +10,7 @@ from typing import Any
 from mcp.types import CallToolResult
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
+from dj_digger.catalog.database import Database
 from dj_digger.config import WorkspaceConfig
 from dj_digger.curation.catalog import CurationCatalog, CurationCatalogError
 from dj_digger.curation.client import (
@@ -17,7 +18,7 @@ from dj_digger.curation.client import (
     CurationResponseError,
     OpenAICompatibleClient,
 )
-from dj_digger.curation.models import CandidateDetails, CandidateRef
+from dj_digger.curation.models import CandidateDetails, CandidateRef, CurationCreation
 from dj_digger.curation.prompts import CUSTOM_SYSTEM_PROMPT_PREFIX, SYSTEM_PROMPT
 from dj_digger.mcp_server import create_curation_mcp_server
 
@@ -25,7 +26,9 @@ ALLOWED_TOOLS = (
     "get_library_overview",
     "search_curation_candidates",
     "get_curation_candidates",
+    "create_curation",
 )
+WRITE_TOOL = "create_curation"
 
 
 class CurationAgentError(RuntimeError):
@@ -57,18 +60,6 @@ class CurationRequest(BaseModel):
         return self
 
 
-class AgentSelection(BaseModel):
-    model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
-    source_id: str = Field(min_length=1)
-    track_id: int = Field(gt=0)
-    rationale: str = Field(min_length=1, max_length=1_000)
-
-
-class _AgentAnswer(BaseModel):
-    model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
-    selections: list[AgentSelection]
-
-
 class CuratedTrack(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
     rationale: str
@@ -79,6 +70,7 @@ class CurationResult(BaseModel):
     """Final result whose factual fields are rebuilt from the catalog."""
 
     model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
+    creation: CurationCreation
     tracks: tuple[CuratedTrack, ...]
 
 
@@ -148,11 +140,21 @@ class CurationAgent:
                                 raise CurationResponseError(
                                     "curation model returned invalid tool arguments"
                                 )
+                            if call.function.name == WRITE_TOOL:
+                                if len(response.tool_calls) != 1:
+                                    raise CurationGroundingError(
+                                        "creation write must be the only tool call in its turn"
+                                    )
+                                arguments["user_prompt"] = request.prompt.strip()
                             result = await self._server.call_tool(call.function.name, arguments)
                             if not isinstance(result, CallToolResult):
                                 raise CurationGroundingError("catalog tool requested user input")
                             if result.is_error or result.structured_content is None:
                                 raise CurationGroundingError("catalog tool call failed")
+                            if call.function.name == WRITE_TOOL:
+                                return self._ground_creation(
+                                    result.structured_content, request.max_tracks
+                                )
                             messages.append(
                                 {
                                     "role": "tool",
@@ -163,28 +165,36 @@ class CurationAgent:
                                 }
                             )
                         continue
-                    if response.content is None:
-                        raise CurationResponseError("curation model returned no result")
-                    return self._ground(response.content, request.max_tracks)
+                    raise CurationGroundingError(
+                        "curation model must create its result with create_curation"
+                    )
         except TimeoutError:
             raise CurationTurnLimitError("curation agent exceeded its total timeout") from None
         except CurationClientError:
             raise
         raise CurationTurnLimitError("curation agent exceeded its maximum number of turns")
 
-    def _ground(self, content: str, max_tracks: int) -> CurationResult:
+    def _ground_creation(self, content: dict[str, Any], max_tracks: int) -> CurationResult:
         try:
-            answer = _AgentAnswer.model_validate_json(content)
+            creation = CurationCreation.model_validate(content)
         except ValidationError:
-            raise CurationResponseError("curation model returned an invalid final result") from None
-        if not 1 <= len(answer.selections) <= max_tracks:
+            raise CurationResponseError("curation tool returned an invalid creation") from None
+        if not 1 <= len(creation.tracks) <= max_tracks:
             raise CurationGroundingError("curation result has an invalid track count")
+        with Database.open_read_only(self._config.database) as database:
+            source_by_track = {
+                int(track_id): str(source_id)
+                for track_id, source_id in database.execute(
+                    "SELECT id, source_id FROM tracks WHERE id IN ({})".format(
+                        ",".join("?" for _ in creation.tracks)
+                    ),
+                    tuple(track.track_id for track in creation.tracks),
+                )
+            }
         refs = [
-            CandidateRef(source_id=item.source_id, track_id=item.track_id)
-            for item in answer.selections
+            CandidateRef(source_id=source_by_track[track.track_id], track_id=track.track_id)
+            for track in creation.tracks
         ]
-        if len({(ref.source_id, ref.track_id) for ref in refs}) != len(refs):
-            raise CurationGroundingError("curation result contains duplicate tracks")
         try:
             resolved = self._catalog.get_candidates(refs)
         except CurationCatalogError:
@@ -192,8 +202,9 @@ class CurationAgent:
                 "curation result references an unknown or unavailable track"
             ) from None
         return CurationResult(
+            creation=creation,
             tracks=tuple(
-                CuratedTrack(rationale=selection.rationale, catalog=details)
-                for selection, details in zip(answer.selections, resolved.candidates, strict=True)
-            )
+                CuratedTrack(rationale="Persisted in curation report.", catalog=details)
+                for details in resolved.candidates
+            ),
         )

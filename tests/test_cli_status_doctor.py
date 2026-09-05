@@ -70,7 +70,7 @@ def test_doctor_reports_sqlite_runtime_schema_and_health(tmp_path: Path) -> None
     payload = json.loads(result.output)
     assert payload["database"] == str((tmp_path / "catalog.sqlite").resolve())
     assert payload["sqlite_version"]
-    assert payload["migration_version"] == 9
+    assert payload["migration_version"] == 10
     assert payload["journal_mode"] == "wal"
     assert payload["foreign_keys"] == 1
     assert payload["synchronous"] == 1
@@ -90,7 +90,7 @@ def test_doctor_reports_sqlite_runtime_schema_and_health(tmp_path: Path) -> None
     (
         ("foreign_keys", "OFF", "SQLite foreign keys are disabled"),
         ("journal_mode", "DELETE", "SQLite journal mode is delete, expected wal"),
-        ("user_version", "7", "SQLite migration version is 7, expected 9"),
+        ("user_version", "7", "SQLite migration version is 7, expected 10"),
     ),
 )
 def test_doctor_marks_unhealthy_sqlite_settings_as_issues(

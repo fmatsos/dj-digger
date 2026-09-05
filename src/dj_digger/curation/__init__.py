@@ -6,9 +6,15 @@ from dj_digger.curation.models import (
     CandidateDetailsV1,
     CandidateRef,
     CandidateSearchV1,
+    CreateCurationDraft,
+    CurationCreation,
+    CurationKind,
+    CurationStatus,
+    CurationTrack,
     LibraryOverviewV1,
     SearchFilters,
 )
+from dj_digger.curation.repository import CurationRepository
 
 __all__ = [
     "CandidateDetailsV1",
@@ -19,4 +25,10 @@ __all__ = [
     "CurationCatalogError",
     "LibraryOverviewV1",
     "SearchFilters",
+    "CreateCurationDraft",
+    "CurationCreation",
+    "CurationKind",
+    "CurationRepository",
+    "CurationStatus",
+    "CurationTrack",
 ]

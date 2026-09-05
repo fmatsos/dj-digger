@@ -92,3 +92,15 @@ def test_factory_opens_independent_connections_and_rolls_back_failed_transaction
         first.scalar("SELECT 1")
     with pytest.raises(sqlite3.ProgrammingError):
         second.scalar("SELECT 1")
+
+
+def test_write_transaction_begins_immediately(tmp_path: Path) -> None:
+    database = Database.open(tmp_path / "catalog.sqlite")
+    statements: list[str] = []
+    database._connection.set_trace_callback(statements.append)
+
+    with database.transaction():
+        database.execute("CREATE TABLE transaction_probe (value TEXT)")
+
+    assert statements[0] == "BEGIN IMMEDIATE"
+    assert statements[-1] == "COMMIT"
