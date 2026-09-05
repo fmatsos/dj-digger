@@ -2,6 +2,7 @@
 
 from dj_digger.curation.catalog import CurationCatalog, CurationCatalogError
 from dj_digger.curation.models import (
+    CandidateDetails,
     CandidateDetailsV1,
     CandidateRef,
     CandidateSearchV1,
@@ -11,6 +12,7 @@ from dj_digger.curation.models import (
 
 __all__ = [
     "CandidateDetailsV1",
+    "CandidateDetails",
     "CandidateRef",
     "CandidateSearchV1",
     "CurationCatalog",

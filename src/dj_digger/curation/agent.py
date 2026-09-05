@@ -1,0 +1,199 @@
+"""Bounded, catalog-grounded curation agent orchestration."""
+
+from __future__ import annotations
+
+import asyncio
+import json
+import os
+from typing import Any
+
+from mcp.types import CallToolResult
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
+
+from dj_digger.config import WorkspaceConfig
+from dj_digger.curation.catalog import CurationCatalog, CurationCatalogError
+from dj_digger.curation.client import (
+    CurationClientError,
+    CurationResponseError,
+    OpenAICompatibleClient,
+)
+from dj_digger.curation.models import CandidateDetails, CandidateRef
+from dj_digger.curation.prompts import CUSTOM_SYSTEM_PROMPT_PREFIX, SYSTEM_PROMPT
+from dj_digger.mcp_server import create_curation_mcp_server
+
+ALLOWED_TOOLS = (
+    "get_library_overview",
+    "search_curation_candidates",
+    "get_curation_candidates",
+)
+
+
+class CurationAgentError(RuntimeError):
+    """Sanitized, typed orchestration failure."""
+
+
+class CurationTurnLimitError(CurationAgentError):
+    """The model did not finish within its configured turn budget."""
+
+
+class CurationGroundingError(CurationAgentError):
+    """The result was not grounded in currently available catalog candidates."""
+
+
+class CurationRequest(BaseModel):
+    """Strict bounded user request."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
+    prompt: str = Field(min_length=1, max_length=4_000)
+    custom_system_prompt: str | None = Field(default=None, min_length=1, max_length=4_000)
+    max_tracks: int = Field(default=10, ge=1, le=20)
+
+    @model_validator(mode="after")
+    def reject_blank(self) -> CurationRequest:
+        if not self.prompt.strip():
+            raise ValueError("prompt must not be blank")
+        if self.custom_system_prompt is not None and not self.custom_system_prompt.strip():
+            raise ValueError("custom_system_prompt must not be blank")
+        return self
+
+
+class AgentSelection(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
+    source_id: str = Field(min_length=1)
+    track_id: int = Field(gt=0)
+    rationale: str = Field(min_length=1, max_length=1_000)
+
+
+class _AgentAnswer(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
+    selections: list[AgentSelection]
+
+
+class CuratedTrack(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
+    rationale: str
+    catalog: CandidateDetails
+
+
+class CurationResult(BaseModel):
+    """Final result whose factual fields are rebuilt from the catalog."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
+    tracks: tuple[CuratedTrack, ...]
+
+
+class CurationAgent:
+    def __init__(
+        self, config: WorkspaceConfig, client: OpenAICompatibleClient | None = None
+    ) -> None:
+        self._config = config
+        self._catalog = CurationCatalog(config.database)
+        self._server = create_curation_mcp_server(config)
+        self._client = client or OpenAICompatibleClient(
+            config.curation, os.environ.get(config.curation.api_key_env)
+        )
+
+    async def run(self, request: CurationRequest) -> CurationResult:
+        if request.max_tracks > self._config.curation.max_output_tracks:
+            raise CurationGroundingError(
+                "requested track count exceeds the configured output limit"
+            )
+        available_tools = [
+            tool for tool in await self._server.list_tools() if tool.name in ALLOWED_TOOLS
+        ]
+        if tuple(tool.name for tool in available_tools) != ALLOWED_TOOLS:
+            raise CurationAgentError("curation tool composition is invalid")
+        tool_defs: list[dict[str, Any]] = [
+            {
+                "type": "function",
+                "function": {
+                    "name": tool.name,
+                    "description": tool.description or "DJ Digger catalog query",
+                    "parameters": tool.input_schema,
+                },
+            }
+            for tool in available_tools
+        ]
+        messages: list[dict[str, Any]] = [{"role": "system", "content": SYSTEM_PROMPT}]
+        if request.custom_system_prompt is not None:
+            messages.append(
+                {
+                    "role": "system",
+                    "content": CUSTOM_SYSTEM_PROMPT_PREFIX + request.custom_system_prompt.strip(),
+                }
+            )
+        messages.append(
+            {
+                "role": "user",
+                "content": f"Select at most {request.max_tracks} tracks. {request.prompt.strip()}",
+            }
+        )
+        try:
+            async with asyncio.timeout(self._config.curation.total_timeout_seconds):
+                for _turn in range(self._config.curation.max_turns):
+                    response = await asyncio.to_thread(self._client.complete, messages, tool_defs)
+                    assistant = response.model_dump(mode="json", exclude_defaults=True)
+                    messages.append(assistant)
+                    if response.tool_calls:
+                        for call in response.tool_calls:
+                            if call.type != "function" or call.function.name not in ALLOWED_TOOLS:
+                                raise CurationGroundingError("model requested a forbidden tool")
+                            try:
+                                arguments = json.loads(call.function.arguments)
+                            except (json.JSONDecodeError, TypeError):
+                                raise CurationResponseError(
+                                    "curation model returned invalid tool arguments"
+                                ) from None
+                            if not isinstance(arguments, dict):
+                                raise CurationResponseError(
+                                    "curation model returned invalid tool arguments"
+                                )
+                            result = await self._server.call_tool(call.function.name, arguments)
+                            if not isinstance(result, CallToolResult):
+                                raise CurationGroundingError("catalog tool requested user input")
+                            if result.is_error or result.structured_content is None:
+                                raise CurationGroundingError("catalog tool call failed")
+                            messages.append(
+                                {
+                                    "role": "tool",
+                                    "tool_call_id": call.id,
+                                    "content": json.dumps(
+                                        result.structured_content, separators=(",", ":")
+                                    ),
+                                }
+                            )
+                        continue
+                    if response.content is None:
+                        raise CurationResponseError("curation model returned no result")
+                    return self._ground(response.content, request.max_tracks)
+        except TimeoutError:
+            raise CurationTurnLimitError("curation agent exceeded its total timeout") from None
+        except CurationClientError:
+            raise
+        raise CurationTurnLimitError("curation agent exceeded its maximum number of turns")
+
+    def _ground(self, content: str, max_tracks: int) -> CurationResult:
+        try:
+            answer = _AgentAnswer.model_validate_json(content)
+        except ValidationError:
+            raise CurationResponseError("curation model returned an invalid final result") from None
+        if not 1 <= len(answer.selections) <= max_tracks:
+            raise CurationGroundingError("curation result has an invalid track count")
+        refs = [
+            CandidateRef(source_id=item.source_id, track_id=item.track_id)
+            for item in answer.selections
+        ]
+        if len({(ref.source_id, ref.track_id) for ref in refs}) != len(refs):
+            raise CurationGroundingError("curation result contains duplicate tracks")
+        try:
+            resolved = self._catalog.get_candidates(refs)
+        except CurationCatalogError:
+            raise CurationGroundingError(
+                "curation result references an unknown or unavailable track"
+            ) from None
+        return CurationResult(
+            tracks=tuple(
+                CuratedTrack(rationale=selection.rationale, catalog=details)
+                for selection, details in zip(answer.selections, resolved.candidates, strict=True)
+            )
+        )

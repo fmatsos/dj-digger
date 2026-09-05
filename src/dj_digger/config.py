@@ -2,6 +2,7 @@
 
 import hashlib
 import json
+import re
 import tomllib
 from dataclasses import dataclass, field
 from importlib.resources import as_file, files
@@ -149,6 +150,20 @@ class MasteringConfig:
 
 
 @dataclass(frozen=True)
+class CurationConfig:
+    """Bounded OpenAI-compatible curation runtime configuration."""
+
+    base_url: str = "https://api.openai.com/v1"
+    model: str = "gpt-5-mini"
+    api_key_env: str = "OPENAI_API_KEY"
+    request_timeout_seconds: float = 30.0
+    total_timeout_seconds: float = 120.0
+    max_turns: int = 8
+    max_output_tokens: int = 2_000
+    max_output_tracks: int = 20
+
+
+@dataclass(frozen=True)
 class WorkspaceConfig:
     """Immutable configuration for a DJ Digger workspace."""
 
@@ -158,6 +173,7 @@ class WorkspaceConfig:
     dsp: DspConfig = field(default_factory=DspConfig.canonical)
     dsp_path: Path | None = None
     mastering: MasteringConfig = field(default_factory=MasteringConfig)
+    curation: CurationConfig = field(default_factory=CurationConfig)
 
     @classmethod
     def load(cls, path: Path, *, dsp_path: Path | None = None) -> "WorkspaceConfig":
@@ -212,6 +228,7 @@ class WorkspaceConfig:
         # configuration as a structured diagnostic instead of aborting config parsing.
         dsp = DspConfig.canonical()
         mastering = _mastering_config(raw_config.get("mastering"))
+        curation = _curation_config(raw_config.get("curation"))
         return cls(
             database,
             exports,
@@ -219,6 +236,7 @@ class WorkspaceConfig:
             dsp,
             configured_dsp,
             mastering,
+            curation,
         )
 
 
@@ -300,6 +318,60 @@ def _mastering_config(value: object) -> MasteringConfig:
             table.get("review_thresholds"), "mastering.review_thresholds", REVIEW_DEFAULTS
         ),
     )
+
+
+def _curation_config(value: object) -> CurationConfig:
+    if value is None:
+        return CurationConfig()
+    table = _mapping(value, "curation")
+    forbidden = {name for name in table if name.lower() in {"api_key", "key", "token", "secret"}}
+    if forbidden:
+        raise ValueError("curation secrets must be supplied only through an environment variable")
+    defaults = CurationConfig()
+    base_url = _non_empty_string(table.get("base_url", defaults.base_url), "curation.base_url")
+    if not base_url.startswith(("http://", "https://")):
+        raise ValueError("curation.base_url must be an HTTP(S) URL")
+    model = _non_empty_string(table.get("model", defaults.model), "curation.model")
+    api_key_env = _non_empty_string(
+        table.get("api_key_env", defaults.api_key_env), "curation.api_key_env"
+    )
+    if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", api_key_env) is None:
+        raise ValueError("curation.api_key_env must be a valid environment variable name")
+    request_timeout = _number(
+        table.get("request_timeout_seconds", defaults.request_timeout_seconds),
+        "curation.request_timeout_seconds",
+    )
+    total_timeout = _number(
+        table.get("total_timeout_seconds", defaults.total_timeout_seconds),
+        "curation.total_timeout_seconds",
+    )
+    max_turns = _integer(table.get("max_turns", defaults.max_turns), "curation.max_turns")
+    max_tokens = _integer(
+        table.get("max_output_tokens", defaults.max_output_tokens), "curation.max_output_tokens"
+    )
+    max_tracks = _integer(
+        table.get("max_output_tracks", defaults.max_output_tracks), "curation.max_output_tracks"
+    )
+    if request_timeout <= 0 or total_timeout <= 0 or total_timeout < request_timeout:
+        raise ValueError("curation timeouts must be positive and total must cover each request")
+    if not 1 <= max_turns <= 32 or not 1 <= max_tokens <= 100_000 or not 1 <= max_tracks <= 20:
+        raise ValueError("curation turn and output limits are outside supported bounds")
+    return CurationConfig(
+        base_url=base_url.rstrip("/"),
+        model=model,
+        api_key_env=api_key_env,
+        request_timeout_seconds=request_timeout,
+        total_timeout_seconds=total_timeout,
+        max_turns=max_turns,
+        max_output_tokens=max_tokens,
+        max_output_tracks=max_tracks,
+    )
+
+
+def _non_empty_string(value: object, name: str) -> str:
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"{name} must be a non-empty string")
+    return value.strip()
 
 
 def _is_within(path: Path, root: Path) -> bool:
