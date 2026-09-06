@@ -151,6 +151,11 @@ class CurationAgent:
                                     raise CurationGroundingError(
                                         "creation write must be the only tool call in its turn"
                                     )
+                                tracks = arguments.get("tracks")
+                                if isinstance(tracks, list) and len(tracks) > request.max_tracks:
+                                    raise CurationGroundingError(
+                                        "curation result has an invalid track count"
+                                    )
                                 arguments["user_prompt"] = request.prompt.strip()
                                 arguments["kind"] = request.kind
                                 if request.name is not None:

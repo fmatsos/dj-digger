@@ -158,10 +158,18 @@ def _run_curation(
 ) -> None:
     try:
         config = WorkspaceConfig.load(config_path)
+    except Exception as error:
+        typer.echo(f"Error: {_curation_error(error)}", err=True)
+        raise typer.Exit(1) from None
+    try:
         with WorkspaceApplication(config) as service:
             payload = action(service)
     except Exception as error:
-        typer.echo(f"Error: {_curation_error(error)}", err=True)
+        message = _curation_error(error)
+        RunLogger(config.database).write(
+            {"event": "curation", "status": "failed", "error": message}
+        )
+        typer.echo(f"Error: {message}", err=True)
         raise typer.Exit(1) from None
     _emit_curation(payload, json_output=json_output)
 
