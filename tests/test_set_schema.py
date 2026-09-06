@@ -95,6 +95,24 @@ def fixture_legacy_set() -> dict[str, object]:
     }
 
 
+def fixture_legacy_transition() -> dict[str, object]:
+    return {
+        "from_path": "Fixture/Track.flac",
+        "to_path": "Fixture/Track.flac",
+        "compatibility": 0.8,
+        "confidence": "HIGH",
+        "strategy": "STANDARD_BLEND",
+        "overlap_bars": 16,
+        "outgoing_region": "outro",
+        "incoming_region": "intro",
+        "target_bpm": 128,
+        "from_pitch_percent": 0,
+        "to_pitch_percent": 0,
+        "bass_handoff": "midpoint",
+        "reasons": ["fixture"],
+    }
+
+
 def test_curation_result_accepts_the_current_contract() -> None:
     validate_curation_result(fixture_result())
 
@@ -104,6 +122,16 @@ def test_curation_result_rejects_nonexistent_transition_reference() -> None:
     payload["transitions"][0]["to"]["track_id"] = 99  # type: ignore[index]
 
     with pytest.raises(ValidationError, match="does not reference a canonical track"):
+        validate_curation_result(payload)
+
+
+def test_curation_result_rejects_nonexistent_evidence_track_position() -> None:
+    payload = fixture_result()
+    payload["report"]["attested_facts"][0]["evidence"][0]["track_positions"] = [99]  # type: ignore[index]
+
+    with pytest.raises(
+        ValidationError, match="evidence does not reference a canonical track position"
+    ):
         validate_curation_result(payload)
 
 
@@ -151,3 +179,24 @@ def test_curation_result_rejects_unsourced_attested_fact() -> None:
 
 def test_historical_dj_set_v2_remains_compatible() -> None:
     validate_curation_result(fixture_legacy_set())
+
+
+def test_historical_dj_set_v2_rejects_missing_transition_path() -> None:
+    payload = fixture_legacy_set()
+    transition = fixture_legacy_transition()
+    transition["to_path"] = "Fixture/Missing.flac"
+    payload["transitions"] = [transition]
+
+    with pytest.raises(ValidationError, match="ambiguous or does not resolve"):
+        validate_curation_result(payload)
+
+
+def test_historical_dj_set_v2_rejects_ambiguous_transition_path() -> None:
+    payload = fixture_legacy_set()
+    duplicate_path_track = copy.deepcopy(payload["tracks"][0])  # type: ignore[index]
+    duplicate_path_track.update({"position": 2, "source_id": "second-source", "track_id": 43})
+    payload["tracks"].append(duplicate_path_track)  # type: ignore[union-attr]
+    payload["transitions"] = [fixture_legacy_transition()]
+
+    with pytest.raises(ValidationError, match="ambiguous or does not resolve"):
+        validate_curation_result(payload)
