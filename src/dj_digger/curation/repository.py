@@ -1,6 +1,7 @@
 """Transactional persistence for durable curation creations."""
 
 import json
+import sqlite3
 from datetime import UTC, datetime
 from typing import cast
 
@@ -24,6 +25,19 @@ class CurationRepository:
         """Persist a draft, report, and tracks; config is caller-sanitized and non-secret."""
         now = _now()
         with self._database.transaction():
+            track_ids = tuple(track.track_id for track in draft.tracks)
+            if not track_ids:
+                raise ValueError("a curation must contain at least one track")
+            available = int(
+                self._database.scalar(
+                    "SELECT count(*) FROM tracks WHERE presence_status = 'present' "
+                    f"AND id IN ({','.join('?' for _ in track_ids)})",
+                    track_ids,
+                )
+                or 0
+            )
+            if available != len(track_ids):
+                raise sqlite3.IntegrityError("curation references an unknown or unavailable track")
             self._database.execute(
                 """
                 INSERT INTO curation_creations (
@@ -79,6 +93,22 @@ class CurationRepository:
         if creation is None:
             raise RuntimeError("validated curation could not be read")
         return creation
+
+    def list(self, status: CurationStatus | None = None) -> tuple[CurationCreation, ...]:
+        """Return creations newest first, optionally filtered for API consumers."""
+        if status is None:
+            rows = self._database.execute(
+                "SELECT id FROM curation_creations ORDER BY created_at DESC, id"
+            ).fetchall()
+        else:
+            rows = self._database.execute(
+                "SELECT id FROM curation_creations WHERE status = ? ORDER BY created_at DESC, id",
+                (status,),
+            ).fetchall()
+        creations = tuple(self.get(str(row[0])) for row in rows)
+        if any(creation is None for creation in creations):
+            raise RuntimeError("listed curation could not be read")
+        return cast(tuple[CurationCreation, ...], creations)
 
     def get(self, creation_id: str) -> CurationCreation | None:
         """Return one creation with tracks ordered by their persisted position."""

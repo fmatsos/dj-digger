@@ -3,8 +3,9 @@
 import json
 import math
 import os
+from collections.abc import Callable
 from pathlib import Path
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 
 import typer
 
@@ -12,7 +13,19 @@ from dj_digger import background
 from dj_digger.application import WorkspaceApplication
 from dj_digger.completion import install_patches
 from dj_digger.config import WorkspaceConfig
-from dj_digger.curation import CurationCatalog
+from dj_digger.curation import CurationCatalog, CurationCreation, CurationStatus
+from dj_digger.curation.agent import (
+    CurationGroundingError,
+    CurationMCPError,
+    CurationRequest,
+    CurationTurnLimitError,
+)
+from dj_digger.curation.client import (
+    CurationAuthenticationError,
+    CurationResponseError,
+    CurationTimeoutError,
+    CurationTransportError,
+)
 from dj_digger.logging import RunLogger
 from dj_digger.mcp_server import create_curation_mcp_server
 from dj_digger.rich_progress import RichProgressReporter
@@ -27,7 +40,9 @@ app = typer.Typer(
     context_settings={"help_option_names": ["-h", "--help"]},
 )
 database_app = typer.Typer(help="Inspect and maintain the SQLite catalog.")
+curation_app = typer.Typer(help="Create, inspect, and validate catalog-grounded curations.")
 app.add_typer(database_app, name="database")
+app.add_typer(curation_app, name="curation")
 
 
 @app.callback()
@@ -74,6 +89,173 @@ ConfigOption = Annotated[
 ]
 
 
+JsonOption = Annotated[
+    bool, typer.Option("--json", help="Emit the compact machine-readable JSON payload.")
+]
+
+
+def _creation_payload(creation: CurationCreation, *, include_report: bool = True) -> dict[str, Any]:
+    payload: dict[str, Any] = {
+        "id": creation.id,
+        "name": creation.name,
+        "kind": creation.kind,
+        "status": creation.status,
+        "created_at": creation.created_at,
+        "updated_at": creation.updated_at,
+        "validated_at": creation.validated_at,
+        "model": creation.model_config_data,
+        "tracks": [track.model_dump(mode="json") for track in creation.tracks],
+    }
+    if include_report:
+        payload["report_markdown"] = creation.report_markdown
+    return payload
+
+
+def _emit_curation(payload: dict[str, Any], *, json_output: bool) -> None:
+    if json_output:
+        typer.echo(json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")))
+        return
+    typer.echo(f"{payload['name']} ({payload['id']})")
+    typer.echo(f"kind: {payload['kind']}")
+    typer.echo(f"status: {payload['status']}")
+    tracks = payload.get("tracks", [])
+    typer.echo("tracks: " + ", ".join(str(track["track_id"]) for track in tracks))
+    for creation in payload.get("curations", []):
+        typer.echo(
+            f"{creation['id']}  {creation['status']}  {creation['kind']}  {creation['name']}"
+        )
+    if "report_markdown" in payload:
+        typer.echo("report:")
+        typer.echo(str(payload["report_markdown"]))
+
+
+def _curation_error(error: Exception) -> str:
+    if isinstance(error, CurationAuthenticationError):
+        return "Remote authentication failed; check the configured credential environment variable."
+    if isinstance(error, (CurationTimeoutError, CurationTurnLimitError)):
+        return "Curation timed out; retry or increase the configured timeout."
+    if isinstance(error, CurationResponseError):
+        return "The model returned an invalid response; verify model compatibility and retry."
+    if isinstance(error, CurationTransportError):
+        return "The model request failed; check endpoint availability and authentication."
+    if isinstance(error, CurationMCPError):
+        return "The catalog tool failed; run database quick-check and retry."
+    if isinstance(error, CurationGroundingError):
+        return "A selected track reference is stale or unavailable; refresh the catalog and retry."
+    if isinstance(error, RuntimeError):
+        return "Curation state conflict; reload the curation before retrying."
+    if isinstance(error, (OSError, ValueError)):
+        return "Invalid curation configuration or input; check paths, options, and config values."
+    return "Curation failed safely; check the workspace database and retry."
+
+
+def _run_curation(
+    config_path: Path,
+    action: Callable[[WorkspaceApplication], dict[str, Any]],
+    *,
+    json_output: bool,
+) -> None:
+    try:
+        config = WorkspaceConfig.load(config_path)
+        with WorkspaceApplication(config) as service:
+            payload = action(service)
+    except Exception as error:
+        typer.echo(f"Error: {_curation_error(error)}", err=True)
+        raise typer.Exit(1) from None
+    _emit_curation(payload, json_output=json_output)
+
+
+@curation_app.command("create")
+def curation_create(
+    config: ConfigOption,
+    prompt: Annotated[str | None, typer.Argument(help="Direct curation prompt.")] = None,
+    prompt_file: Annotated[
+        Path | None,
+        typer.Option("--prompt-file", exists=True, file_okay=True, dir_okay=False, readable=True),
+    ] = None,
+    kind: Annotated[Literal["set", "playlist"], typer.Option("--kind")] = "set",
+    name: Annotated[str | None, typer.Option("--name")] = None,
+    max_tracks: Annotated[int, typer.Option("--max-tracks", min=1, max=20)] = 10,
+    json_output: JsonOption = False,
+) -> None:
+    """Run the curation agent and atomically save its grounded result as a draft."""
+    if (prompt is None) == (prompt_file is None):
+        raise typer.BadParameter("provide exactly one of PROMPT or --prompt-file")
+    try:
+        if prompt is not None:
+            text = prompt
+        elif prompt_file is not None:
+            text = prompt_file.read_text(encoding="utf-8")
+        else:
+            raise ValueError("missing prompt")
+    except (OSError, UnicodeError):
+        typer.echo("Error: Prompt file is unreadable UTF-8; fix the file and retry.", err=True)
+        raise typer.Exit(1) from None
+
+    def action(service: WorkspaceApplication) -> dict[str, Any]:
+        result = service.curation_create(
+            CurationRequest(prompt=text, kind=kind, name=name, max_tracks=max_tracks)
+        )
+        return _creation_payload(result.creation)
+
+    _run_curation(config, action, json_output=json_output)
+
+
+@curation_app.command("show")
+def curation_show(
+    creation_id: Annotated[str, typer.Argument(metavar="ID")],
+    config: ConfigOption,
+    json_output: JsonOption = False,
+) -> None:
+    """Show sanitized metadata, ordered tracks, status, and Markdown report."""
+
+    def action(service: WorkspaceApplication) -> dict[str, Any]:
+        creation = service.curation_get(creation_id)
+        if creation is None:
+            raise ValueError("unknown curation ID")
+        return _creation_payload(creation)
+
+    _run_curation(config, action, json_output=json_output)
+
+
+@curation_app.command("list")
+def curation_list(
+    config: ConfigOption,
+    status: Annotated[CurationStatus | None, typer.Option("--status")] = None,
+    json_output: JsonOption = False,
+) -> None:
+    """List curations, optionally filtered by lifecycle status."""
+
+    def action(service: WorkspaceApplication) -> dict[str, Any]:
+        return {
+            "name": "curations",
+            "id": "list",
+            "kind": "collection",
+            "status": status or "all",
+            "tracks": [],
+            "curations": [
+                _creation_payload(creation, include_report=False)
+                for creation in service.curation_list(status)
+            ],
+        }
+
+    _run_curation(config, action, json_output=json_output)
+
+
+@curation_app.command("validate")
+def curation_validate(
+    creation_id: Annotated[str, typer.Argument(metavar="ID")],
+    config: ConfigOption,
+    json_output: JsonOption = False,
+) -> None:
+    """Explicitly transition a reviewed draft to validated."""
+    _run_curation(
+        config,
+        lambda service: _creation_payload(service.curation_validate(creation_id)),
+        json_output=json_output,
+    )
+
+
 @app.command("mcp")
 def mcp_server(config: ConfigOption) -> None:
     """Serve the read-only curation catalog over MCP stdio."""
@@ -113,9 +295,6 @@ PositiveWorkersOption = Annotated[
 BackgroundOption = Annotated[
     bool,
     typer.Option("--background", help="Detach and run this command in the background."),
-]
-JsonOption = Annotated[
-    bool, typer.Option("--json", help="Emit the compact machine-readable JSON payload.")
 ]
 
 
