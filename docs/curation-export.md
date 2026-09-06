@@ -2,10 +2,11 @@
 
 > Current functional documentation for the `dj-digger curation export` command.
 
-A persisted draft or validated curation can be exported with:
+A persisted `draft` or `validated` curation can be exported with:
 
 ```console
-dj-digger curation export ID --content playlist|report|both [--copy-files] --output PATH
+dj-digger curation export ID --config config/demo.toml \
+  --content playlist|report|both [--copy-files] --output demo-exports/NAME
 ```
 
 The output path must not already exist. DJ Digger prepares the complete output in a
@@ -34,3 +35,8 @@ Before publication, every catalog identity is resolved against its matching
 that escape through links, missing or non-regular files, and files whose recorded size or
 modification time no longer matches the snapshot. Destination symbolic links and existing
 paths are also refused.
+
+The normal lifecycle is `curation create` (always `draft`), human inspection with
+`curation show`, and explicit `curation validate` (`draft` → `validated`). Export does
+not imply validation and deliberately supports both statuses. See
+[Native curation](curation.md) for the complete command sequence and status filters.

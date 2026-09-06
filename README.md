@@ -29,8 +29,12 @@ It can:
 For the data flow, catalog model, processing boundaries, and SQLite lifecycle, see
 [Architecture](docs/ARCHITECTURE.md).
 
-The bounded read-only MCP interface for curation is documented in
+The bounded MCP interface for curation is documented in
 [docs/mcp.md](docs/mcp.md).
+
+The implemented native curation workflow, including endpoint configuration, private
+data disclosure, strict catalog grounding, human validation, and export variants, is
+documented in [docs/curation.md](docs/curation.md).
 
 ## CLI output and exports
 
@@ -155,11 +159,11 @@ ffprobe -version
 3. Edit `config/local.toml`. Inside Docker, music sources must use paths below
    `/music`. The database and exports should remain below `/workspace`.
 
-4. Build the image and check the configuration. Replace `/path/to/music` with the
-   parent folder of the source paths configured in `config/local.toml`.
+4. Build the image and check the configuration. The fictional example below expects
+   `demo-library/neon-archive` and `demo-library/lunar-radio` directories.
 
    ```bash
-   export DJ_DIGGER_MUSIC_ROOT=/path/to/music
+   export DJ_DIGGER_MUSIC_ROOT="$PWD/demo-library"
    docker compose build
    docker compose run --rm dj-digger doctor --config /config/local.toml
    ```
@@ -173,9 +177,10 @@ ffprobe -version
 The SQLite database is written to `workspace/dj-digger.sqlite`. Published files are
 written to `workspace/exports/` with the example configuration.
 
-DJ Digger uses Catalog V9. It creates fresh V9 catalogs and upgrades V6 catalogs in
-place. Catalogs from V1 through V5 remain unsupported; preserve them as backups and
-move them out of the configured workspace before creating a fresh V9 catalog.
+DJ Digger uses Catalog V10. It creates fresh V10 catalogs and upgrades V6 through V9
+catalogs in place. Catalogs from V1 through V5 remain unsupported; preserve them as
+backups and move them out of the configured workspace before creating a fresh V10
+catalog.
 
 ### Native Python installation
 
@@ -240,8 +245,8 @@ uvx dj-digger ...
 For example, `doctor` and `refresh` are available through either `uvx` form:
 
 ```bash
-uvx dj-digger doctor --config /path/to/config.toml
-uvx dj-digger refresh --config /path/to/config.toml
+uvx dj-digger doctor --config config/demo.toml
+uvx dj-digger refresh --config config/demo.toml
 ```
 
 `uvx` installs Python dependencies declared by the package, including the audio
@@ -269,7 +274,7 @@ real music library:
 synchronizes the active lockfile. `maintenance.sh` repeats the lockfile sync for
 warm starts and branch changes. The runtime check creates private, synthetic WAV
 fixtures in a temporary directory and exercises the public `doctor`, `refresh`,
-`duplicates`, and `export` commands through SQLite Catalog V9. It never requires
+`duplicates`, and `export` commands through SQLite Catalog V10. It never requires
 or exposes the real media library. Docker and Docker Agent remain optional paths
 for image distribution and orchestration; offline development uses the prepared
 environment and local fixtures.
@@ -292,6 +297,17 @@ explicit read-only library root and output directory.
 | `snapshot` | Create a validated export snapshot. |
 | `copy` | Copy and renumber a playlist or explicit tracks into a portable set directory. |
 | `jobs` | List background jobs started with `--background` and their status. |
+| `curation create` | Run the bounded catalog-grounded agent and persist a draft. |
+| `curation show` / `curation list` | Review a creation or list it by `draft`/`validated` status. |
+| `curation validate` | Record the explicit human-reviewed `draft` → `validated` transition. |
+| `curation export` | Publish a report, playlist, or both, with optional portable track copies. |
+| `mcp` | Serve the bounded curation tools to a local external agent over stdio. |
+
+DJ Digger catalog identities and facts are authoritative during native curation.
+General model knowledge may guide strategy and explanation only; no track absent
+from current catalog tool results can be persisted. A model-created selection is
+always a `draft`, requiring human review before `curation validate` marks it
+`validated`. Multi-source playlists require `curation export --copy-files`.
 
 Catalog commands print compact JSON diagnostics. Exit code `0` means success, `1`
 means failure, and `2` means that the command completed only partially. `copy` reports
@@ -305,7 +321,7 @@ running the analysis, the command detaches a copy of itself (same arguments, min
 `--background`) into its own process group and returns immediately with a job id:
 
 ```json
-{"event":"analyze","status":"background","job_id":"15ac91341eeb","pid":1079394,"log":"/path/to/workspace/jobs/15ac91341eeb.log"}
+{"event":"analyze","status":"background","job_id":"15ac91341eeb","pid":1079394,"log":"demo-workspace/jobs/15ac91341eeb.log"}
 ```
 
 The detached process keeps running after the launching shell exits or an SSH
@@ -345,7 +361,7 @@ URIs are rejected. Blank lines and playlist comments are ignored. A safe
 inherit the playlist's last group.
 
 The copied files are prefixed with their set order, for example
-`01 - opening.flac`. The output also contains:
+`01 - Aurora Pulse.flac`. The output also contains:
 
 - the input playlist filename, or `playlist.m3u8` when only `--track` is used;
 - a same-stem `.txt` manifest containing order, group, copied filename, and original
@@ -360,10 +376,10 @@ Copy a playlist and append an encore track:
 
 ```bash
 dj-digger copy \
-  --library /media/music \
-  --output /srv/share/my-set \
-  --playlist sets/my-set.m3u8 \
-  --track "Encore/closing.flac" \
+  --library demo-library/neon-archive \
+  --output demo-exports/neon-observatory \
+  --playlist examples/neon-observatory.m3u8 \
+  --track "Fictional Encore/Aurora Pulse.flac" \
   --owner share:share \
   --verbose
 ```
@@ -372,10 +388,10 @@ Copy explicit tracks without an input playlist:
 
 ```bash
 dj-digger copy \
-  -l /media/music \
-  -o /srv/share/closing-set \
-  -t "Closing/first.flac" \
-  -t "Closing/last.flac" \
+  -l demo-library/lunar-radio \
+  -o demo-exports/lunar-closing \
+  -t "Fictional Closing/Moonlit Relay.flac" \
+  -t "Fictional Closing/Quiet Comet.flac" \
   --owner 1000:1000
 ```
 
@@ -657,10 +673,10 @@ immediately and will be reused after restarting the command.
 
 ### Why is my existing SQLite catalog rejected?
 
-DJ Digger creates fresh V9 catalogs and upgrades V6 catalogs in place. Catalogs created
-with versions V1 through V5 are not upgraded. Preserve an unsupported database as a
-backup, move it out of the configured workspace location, and rerun DJ Digger to create
-a fresh V9 catalog.
+DJ Digger creates fresh V10 catalogs and upgrades V6 through V9 catalogs in place.
+Catalogs created with versions V1 through V5 are not upgraded. Preserve an
+unsupported database as a backup, move it out of the configured workspace location,
+and rerun DJ Digger to create a fresh V10 catalog.
 
 ### Why does `doctor` report missing programs?
 
@@ -740,7 +756,7 @@ docker agent debug toolsets ./docker-agent.yaml --working-dir "$PWD"
 
 ## Architecture
 
-See [Architecture](docs/ARCHITECTURE.md) for the current Catalog V9 data model,
+See [Architecture](docs/ARCHITECTURE.md) for the current Catalog V10 data model,
 migration path, connection and concurrency lifecycle, processing flows, publication
 contracts, maintenance commands, and extension invariants.
 ## Duplicate mastering review

@@ -13,18 +13,28 @@ from their authoritative inputs.
 ```mermaid
 flowchart LR
     Sources[Configured music sources] --> Scan[Scan and metadata]
-    Scan --> Catalog[(SQLite Catalog V9)]
+    Scan --> Catalog[(SQLite Catalog V10)]
     Sources --> Workers[Per-track analysis workers]
     Workers --> Parent[Parent analysis pipeline]
     Parent --> Catalog
     Catalog --> Exports[Validated exports]
     Catalog --> Snapshots[Snapshots and archives]
     Exports --> Curator[LLM curator and other consumers]
+    CLI[CLI: curation create/show/list/validate/export] --> Agent[CurationAgent]
+    Agent --> Client[OpenAI-compatible client]
+    Client --> Endpoint[Configured chat/completions endpoint]
+    Agent --> MCP[MCPServer: in-memory]
     Catalog --> Curation[CurationCatalog]
-    Curation --> MCP[MCPServer: in-memory or stdio]
-    MCP --> Native[Future native curator]
-    MCP --> External[External local agents]
-    Curator --> Sets[JSON, M3U8, and transition sheet]
+    Curation --> MCP
+    MCP --> Repository[CurationRepository]
+    Repository --> Catalog
+    CLI --> Repository
+    CLI --> MCPStdio[MCPServer: stdio]
+    Curation --> MCPStdio
+    MCPStdio --> External[External local agents]
+    Repository --> Exporter[Curation exporter]
+    CLI --> Exporter
+    Exporter --> Sets[Report, M3U8, and optional track copies]
 ```
 
 The main implementation layers are:
@@ -38,8 +48,12 @@ The main implementation layers are:
 | Catalog | `src/dj_digger/catalog/` | SQLite lifecycle, migrations, repositories, history, and read projections. |
 | Analysis | `src/dj_digger/analysis/` | Eligibility, isolated extraction, append-only persistence, and analysis exports. |
 | Publication | `src/dj_digger/exports/` | Schema validation, atomic export replacement, and snapshots. |
-| Curation read model | `src/dj_digger/curation/` | Exposes bounded, globally deduplicated Catalog V9 candidates. |
+| Curation read model | `src/dj_digger/curation/` | Exposes bounded, globally deduplicated Catalog V10 candidates. |
 | MCP | `src/dj_digger/mcp_server.py` | Publishes the curation read model in-process and over local stdio. |
+| Native curation agent | `src/dj_digger/curation/agent.py` | Runs the bounded model/tool loop and accepts only a grounded persisted draft. |
+| OpenAI-compatible client | `src/dj_digger/curation/client.py` | Calls the configured `/chat/completions` endpoint with bounded requests and sanitized failures. |
+| Curation repository | `src/dj_digger/curation/repository.py` | Persists ordered drafts and the one-way human-validation transition. |
+| Curation exporter | `src/dj_digger/exports/curation.py` | Atomically publishes reports, playlists, and optional portable track copies. |
 | Curation skill | `skills/electronic-dj-set-curator/` | Consumes published evidence without accessing SQLite or source files. |
 
 `WorkspaceApplication` is the orchestration boundary used by catalog commands. It
@@ -52,10 +66,11 @@ library root, playlist or explicit tracks, and output directory directly; it nei
 loads workspace configuration nor opens SQLite. It publishes a safely renumbered
 playlist, copied tracks, and manifest without modifying the source library.
 
-## Catalog V9 data model
+## Catalog V10 data model
 
-Catalog V9 deliberately separates canonical facts and history from optimized read
-projections.
+Catalog V10 retains the V9 separation of canonical facts and history from optimized
+read projections, and adds normalized curation creations, ordered track membership,
+and lifecycle constraints.
 
 ### Canonical state and history
 
@@ -113,12 +128,12 @@ are read from one SQLite snapshot and validated before any of them is replaced.
 `sqlite_utils.Migrations`. It supports exactly these paths:
 
 - an empty, unversioned database (`user_version = 0`) is initialized directly from
-  `catalog-v9.sql`;
+  `catalog-v10.sql`;
 - a V6 catalog is upgraded in place with `migrate-v6-to-v7.sql`;
-- V7 and V8 catalogs continue through their ordered packaged migrations;
-- an existing V9 catalog is adopted into the sqlite-utils migration ledger without
+- V7, V8, and V9 catalogs continue through their ordered packaged migrations;
+- an existing V10 catalog is adopted into the sqlite-utils migration ledger without
   replaying schema changes;
-- V1 through V5, unversioned non-empty databases, and versions newer than V9 are
+- V1 through V5, unversioned non-empty databases, and versions newer than V10 are
   rejected rather than guessed at or partially upgraded.
 
 The migration registry records applied steps in `_sqlite_migrations`; migration
@@ -240,9 +255,21 @@ analysis facts by `(source_id, track_id, path)`, admits only present eligible tr
 and emits validated JSON, M3U8, and Markdown artifacts. It neither writes the catalog
 nor modifies the music library.
 
-The current MCP server is a separate read-only path over the same Catalog V9
-facts. It does not replace the export-based skill and does not yet include the
-native agent loop; that is future work described in the historical plans.
+The implemented native curation path starts at `dj-digger curation create`. The CLI
+loads configuration and invokes `CurationAgent`, which sends the conversation and
+OpenAI function definitions to an OpenAI-compatible client. The agent executes the
+same MCP server factory in memory: catalog tools read authoritative candidates and
+`create_curation` is the sole write tool, normalizing selected references into a
+persisted `draft` through `CurationRepository`. The model never receives SQLite,
+source roots, absolute paths, or direct filesystem access. The separate `mcp` CLI
+command exposes this tool boundary to external local agents over stdio.
+
+Human review remains outside the model loop. A reviewer inspects the persisted order
+and report with `curation show`, then explicitly advances the immutable record from
+`draft` to `validated` with `curation validate`. The curation exporter reads either
+status from the repository and atomically emits the requested report or playlist;
+multi-source playlists require portable copied files. See
+[Native curation](curation.md) for the trust, failure, and operational contracts.
 
 ## Diagnostics and maintenance
 
@@ -281,10 +308,12 @@ Changes must preserve these boundaries:
 7. Every SQLite connection enables the required pragmas, and write transactions stay
    bounded enough for WAL readers and serialized writers.
 
-Catalog V9 extends the V8 append-only catalog with mastering attempts and the
+Catalog V9 extended the V8 append-only catalog with mastering attempts and the
 rebuildable current mastering and DJ projections. The `8 -> 9` packaged migration
-and fresh V9 schema are transactional, version-checked, foreign-key-clean, and
-wheel-installable. Any new materialized projection needs an atomic write path, a
+is transactional, version-checked, foreign-key-clean, and wheel-installable. Catalog
+V10 adds normalized curation drafts, ordered track references, and their validation
+lifecycle through the packaged `9 -> 10` migration and fresh V10 schema. Any new
+materialized projection needs an atomic write path, a
 deterministic rebuild command or routine, query-plan coverage, and preservation tests.
 Public view or export changes also require explicit schema/consumer compatibility
 decisions rather than silent column or semantic changes.
