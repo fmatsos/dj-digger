@@ -202,7 +202,7 @@ def _open_target_directory(
         os.close(current_fd)
 
 
-def _copy_track_atomic(
+def copy_track_atomic(
     source: Path, target_dir: Path, target_name: str, directory_fd: int | None
 ) -> None:
     if directory_fd is None:
@@ -247,6 +247,13 @@ def _copy_track_atomic(
             os.unlink(temporary_name, dir_fd=directory_fd)
         except FileNotFoundError:
             pass
+
+
+def _copy_track_atomic(
+    source: Path, target_dir: Path, target_name: str, directory_fd: int | None
+) -> None:
+    """Compatibility boundary for callers that instrument the set-copy operation."""
+    copy_track_atomic(source, target_dir, target_name, directory_fd)
 
 
 def _copy_track_atomic_portable(source: Path, target_dir: Path, target_name: str) -> None:
