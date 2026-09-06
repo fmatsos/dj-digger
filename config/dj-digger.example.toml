@@ -13,15 +13,15 @@ max_output_tokens = 2000
 max_output_tracks = 20
 
 [[library.sources]]
-id = "djing"
-path = "/music/djing"
+id = "neon-archive"
+path = "/music/neon-archive"
 set_eligible = true
 analyze = true
 enabled = true
 
 [[library.sources]]
-id = "music"
-path = "/music/music"
+id = "lunar-radio"
+path = "/music/lunar-radio"
 set_eligible = false
 analyze = false
 enabled = true
