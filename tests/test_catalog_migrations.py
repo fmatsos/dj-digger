@@ -315,14 +315,15 @@ def test_catalog_migrations_are_recorded_by_sqlite_utils(tmp_path: Path) -> None
 
     database.migrate()
 
-    assert database.table_exists("_sqlite_utils_migrations")
+    assert database.table_exists("_sqlite_migrations")
     assert database.execute(
-        "SELECT migration FROM _sqlite_utils_migrations WHERE name = 'dj-digger' ORDER BY migration"
+        "SELECT name FROM _sqlite_migrations WHERE migration_set = 'dj-digger' ORDER BY name"
     ).fetchall() == [
-        ("dj_digger_000_initialize_v9",),
+        ("dj_digger_000_initialize_v10",),
         ("dj_digger_006_to_007",),
         ("dj_digger_007_to_008",),
         ("dj_digger_008_to_009",),
+        ("dj_digger_009_to_010",),
     ]
 
 
@@ -330,16 +331,16 @@ def test_existing_current_catalog_is_adopted_by_sqlite_utils(tmp_path: Path) -> 
     path = tmp_path / "catalog.sqlite"
     connection = sqlite3.connect(path)
     root = Path(__file__).parents[1]
-    connection.executescript((root / "schemas/catalog-v9.sql").read_text(encoding="utf-8"))
-    connection.execute("PRAGMA user_version = 9")
+    connection.executescript((root / "schemas/catalog-v10.sql").read_text(encoding="utf-8"))
+    connection.execute("PRAGMA user_version = 10")
     connection.commit()
     connection.close()
 
     database = Database.open(path)
     database.migrate()
 
-    assert database.scalar("PRAGMA user_version") == 9
-    assert database.scalar("SELECT COUNT(*) FROM _sqlite_utils_migrations") == 4
+    assert database.scalar("PRAGMA user_version") == 10
+    assert database.scalar("SELECT COUNT(*) FROM _sqlite_migrations") == 5
 
 
 def test_current_sections_reference_current_analysis_table(tmp_path: Path) -> None:
@@ -479,10 +480,18 @@ def test_v6_upgrade_uses_begin_immediate_and_checks_foreign_keys(tmp_path: Path)
     migrate(connection)
 
     normalized = [" ".join(statement.upper().split()) for statement in statements]
-    begin = normalized.index("BEGIN IMMEDIATE")
-    foreign_key_check = normalized.index("PRAGMA FOREIGN_KEY_CHECK")
-    commit = normalized.index("COMMIT")
-    assert begin < foreign_key_check < commit
+    begins = [index for index, statement in enumerate(normalized) if statement == "BEGIN IMMEDIATE"]
+    checks = [
+        index
+        for index, statement in enumerate(normalized)
+        if statement == "PRAGMA FOREIGN_KEY_CHECK"
+    ]
+    commits = [index for index, statement in enumerate(normalized) if statement == "COMMIT"]
+    assert len(begins) == len(checks) == len(commits) == 4
+    for begin in begins:
+        check = next(index for index in checks if index > begin)
+        commit = next(index for index in commits if index > begin)
+        assert begin < check < commit
 
 
 def test_v6_upgrade_rolls_back_ddl_and_version_on_foreign_key_failure(tmp_path: Path) -> None:
