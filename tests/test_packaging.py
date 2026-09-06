@@ -52,3 +52,4 @@ def test_packaged_resources_are_resolved_without_current_working_directory(
 
     assert resources.read_text("analysis.toml").startswith("[meta]\n")
     assert '"$schema"' in resources.read_text("schemas/tracks.schema.json")
+    assert '"schema_version"' in resources.read_text("schemas/curation-result.schema.json")
