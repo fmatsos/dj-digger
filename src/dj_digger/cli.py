@@ -26,6 +26,7 @@ from dj_digger.curation.client import (
     CurationTimeoutError,
     CurationTransportError,
 )
+from dj_digger.exports.curation import CurationExportContent
 from dj_digger.logging import RunLogger
 from dj_digger.mcp_server import create_curation_mcp_server
 from dj_digger.rich_progress import RichProgressReporter
@@ -254,6 +255,33 @@ def curation_validate(
         lambda service: _creation_payload(service.curation_validate(creation_id)),
         json_output=json_output,
     )
+
+
+@curation_app.command("export")
+def curation_export(
+    creation_id: Annotated[str, typer.Argument(metavar="ID")],
+    output: Annotated[Path, typer.Option("--output", file_okay=False)],
+    config: ConfigOption,
+    content: Annotated[CurationExportContent, typer.Option("--content")] = "both",
+    copy_files: Annotated[
+        bool,
+        typer.Option(
+            "--copy-files",
+            help="Copy tracks for a portable export; required for multi-source playlists.",
+        ),
+    ] = False,
+) -> None:
+    """Export a report and/or M3U8; multi-source playlists require copied files."""
+    try:
+        workspace = WorkspaceConfig.load(config)
+        with WorkspaceApplication(workspace) as service:
+            result = service.curation_export(
+                creation_id, content=content, copy_files=copy_files, output=output
+            )
+    except Exception as error:
+        typer.echo(f"Error: {error}", err=True)
+        raise typer.Exit(1) from None
+    typer.echo(f"Exported {result.track_count} tracks to {result.output}")
 
 
 @app.command("mcp")

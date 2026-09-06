@@ -32,6 +32,7 @@ from dj_digger.duplicates.service import (
     DuplicateService,
 )
 from dj_digger.exports.audit import AuditExporter
+from dj_digger.exports.curation import CurationExportContent, CurationExportResult, export_curation
 from dj_digger.exports.snapshot import SnapshotExporter, SnapshotResult
 from dj_digger.exports.tracks import TracksExporter
 from dj_digger.metadata.exiftool import ExifToolExtractor, MetadataRunResult, MetadataService
@@ -216,6 +217,24 @@ class WorkspaceApplication:
         if creation.status != "draft":
             raise RuntimeError("curation is already validated")
         return CurationRepository(self.database).validate(creation_id)
+
+    def curation_export(
+        self,
+        creation_id: str,
+        *,
+        content: CurationExportContent,
+        copy_files: bool,
+        output: Path,
+    ) -> CurationExportResult:
+        """Publish a persisted curation from one consistent catalog snapshot."""
+        return export_curation(
+            self.database,
+            self.config,
+            creation_id,
+            content=content,
+            copy_files=copy_files,
+            output=output,
+        )
 
     def _duplicate_service(self, *, progress: ProgressReporter | None = None) -> DuplicateService:
         return DuplicateService(
