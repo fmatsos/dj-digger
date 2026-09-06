@@ -100,6 +100,26 @@ def test_all_content_and_copy_combinations(tmp_path: Path, content: str, copy_fi
     assert (output / "tracks").exists() is copy_files
 
 
+def test_report_only_without_copy_does_not_require_source_files(tmp_path: Path) -> None:
+    database, config = _fixture(tmp_path)
+    for source in config.sources:
+        source.path.rename(source.path.with_name(f"{source.path.name}-offline"))
+
+    output = tmp_path / "report-only"
+    export_curation(
+        database,
+        config,
+        "export-id",
+        content="report",
+        copy_files=False,
+        output=output,
+    )
+
+    assert (output / "report.md").read_text() == "# Exact report\n\nNo generated suffix.\n"
+    assert not (output / "curation.m3u8").exists()
+    assert not (output / "tracks").exists()
+
+
 def test_multi_source_playlist_requires_portable_copy(tmp_path: Path) -> None:
     database, config = _fixture(tmp_path, multiple_sources=True)
 

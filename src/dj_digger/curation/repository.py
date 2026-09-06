@@ -30,8 +30,10 @@ class CurationRepository:
                 raise ValueError("a curation must contain at least one track")
             available = int(
                 self._database.scalar(
-                    "SELECT count(*) FROM tracks WHERE presence_status = 'present' "
-                    f"AND id IN ({','.join('?' for _ in track_ids)})",
+                    "SELECT count(*) FROM tracks AS t "
+                    "JOIN library_sources AS s ON s.source_id = t.source_id "
+                    "WHERE t.presence_status = 'present' AND s.set_eligible = 1 "
+                    f"AND t.id IN ({','.join('?' for _ in track_ids)})",
                     track_ids,
                 )
                 or 0

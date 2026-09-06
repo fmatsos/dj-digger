@@ -13,7 +13,7 @@ from their authoritative inputs.
 ```mermaid
 flowchart LR
     Sources[Configured music sources] --> Scan[Scan and metadata]
-    Scan --> Catalog[(SQLite Catalog V10)]
+    Scan --> Catalog[(SQLite Catalog V11)]
     Sources --> Workers[Per-track analysis workers]
     Workers --> Parent[Parent analysis pipeline]
     Parent --> Catalog
@@ -48,7 +48,7 @@ The main implementation layers are:
 | Catalog | `src/dj_digger/catalog/` | SQLite lifecycle, migrations, repositories, history, and read projections. |
 | Analysis | `src/dj_digger/analysis/` | Eligibility, isolated extraction, append-only persistence, and analysis exports. |
 | Publication | `src/dj_digger/exports/` | Schema validation, atomic export replacement, and snapshots. |
-| Curation read model | `src/dj_digger/curation/` | Exposes bounded, globally deduplicated Catalog V10 candidates. |
+| Curation read model | `src/dj_digger/curation/` | Exposes bounded, globally deduplicated Catalog V11 candidates. |
 | MCP | `src/dj_digger/mcp_server.py` | Publishes the curation read model in-process and over local stdio. |
 | Native curation agent | `src/dj_digger/curation/agent.py` | Runs the bounded model/tool loop and accepts only a grounded persisted draft. |
 | OpenAI-compatible client | `src/dj_digger/curation/client.py` | Calls the configured `/chat/completions` endpoint with bounded requests and sanitized failures. |
@@ -66,9 +66,9 @@ library root, playlist or explicit tracks, and output directory directly; it nei
 loads workspace configuration nor opens SQLite. It publishes a safely renumbered
 playlist, copied tracks, and manifest without modifying the source library.
 
-## Catalog V10 data model
+## Catalog V11 data model
 
-Catalog V10 retains the V9 separation of canonical facts and history from optimized
+Catalog V11 retains the V9 separation of canonical facts and history from optimized
 read projections, and adds normalized curation creations, ordered track membership,
 and lifecycle constraints.
 
@@ -128,12 +128,12 @@ are read from one SQLite snapshot and validated before any of them is replaced.
 `sqlite_utils.Migrations`. It supports exactly these paths:
 
 - an empty, unversioned database (`user_version = 0`) is initialized directly from
-  `catalog-v10.sql`;
+  `catalog-v11.sql`;
 - a V6 catalog is upgraded in place with `migrate-v6-to-v7.sql`;
 - V7, V8, and V9 catalogs continue through their ordered packaged migrations;
-- an existing V10 catalog is adopted into the sqlite-utils migration ledger without
-  replaying schema changes;
-- V1 through V5, unversioned non-empty databases, and versions newer than V10 are
+- an existing V10 catalog is adopted into the sqlite-utils migration ledger and
+  upgraded through `migrate-v10-to-v11.sql`;
+- V1 through V5, unversioned non-empty databases, and versions newer than V11 are
   rejected rather than guessed at or partially upgraded.
 
 The migration registry records applied steps in `_sqlite_migrations`; migration
@@ -311,8 +311,9 @@ Changes must preserve these boundaries:
 Catalog V9 extended the V8 append-only catalog with mastering attempts and the
 rebuildable current mastering and DJ projections. The `8 -> 9` packaged migration
 is transactional, version-checked, foreign-key-clean, and wheel-installable. Catalog
-V10 adds normalized curation drafts, ordered track references, and their validation
-lifecycle through the packaged `9 -> 10` migration and fresh V10 schema. Any new
+V10 added normalized curation drafts, ordered track references, and their validation
+lifecycle through the packaged `9 -> 10` migration. V11 requires non-blank prompts
+and Markdown reports through the packaged `10 -> 11` migration and fresh V11 schema. Any new
 materialized projection needs an atomic write path, a
 deterministic rebuild command or routine, query-plan coverage, and preservation tests.
 Public view or export changes also require explicit schema/consumer compatibility

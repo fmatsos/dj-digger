@@ -5,13 +5,13 @@ from importlib.resources import files
 
 from sqlite_utils import Database, Migrations
 
-CURRENT_VERSION = 10
-CURRENT_SCHEMA = "catalog-v10.sql"
+CURRENT_VERSION = 11
+CURRENT_SCHEMA = "catalog-v11.sql"
 MIGRATIONS = Migrations("dj-digger")
 
 
 @MIGRATIONS(transactional=False)
-def dj_digger_000_initialize_v10(database: Database) -> None:
+def dj_digger_000_initialize_v11(database: Database) -> None:
     """Initialize an empty catalog directly at the current schema."""
     connection = database.conn
     if _version(connection) == 0:
@@ -46,6 +46,12 @@ def dj_digger_008_to_009(database: Database) -> None:
 def dj_digger_009_to_010(database: Database) -> None:
     """Upgrade a V9 catalog to V10."""
     _upgrade_if_current(database.conn, 9, "migrate-v9-to-v10.sql")
+
+
+@MIGRATIONS(transactional=False)
+def dj_digger_010_to_011(database: Database) -> None:
+    """Upgrade a V10 catalog to V11."""
+    _upgrade_if_current(database.conn, 10, "migrate-v10-to-v11.sql")
 
 
 def migrate(connection: sqlite3.Connection) -> None:

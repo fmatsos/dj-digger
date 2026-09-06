@@ -218,13 +218,17 @@ class CreateCurationDraft(_Model):
     id: str = Field(min_length=1)
     name: str = Field(min_length=1)
     kind: CurationKind
-    user_prompt: str
-    report_markdown: str
+    user_prompt: str = Field(min_length=1)
+    report_markdown: str = Field(min_length=1)
     model_config_data: dict[str, object]
     tracks: tuple[CurationTrack, ...]
 
     @model_validator(mode="after")
     def validate_track_uniqueness(self) -> CreateCurationDraft:
+        if not self.user_prompt.strip():
+            raise ValueError("user prompt must not be blank")
+        if not self.report_markdown.strip():
+            raise ValueError("Markdown report must not be blank")
         positions = [track.position for track in self.tracks]
         track_ids = [track.track_id for track in self.tracks]
         if len(positions) != len(set(positions)):

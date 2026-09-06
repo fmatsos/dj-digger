@@ -177,9 +177,9 @@ ffprobe -version
 The SQLite database is written to `workspace/dj-digger.sqlite`. Published files are
 written to `workspace/exports/` with the example configuration.
 
-DJ Digger uses Catalog V10. It creates fresh V10 catalogs and upgrades V6 through V9
+DJ Digger uses Catalog V11. It creates fresh V11 catalogs and upgrades V6 through V10
 catalogs in place. Catalogs from V1 through V5 remain unsupported; preserve them as
-backups and move them out of the configured workspace before creating a fresh V10
+backups and move them out of the configured workspace before creating a fresh V11
 catalog.
 
 ### Native Python installation
@@ -274,7 +274,7 @@ real music library:
 synchronizes the active lockfile. `maintenance.sh` repeats the lockfile sync for
 warm starts and branch changes. The runtime check creates private, synthetic WAV
 fixtures in a temporary directory and exercises the public `doctor`, `refresh`,
-`duplicates`, and `export` commands through SQLite Catalog V10. It never requires
+`duplicates`, and `export` commands through SQLite Catalog V11. It never requires
 or exposes the real media library. Docker and Docker Agent remain optional paths
 for image distribution and orchestration; offline development uses the prepared
 environment and local fixtures.
@@ -673,10 +673,10 @@ immediately and will be reused after restarting the command.
 
 ### Why is my existing SQLite catalog rejected?
 
-DJ Digger creates fresh V10 catalogs and upgrades V6 through V9 catalogs in place.
+DJ Digger creates fresh V11 catalogs and upgrades V6 through V10 catalogs in place.
 Catalogs created with versions V1 through V5 are not upgraded. Preserve an
 unsupported database as a backup, move it out of the configured workspace location,
-and rerun DJ Digger to create a fresh V10 catalog.
+and rerun DJ Digger to create a fresh V11 catalog.
 
 ### Why does `doctor` report missing programs?
 
@@ -756,7 +756,7 @@ docker agent debug toolsets ./docker-agent.yaml --working-dir "$PWD"
 
 ## Architecture
 
-See [Architecture](docs/ARCHITECTURE.md) for the current Catalog V10 data model,
+See [Architecture](docs/ARCHITECTURE.md) for the current Catalog V11 data model,
 migration path, connection and concurrency lifecycle, processing flows, publication
 contracts, maintenance commands, and extension invariants.
 ## Duplicate mastering review
