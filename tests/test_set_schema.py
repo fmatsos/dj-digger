@@ -1,21 +1,66 @@
 import copy
-import json
-import re
-from pathlib import Path
 
 import pytest
-from jsonschema import Draft202012Validator, ValidationError
+from jsonschema import ValidationError
 
-SCHEMA_PATH = Path("schemas/dj-set.schema.json")
-EMISSION_REFERENCE = Path("skills/electronic-dj-set-curator/references/set-emission.md")
+from dj_digger.curation.validation import validate_curation_result
 
 
-def fixture_set() -> dict[str, object]:
+def fixture_result() -> dict[str, object]:
+    return {
+        "schema_version": 1,
+        "schema_id": "https://dj-digger.local/schemas/v1/curation-result.schema.json",
+        "type": "set",
+        "status": "draft",
+        "identity": "curation-fixture-001",
+        "prompt": "Build a coherent one-hour set.",
+        "tracks": [
+            {
+                "position": 1,
+                "identity": {"source_id": "fixture", "track_id": 42},
+                "role": "opener",
+            },
+            {
+                "position": 2,
+                "identity": {"source_id": "fixture", "track_id": 43},
+                "role": "closer",
+            },
+        ],
+        "transitions": [
+            {
+                "from": {"source_id": "fixture", "track_id": 42},
+                "to": {"source_id": "fixture", "track_id": 43},
+                "explanation": "A general mixing suggestion, not a catalog fact.",
+            }
+        ],
+        "warnings": [],
+        "report": {
+            "summary": "A compact fixture result.",
+            "attested_facts": [
+                {
+                    "statement": "Both selections are available.",
+                    "evidence": [
+                        {"source": "dj_digger", "fact": "availability", "track_positions": [1, 2]}
+                    ],
+                }
+            ],
+            "llm_explanations": ["The ordering should create a broad narrative arc."],
+        },
+        "provenance": {
+            "generator": "dj-digger",
+            "model": "fixture-model",
+            "generated_at": "2026-01-01T00:00:00Z",
+            "catalog_snapshot": "fixture-snapshot",
+        },
+    }
+
+
+def fixture_legacy_set() -> dict[str, object]:
     return {
         "schema_version": 2,
-        "identity": "acid-rave-core",
-        "series": "Acid Rave",
-        "set_name": "Core",
+        "identity": "legacy-fixture",
+        "series": "Fixture Series",
+        "set_name": "Fixture Set",
         "brief": {
             "target_duration_minutes": 60,
             "hard": ["available"],
@@ -25,9 +70,9 @@ def fixture_set() -> dict[str, object]:
         "tracks": [
             {
                 "position": 1,
-                "source_id": "djing",
+                "source_id": "fixture",
                 "track_id": 42,
-                "path": "Acid/Track.flac",
+                "path": "Fixture/Track.flac",
                 "role": "opener",
                 "source_quality": "lossless",
                 "analysis_confidence": 1.0,
@@ -50,72 +95,59 @@ def fixture_set() -> dict[str, object]:
     }
 
 
-def validate_set(payload: dict[str, object]) -> None:
-    schema = json.loads(SCHEMA_PATH.read_text(encoding="utf-8"))
-    Draft202012Validator(schema).validate(payload)
-
-    assert EMISSION_REFERENCE.exists(), "the source-aware set emission reference must exist"
-    text = EMISSION_REFERENCE.read_text(encoding="utf-8")
-    match = re.search(r"```python set-validation\n(.*?)\n```", text, re.DOTALL)
-    assert match is not None, "the set validation contract pseudocode must be executable"
-    namespace: dict[str, object] = {}
-    exec(match.group(1), namespace)
-    namespace["validate_path_references"](payload)
+def test_curation_result_accepts_the_current_contract() -> None:
+    validate_curation_result(fixture_result())
 
 
-def test_set_track_requires_source_identity() -> None:
-    payload = fixture_set()
-    del payload["tracks"][0]["source_id"]  # type: ignore[index]
+def test_curation_result_rejects_nonexistent_transition_reference() -> None:
+    payload = fixture_result()
+    payload["transitions"][0]["to"]["track_id"] = 99  # type: ignore[index]
 
-    with pytest.raises(ValidationError):
-        validate_set(payload)
+    with pytest.raises(ValidationError, match="does not reference a canonical track"):
+        validate_curation_result(payload)
 
 
-def test_set_alternative_requires_source_identity() -> None:
-    payload = fixture_set()
-    payload["alternatives"] = [
-        {
-            "source_id": "djing",
-            "track_id": 43,
-            "path": "Acid/Alternative.flac",
-            "role": "alternative",
-            "replace_position": 1,
-            "entry_from_path": None,
-            "entry_compatibility": None,
-            "entry_strategy": None,
-            "rejoin_to_path": None,
-            "exit_compatibility": None,
-            "exit_strategy": None,
-        }
-    ]
-    del payload["alternatives"][0]["source_id"]  # type: ignore[index]
+def test_curation_result_rejects_ambiguous_stable_identity() -> None:
+    payload = fixture_result()
+    payload["tracks"][1]["identity"] = copy.deepcopy(  # type: ignore[index]
+        payload["tracks"][0]["identity"]  # type: ignore[index]
+    )
+
+    with pytest.raises(ValidationError, match="duplicate canonical track identity"):
+        validate_curation_result(payload)
+
+
+def test_curation_result_rejects_non_contiguous_positions() -> None:
+    payload = fixture_result()
+    payload["tracks"][1]["position"] = 3  # type: ignore[index]
+
+    with pytest.raises(ValidationError, match="positions must be continuous"):
+        validate_curation_result(payload)
+
+
+def test_curation_result_rejects_invalid_status() -> None:
+    payload = fixture_result()
+    payload["status"] = "unknown"
 
     with pytest.raises(ValidationError):
-        validate_set(payload)
+        validate_curation_result(payload)
 
 
-def test_set_rejects_transition_path_ambiguous_across_sources() -> None:
-    payload = fixture_set()
-    duplicate = copy.deepcopy(payload["tracks"][0])  # type: ignore[index]
-    duplicate.update({"position": 2, "source_id": "archive", "track_id": 9})
-    payload["tracks"].append(duplicate)  # type: ignore[index]
-    payload["transitions"] = [
-        {
-            "from_path": "Acid/Track.flac",
-            "to_path": "Acid/Track.flac",
-            "compatibility": 1.0,
-            "confidence": "HIGH",
-            "strategy": "STANDARD_BLEND",
-            "overlap_bars": 16,
-            "outgoing_region": "outro",
-            "incoming_region": "intro",
-            "target_bpm": 130,
-            "from_pitch_percent": 0,
-            "to_pitch_percent": 0,
-            "bass_handoff": "swap",
-            "reasons": ["fixture"],
-        }
-    ]
+def test_curation_result_requires_report() -> None:
+    payload = fixture_result()
+    del payload["report"]
 
-    with pytest.raises(ValidationError, match="ambiguous"):
-        validate_set(payload)
+    with pytest.raises(ValidationError):
+        validate_curation_result(payload)
+
+
+def test_curation_result_rejects_unsourced_attested_fact() -> None:
+    payload = fixture_result()
+    payload["report"]["attested_facts"][0]["evidence"] = []  # type: ignore[index]
+
+    with pytest.raises(ValidationError):
+        validate_curation_result(payload)
+
+
+def test_historical_dj_set_v2_remains_compatible() -> None:
+    validate_curation_result(fixture_legacy_set())
