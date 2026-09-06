@@ -110,7 +110,7 @@ are read from one SQLite snapshot and validated before any of them is replaced.
 ## Catalog migration lifecycle
 
 `src/dj_digger/catalog/migrations.py` registers every catalog transition with
-`sqlite_utils.migrations.Migrations`. It supports exactly these paths:
+`sqlite_utils.Migrations`. It supports exactly these paths:
 
 - an empty, unversioned database (`user_version = 0`) is initialized directly from
   `catalog-v9.sql`;
@@ -121,7 +121,7 @@ are read from one SQLite snapshot and validated before any of them is replaced.
 - V1 through V5, unversioned non-empty databases, and versions newer than V9 are
   rejected rather than guessed at or partially upgraded.
 
-The migration registry records applied steps in `_sqlite_utils_migrations`; migration
+The migration registry records applied steps in `_sqlite_migrations`; migration
 functions remain ordered, deterministic adapters around packaged SQL resources. This
 ledger is the sole mechanism for all future catalog migrations. `user_version` remains
 the application compatibility boundary so older catalogs can be adopted safely and
