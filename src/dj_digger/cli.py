@@ -294,7 +294,7 @@ def curation_export(
 
 @app.command("mcp")
 def mcp_server(config: ConfigOption) -> None:
-    """Serve the read-only curation catalog over MCP stdio."""
+    """Serve bounded curation reads and draft creation over MCP stdio."""
     try:
         workspace = WorkspaceConfig.load(config)
         CurationCatalog(workspace.database).overview()
