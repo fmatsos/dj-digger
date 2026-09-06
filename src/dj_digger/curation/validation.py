@@ -1,6 +1,7 @@
 """Validation for packaged, versioned curation result contracts."""
 
 import json
+from collections import defaultdict
 from collections.abc import Mapping
 from importlib.resources import files
 from typing import Any
@@ -46,6 +47,16 @@ def _validate_current(payload: Mapping[str, object]) -> None:
     if positions != list(range(1, len(tracks) + 1)):
         raise ValidationError("canonical track positions must be continuous and ordered from 1")
 
+    report = payload["report"]
+    assert isinstance(report, Mapping)
+    attested_facts = report["attested_facts"]
+    assert isinstance(attested_facts, list)
+    known_positions = set(positions)
+    for attested_fact in attested_facts:
+        for evidence in attested_fact["evidence"]:
+            if not set(evidence["track_positions"]).issubset(known_positions):
+                raise ValidationError("evidence does not reference a canonical track position")
+
     identities = [_identity(track["identity"]) for track in tracks]
     if len(identities) != len(set(identities)):
         raise ValidationError("duplicate canonical track identity is ambiguous")
@@ -56,10 +67,41 @@ def _validate_current(payload: Mapping[str, object]) -> None:
                 raise ValidationError(f"transition {endpoint} does not reference a canonical track")
 
 
+def _validate_legacy_path_references(payload: Mapping[str, object]) -> None:
+    tracks = payload["tracks"]
+    transitions = payload["transitions"]
+    alternatives = payload["alternatives"]
+    assert isinstance(tracks, list)
+    assert isinstance(transitions, list)
+    assert isinstance(alternatives, list)
+
+    sources_by_path: dict[str, set[str]] = defaultdict(set)
+    for track in tracks:
+        sources_by_path[track["path"]].add(track["source_id"])
+
+    references: list[tuple[str, str]] = []
+    for transition in transitions:
+        references.extend(
+            (("from_path", transition["from_path"]), ("to_path", transition["to_path"]))
+        )
+    for alternative in alternatives:
+        for field in ("entry_from_path", "rejoin_to_path"):
+            path = alternative[field]
+            if path is not None:
+                references.append((field, path))
+
+    for field, path in references:
+        if len(sources_by_path[path]) != 1:
+            raise ValidationError(
+                f"{field} path {path!r} is ambiguous or does not resolve to a selected track"
+            )
+
+
 def validate_curation_result(payload: Mapping[str, object]) -> None:
     """Validate a current result or the explicitly supported historical set V2."""
     if payload.get("schema_version") == 2 and "schema_id" not in payload:
         Draft202012Validator(_load_schema("dj-set.schema.json")).validate(payload)
+        _validate_legacy_path_references(payload)
         return
     if payload.get("schema_id") != _CURRENT_SCHEMA_ID:
         raise ValidationError("unsupported curation result schema identifier")
