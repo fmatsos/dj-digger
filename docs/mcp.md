@@ -1,20 +1,21 @@
 # Curation MCP (current)
 
-DJ Digger exposes a deliberately small, read-only Model Context Protocol (MCP)
-surface over Catalog V9. It is intended for local external agents and for the
-future native curator. It never writes the catalog, reads source audio, or
-accepts SQL.
+DJ Digger exposes a deliberately small Model Context Protocol (MCP) surface over
+the current catalog. The implemented native curator uses the server factory in
+memory; local external agents can use the same contract over stdio. Catalog reads
+are bounded, and the only write is creation of a normalized `draft`. The server
+never reads source audio or accepts SQL.
 
 ## Start the server
 
 Prepare the catalog with the normal workflow first (`refresh`, duplicate
 fingerprinting, and quality/mastering analysis when needed). The server refuses
-missing, empty, or non-V9 catalogs.
+missing, empty, or non-V10 catalogs.
 
 ```bash
-uv run dj-digger mcp --config /path/to/config.toml
-dj-digger mcp --config /path/to/config.toml
-uvx dj-digger mcp --config /path/to/config.toml
+uv run dj-digger mcp --config config/demo.toml
+dj-digger mcp --config config/demo.toml
+uvx dj-digger mcp --config config/demo.toml
 ```
 
 The process uses MCP stdio only. Do not configure a host, port, token, HTTP
@@ -22,7 +23,7 @@ endpoint, SSE endpoint, or remote bind address.
 
 ## Tools
 
-Exactly three tools are published:
+Exactly four tools are published:
 
 * `get_library_overview` returns bounded counts, source IDs, freshness timestamps,
   analysis status coverage, quality status coverage, and deterministic facets.
@@ -32,6 +33,10 @@ Exactly three tools are published:
   filters apply to the selected representative.
 * `get_curation_candidates` accepts 1-20 unique `{source_id, track_id}` references
   from search and preserves request order.
+* `create_curation` accepts the name, `set` or `playlist` kind, original user prompt,
+  Markdown report, and an ordered non-empty list of candidate references. It resolves
+  the references against current available catalog tracks and atomically persists a
+  `draft`; it cannot create a `validated` record.
 
 Results use contract version `curation/v1`. Candidate identity is the exact
 `(source_id, track_id, path)` tuple, with a source-relative path. Duplicate
@@ -45,7 +50,7 @@ windows. Missing values are JSON `null`.
 
 ## Privacy boundary
 
-Responses contain only identity, discovery metadata, audio format/quality,
+Read responses contain only identity, discovery metadata, audio format/quality,
 allowlisted analysis facts, intro/outro windows, section summaries, and current
 mastering/DJ values. They never contain source roots, absolute paths, database or
 export paths, file size/mtime, hashes or fingerprints, analyzer/config versions,
@@ -62,7 +67,7 @@ tested shape for Claude Code is:
     "dj-digger-curation": {
       "type": "stdio",
       "command": "uvx",
-      "args": ["dj-digger", "mcp", "--config", "/path/to/config.toml"]
+      "args": ["dj-digger", "mcp", "--config", "config/demo.toml"]
     }
   }
 }
@@ -73,7 +78,7 @@ server configuration. Keep the config and database on the local machine.
 Client configuration keys can evolve independently; the command remains the
 public contract.
 
-The next native-agent tranche will use the same factory in memory:
+The native agent uses the same factory in memory:
 
 ```python
 from mcp import Client
@@ -84,8 +89,11 @@ async with Client(server) as client:
     overview = await client.call_tool("get_library_overview", {})
 ```
 
-This does not implement the native agent loop, provider, transition evaluator,
-draft validation, persistence, or set emission.
+The public `dj-digger curation create` command composes that in-memory server with
+the bounded OpenAI-compatible client. `create_curation` is the only model-accessible
+mutation; human validation and export remain explicit CLI operations. See
+[Native curation](curation.md) for endpoint configuration, data disclosure, trust
+order, limits, failure behavior, review, and export commands.
 
 ## Troubleshooting
 
