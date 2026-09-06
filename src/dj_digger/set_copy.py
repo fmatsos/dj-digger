@@ -203,10 +203,22 @@ def _open_target_directory(
 
 
 def copy_track_atomic(
-    source: Path, target_dir: Path, target_name: str, directory_fd: int | None
+    source: Path,
+    target_dir: Path,
+    target_name: str,
+    directory_fd: int | None,
+    *,
+    expected_size: int | None = None,
+    expected_mtime_ns: int | None = None,
 ) -> None:
     if directory_fd is None:
-        _copy_track_atomic_portable(source, target_dir, target_name)
+        _copy_track_atomic_portable(
+            source,
+            target_dir,
+            target_name,
+            expected_size=expected_size,
+            expected_mtime_ns=expected_mtime_ns,
+        )
         return
     try:
         destination_status = os.stat(target_name, dir_fd=directory_fd, follow_symlinks=False)
@@ -224,11 +236,17 @@ def copy_track_atomic(
         dir_fd=directory_fd,
     )
     try:
-        source_status = source.stat()
-        with source.open("rb") as source_stream, os.fdopen(temporary_fd, "wb") as target_stream:
+        source_fd = _open_source(source)
+        with (
+            os.fdopen(source_fd, "rb") as source_stream,
+            os.fdopen(temporary_fd, "wb") as target_stream,
+        ):
             temporary_fd = -1
+            source_status = os.fstat(source_stream.fileno())
+            _verify_source_identity(source, source_status, expected_size, expected_mtime_ns)
             shutil.copyfileobj(source_stream, target_stream)
             target_stream.flush()
+            _verify_source_unchanged(source, source_stream.fileno(), source_status)
             os.fchmod(target_stream.fileno(), stat.S_IMODE(source_status.st_mode))
             os.utime(
                 target_stream.fileno(),
@@ -256,7 +274,14 @@ def _copy_track_atomic(
     copy_track_atomic(source, target_dir, target_name, directory_fd)
 
 
-def _copy_track_atomic_portable(source: Path, target_dir: Path, target_name: str) -> None:
+def _copy_track_atomic_portable(
+    source: Path,
+    target_dir: Path,
+    target_name: str,
+    *,
+    expected_size: int | None,
+    expected_mtime_ns: int | None,
+) -> None:
     destination = target_dir / target_name
     if destination.is_symlink():
         raise ValueError(f"Refusing to overwrite destination symbolic link: {destination}")
@@ -266,10 +291,58 @@ def _copy_track_atomic_portable(source: Path, target_dir: Path, target_name: str
     os.close(descriptor)
     temporary = Path(temporary_value)
     try:
-        shutil.copy2(source, temporary)
+        source_fd = _open_source(source)
+        with os.fdopen(source_fd, "rb") as source_stream, temporary.open("wb") as target_stream:
+            source_status = os.fstat(source_stream.fileno())
+            _verify_source_identity(source, source_status, expected_size, expected_mtime_ns)
+            shutil.copyfileobj(source_stream, target_stream)
+            target_stream.flush()
+            _verify_source_unchanged(source, source_stream.fileno(), source_status)
+            os.fchmod(target_stream.fileno(), stat.S_IMODE(source_status.st_mode))
+            os.utime(
+                target_stream.fileno(),
+                ns=(source_status.st_atime_ns, source_status.st_mtime_ns),
+            )
         os.replace(temporary, destination)
     finally:
         temporary.unlink(missing_ok=True)
+
+
+def _open_source(source: Path) -> int:
+    flags = os.O_RDONLY
+    if hasattr(os, "O_NOFOLLOW"):
+        flags |= os.O_NOFOLLOW
+    try:
+        return os.open(source, flags)
+    except OSError:
+        raise ValueError(f"Refusing unsafe or missing source track: {source}") from None
+
+
+def _verify_source_identity(
+    source: Path,
+    status: os.stat_result,
+    expected_size: int | None,
+    expected_mtime_ns: int | None,
+) -> None:
+    if not stat.S_ISREG(status.st_mode):
+        raise ValueError(f"Refusing source track that is not a regular file: {source}")
+    if (expected_size is not None and status.st_size != expected_size) or (
+        expected_mtime_ns is not None and status.st_mtime_ns != expected_mtime_ns
+    ):
+        raise ValueError(f"track identity changed; rescan: {source}")
+
+
+def _verify_source_unchanged(source: Path, source_fd: int, before: os.stat_result) -> None:
+    after = os.fstat(source_fd)
+    try:
+        path_status = source.stat(follow_symlinks=False)
+    except FileNotFoundError:
+        raise ValueError(f"track identity changed during copy; rescan: {source}") from None
+    stable_fields = ("st_dev", "st_ino", "st_size", "st_mtime_ns", "st_ctime_ns")
+    if any(getattr(before, field) != getattr(after, field) for field in stable_fields) or (
+        path_status.st_dev != after.st_dev or path_status.st_ino != after.st_ino
+    ):
+        raise ValueError(f"track identity changed during copy; rescan: {source}")
 
 
 def _set_recursive_ownership(output: Path, uid: int, gid: int) -> None:
