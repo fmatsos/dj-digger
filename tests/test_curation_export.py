@@ -186,12 +186,27 @@ def test_copy_failure_cleans_staging_and_publishes_nothing(
     real_copy = curation_export_module.copy_track_atomic
     calls = 0
 
-    def fail_second(source: Path, target_dir: Path, name: str, directory_fd: int | None) -> None:
+    def fail_second(
+        source: Path,
+        target_dir: Path,
+        name: str,
+        directory_fd: int | None,
+        *,
+        expected_size: int,
+        expected_mtime_ns: int,
+    ) -> None:
         nonlocal calls
         calls += 1
         if calls == 2:
             raise OSError("injected copy failure")
-        real_copy(source, target_dir, name, directory_fd)
+        real_copy(
+            source,
+            target_dir,
+            name,
+            directory_fd,
+            expected_size=expected_size,
+            expected_mtime_ns=expected_mtime_ns,
+        )
 
     monkeypatch.setattr(curation_export_module, "copy_track_atomic", fail_second)
     output = tmp_path / "failed"
@@ -207,6 +222,50 @@ def test_copy_failure_cleans_staging_and_publishes_nothing(
 
     assert not output.exists()
     assert list(tmp_path.glob(".failed.*")) == []
+
+
+def test_source_changed_during_copy_never_publishes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    database, config = _fixture(tmp_path)
+    real_copy = curation_export_module.copy_track_atomic
+    changed_source = tmp_path / "source-a" / "second.flac"
+
+    def change_after_copy(
+        source: Path,
+        target_dir: Path,
+        name: str,
+        directory_fd: int | None,
+        *,
+        expected_size: int,
+        expected_mtime_ns: int,
+    ) -> None:
+        real_copy(
+            source,
+            target_dir,
+            name,
+            directory_fd,
+            expected_size=expected_size,
+            expected_mtime_ns=expected_mtime_ns,
+        )
+        if source == changed_source:
+            source.write_bytes(b"changed after copy")
+
+    monkeypatch.setattr(curation_export_module, "copy_track_atomic", change_after_copy)
+    output = tmp_path / "changed-during-copy"
+
+    with pytest.raises(ValueError, match="identity changed.*rescan"):
+        export_curation(
+            database,
+            config,
+            "export-id",
+            content="both",
+            copy_files=True,
+            output=output,
+        )
+
+    assert not output.exists()
+    assert list(tmp_path.glob(".changed-during-copy.*")) == []
 
 
 @pytest.mark.parametrize("content", ["playlist", "report", "both"])
