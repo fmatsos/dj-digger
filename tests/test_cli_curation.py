@@ -59,6 +59,12 @@ def _workspace(tmp_path: Path, endpoint: str) -> tuple[Path, Path]:
             "last_seen_scan_id) VALUES (1, 'public-source', 'safe.flac', 'safe.flac', '.flac', "
             "1, 1, 'present', 'now', 'now', 1, 1)"
         )
+        database.execute(
+            "INSERT INTO tracks (id, source_id, relative_path, filename, extension, size_bytes, "
+            "mtime_ns, presence_status, discovered_at, last_seen_at, created_scan_id, "
+            "last_seen_scan_id) VALUES (2, 'public-source', 'second.flac', 'second.flac', "
+            "'.flac', 1, 1, 'present', 'now', 'now', 1, 1)"
+        )
         database.commit()
     config = tmp_path / "config.toml"
     config.write_text(
@@ -189,6 +195,43 @@ def test_create_failures_leave_no_partial_rows(
     assert error in result.stderr.lower()
     assert "local-secret" not in result.output
     assert "/private/library/root" not in result.output
+    log = (database_path.parent / "logs" / "dj-digger.log").read_text(encoding="utf-8")
+    assert '"event": "curation"' in log
+    assert '"status": "failed"' in log
+    assert error in log.lower()
+    with Database.open_read_only(database_path) as database:
+        assert database.scalar("SELECT count(*) FROM curation_creations") == 0
+        assert database.scalar("SELECT count(*) FROM curation_creation_tracks") == 0
+
+
+def test_create_rejects_track_count_before_persisting_draft(
+    tmp_path: Path, endpoint: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    config, database_path = _workspace(tmp_path, endpoint)
+    monkeypatch.setenv("TEST_CURATION_KEY", "local-credential")
+    response = json.loads(_completion())
+    arguments = response["choices"][0]["message"]["tool_calls"][0]["function"]["arguments"]
+    creation = json.loads(arguments)
+    creation["tracks"].append({"source_id": "public-source", "track_id": 2})
+    response["choices"][0]["message"]["tool_calls"][0]["function"]["arguments"] = json.dumps(
+        creation
+    )
+    _Endpoint.response = json.dumps(response).encode()
+
+    result = CliRunner().invoke(
+        app,
+        [
+            "curation",
+            "create",
+            "Build one selection",
+            "--max-tracks",
+            "1",
+            "--config",
+            str(config),
+        ],
+    )
+
+    assert result.exit_code == 1
     with Database.open_read_only(database_path) as database:
         assert database.scalar("SELECT count(*) FROM curation_creations") == 0
         assert database.scalar("SELECT count(*) FROM curation_creation_tracks") == 0
