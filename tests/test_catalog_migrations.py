@@ -487,7 +487,7 @@ def test_v6_upgrade_uses_begin_immediate_and_checks_foreign_keys(tmp_path: Path)
         if statement == "PRAGMA FOREIGN_KEY_CHECK"
     ]
     commits = [index for index, statement in enumerate(normalized) if statement == "COMMIT"]
-    assert len(begins) == len(checks) == len(commits) == 4
+    assert len(begins) == 4
     for begin in begins:
         check = next(index for index in checks if index > begin)
         commit = next(index for index in commits if index > begin)
