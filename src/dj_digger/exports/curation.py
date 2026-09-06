@@ -91,7 +91,12 @@ def export_curation(
                 raise ValueError(
                     "multi-source playlists require --copy-files and a portable --output target"
                 )
-            resolved = tuple(_resolve_track(track, roots) for track in tracks)
+            for track in tracks:
+                _validate_relative_track_path(track)
+            needs_audio = copy_files or content in {"playlist", "both"}
+            resolved = (
+                tuple(_resolve_track(track, roots) for track in tracks) if needs_audio else ()
+            )
             playlist_entries: list[str] = []
             if copy_files:
                 track_dir = staging / "tracks"
@@ -145,9 +150,7 @@ def _resolve_track(track: _Track, roots: dict[str, Path]) -> Path:
     root = roots.get(track.source_id)
     if root is None:
         raise ValueError(f"source is not configured: {track.source_id}")
-    relative = Path(track.relative_path)
-    if relative.is_absolute() or ".." in relative.parts:
-        raise ValueError(f"unsafe relative track path for source {track.source_id}")
+    relative = _validate_relative_track_path(track)
     candidate = root / relative
     try:
         resolved = candidate.resolve(strict=True)
@@ -167,6 +170,13 @@ def _resolve_track(track: _Track, roots: dict[str, Path]) -> Path:
             f"{track.relative_path}"
         )
     return resolved
+
+
+def _validate_relative_track_path(track: _Track) -> Path:
+    relative = Path(track.relative_path)
+    if relative.is_absolute() or ".." in relative.parts:
+        raise ValueError(f"unsafe relative track path for source {track.source_id}")
+    return relative
 
 
 def _playlist_entry(value: str) -> str:

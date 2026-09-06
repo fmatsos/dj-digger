@@ -69,6 +69,26 @@ def test_create_draft_rolls_back_parent_when_any_track_is_invalid(tmp_path: Path
     assert database.scalar("SELECT count(*) FROM curation_creation_tracks") == 0
 
 
+def test_create_draft_rechecks_source_eligibility_in_write_transaction(tmp_path: Path) -> None:
+    database = _catalog_with_tracks(tmp_path / "catalog.sqlite")
+    database.execute("UPDATE library_sources SET set_eligible = 0 WHERE source_id = 'fixture'")
+    database.commit()
+
+    with pytest.raises(sqlite3.IntegrityError, match="unknown or unavailable"):
+        CurationRepository(database).create_draft(_draft())
+
+    assert database.scalar("SELECT count(*) FROM curation_creations") == 0
+
+
+@pytest.mark.parametrize("field", ["user_prompt", "report_markdown"])
+def test_create_draft_rejects_blank_required_narrative(field: str) -> None:
+    values = _draft().model_dump()
+    values[field] = "   "
+
+    with pytest.raises(ValueError, match="must not be blank"):
+        CreateCurationDraft.model_validate(values)
+
+
 def test_creation_rejects_duplicate_positions_at_database_boundary(tmp_path: Path) -> None:
     database = _catalog_with_tracks(tmp_path / "catalog.sqlite")
     repository = CurationRepository(database)

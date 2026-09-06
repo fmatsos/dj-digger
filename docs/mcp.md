@@ -10,7 +10,7 @@ never reads source audio or accepts SQL.
 
 Prepare the catalog with the normal workflow first (`refresh`, duplicate
 fingerprinting, and quality/mastering analysis when needed). The server refuses
-missing, empty, or non-V10 catalogs.
+missing, empty, or non-V11 catalogs.
 
 ```bash
 uv run dj-digger mcp --config config/demo.toml
