@@ -97,9 +97,17 @@ def export_curation(
                 track_dir = staging / "tracks"
                 track_dir.mkdir()
                 width = max(2, len(str(len(resolved))))
-                for position, source in enumerate(resolved, 1):
+                for position, (track, source) in enumerate(zip(tracks, resolved, strict=True), 1):
                     name = f"{position:0{width}d} - {source.name}"
-                    copy_track_atomic(source, track_dir, name, None)
+                    copy_track_atomic(
+                        source,
+                        track_dir,
+                        name,
+                        None,
+                        expected_size=track.size_bytes,
+                        expected_mtime_ns=track.mtime_ns,
+                    )
+                    _resolve_track(track, roots)
                     playlist_entries.append(_playlist_entry(f"tracks/{name}"))
             else:
                 playlist_entries = [_playlist_entry(str(path)) for path in resolved]
