@@ -105,7 +105,13 @@ class OpenAICompatibleClient:
                 raw = response.read(self._config.max_output_tokens * 16 + 1)
         except TimeoutError:
             raise CurationTimeoutError("curation model request timed out") from None
-        except (urllib.error.HTTPError, urllib.error.URLError, OSError):
+        except urllib.error.HTTPError as error:
+            if error.code in {401, 403}:
+                raise CurationAuthenticationError(
+                    "curation model rejected the configured credential"
+                ) from None
+            raise CurationTransportError("curation model request failed") from None
+        except (urllib.error.URLError, OSError):
             raise CurationTransportError("curation model request failed") from None
         if len(raw) > self._config.max_output_tokens * 16:
             raise CurationResponseError("curation model response exceeded its size limit")

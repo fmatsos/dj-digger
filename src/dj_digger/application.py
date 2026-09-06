@@ -1,5 +1,6 @@
 """Application-level orchestration for the DJ Digger command line."""
 
+import asyncio
 import importlib.util
 import shutil
 import subprocess
@@ -22,6 +23,8 @@ from dj_digger.catalog.database import Database
 from dj_digger.catalog.migrations import CURRENT_VERSION
 from dj_digger.catalog.repositories import SourceRepository
 from dj_digger.config import LibrarySourceConfig, WorkspaceConfig
+from dj_digger.curation import CurationCreation, CurationRepository, CurationStatus
+from dj_digger.curation.agent import CurationAgent, CurationRequest, CurationResult
 from dj_digger.duplicates.quality import QualityMarkResult
 from dj_digger.duplicates.service import (
     DuplicateAnalysisResult,
@@ -192,6 +195,27 @@ class WorkspaceApplication:
         if source_id is not None:
             self._selected_sources(source_id, enabled_only=True)
         return self._duplicate_service().mark_best_quality(source_id)
+
+    def curation_create(self, request: CurationRequest) -> CurationResult:
+        """Run and persist one catalog-grounded draft through the application boundary."""
+        return asyncio.run(CurationAgent(self.config).run(request))
+
+    def curation_get(self, creation_id: str) -> CurationCreation | None:
+        """Return one durable curation."""
+        return CurationRepository(self.database).get(creation_id)
+
+    def curation_list(self, status: CurationStatus | None = None) -> tuple[CurationCreation, ...]:
+        """List durable curations for CLI and future web consumers."""
+        return CurationRepository(self.database).list(status)
+
+    def curation_validate(self, creation_id: str) -> CurationCreation:
+        """Explicitly transition a draft to validated."""
+        creation = CurationRepository(self.database).get(creation_id)
+        if creation is None:
+            raise ValueError("unknown curation ID")
+        if creation.status != "draft":
+            raise RuntimeError("curation is already validated")
+        return CurationRepository(self.database).validate(creation_id)
 
     def _duplicate_service(self, *, progress: ProgressReporter | None = None) -> DuplicateService:
         return DuplicateService(

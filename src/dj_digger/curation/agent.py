@@ -39,6 +39,10 @@ class CurationTurnLimitError(CurationAgentError):
     """The model did not finish within its configured turn budget."""
 
 
+class CurationMCPError(CurationAgentError):
+    """The local MCP composition or tool execution failed."""
+
+
 class CurationGroundingError(CurationAgentError):
     """The result was not grounded in currently available catalog candidates."""
 
@@ -50,6 +54,8 @@ class CurationRequest(BaseModel):
     prompt: str = Field(min_length=1, max_length=4_000)
     custom_system_prompt: str | None = Field(default=None, min_length=1, max_length=4_000)
     max_tracks: int = Field(default=10, ge=1, le=20)
+    kind: str = Field(default="set", pattern="^(set|playlist)$")
+    name: str | None = Field(default=None, min_length=1, max_length=200)
 
     @model_validator(mode="after")
     def reject_blank(self) -> CurationRequest:
@@ -94,7 +100,7 @@ class CurationAgent:
             tool for tool in await self._server.list_tools() if tool.name in ALLOWED_TOOLS
         ]
         if tuple(tool.name for tool in available_tools) != ALLOWED_TOOLS:
-            raise CurationAgentError("curation tool composition is invalid")
+            raise CurationMCPError("curation tool composition is invalid")
         tool_defs: list[dict[str, Any]] = [
             {
                 "type": "function",
@@ -146,11 +152,25 @@ class CurationAgent:
                                         "creation write must be the only tool call in its turn"
                                     )
                                 arguments["user_prompt"] = request.prompt.strip()
-                            result = await self._server.call_tool(call.function.name, arguments)
+                                arguments["kind"] = request.kind
+                                if request.name is not None:
+                                    arguments["name"] = request.name.strip()
+                            try:
+                                result = await self._server.call_tool(call.function.name, arguments)
+                            except Exception as error:
+                                message = str(error).lower()
+                                if call.function.name == WRITE_TOOL and any(
+                                    word in message
+                                    for word in ("unknown", "unavailable", "candidate")
+                                ):
+                                    raise CurationGroundingError(
+                                        "curation result references an unknown or unavailable track"
+                                    ) from None
+                                raise CurationMCPError("catalog tool call failed") from None
                             if not isinstance(result, CallToolResult):
-                                raise CurationGroundingError("catalog tool requested user input")
+                                raise CurationMCPError("catalog tool requested user input")
                             if result.is_error or result.structured_content is None:
-                                raise CurationGroundingError("catalog tool call failed")
+                                raise CurationMCPError("catalog tool call failed")
                             if call.function.name == WRITE_TOOL:
                                 return self._ground_creation(
                                     result.structured_content, request.max_tracks
