@@ -9,8 +9,7 @@ from typing import Annotated, Any
 
 import typer
 
-from dj_digger import background
-from dj_digger.application import WorkspaceApplication
+from dj_digger.cli import background
 from dj_digger.cli.commands.analyze import execute as execute_analyze
 from dj_digger.cli.commands.copy import execute as execute_copy
 from dj_digger.cli.commands.curation import curation_app
@@ -26,6 +25,7 @@ from dj_digger.cli.commands.operations import (
     execute_rebuild,
     execute_status,
 )
+from dj_digger.cli.commands.refresh import execute as execute_refresh
 from dj_digger.cli.commands.scan import execute as execute_scan
 from dj_digger.cli.commands.snapshot import execute as execute_snapshot
 from dj_digger.cli.presenters.copy import copy_payload, copy_progress_lines
@@ -35,10 +35,12 @@ from dj_digger.completion import install_patches
 from dj_digger.core.application import (
     AnalyzeRequest,
     CopySetRequest,
+    CoreApplication,
     DuplicateAnalyzeRequest,
     DuplicateListRequest,
     DuplicateMarkBestRequest,
     ExportRequest,
+    RefreshRequest,
     SnapshotRequest,
 )
 from dj_digger.core.config import WorkspaceConfig
@@ -46,6 +48,8 @@ from dj_digger.logging import RunLogger
 from dj_digger.terminal import render
 
 install_patches()
+
+WorkspaceApplication = CoreApplication
 
 app = typer.Typer(
     help="Catalog and export DJ music libraries.",
@@ -267,7 +271,7 @@ def analyze(
         _run_in_background(config, "analyze", argv, json_output=json_output)
         return
 
-    def action(service: WorkspaceApplication) -> dict[str, Any]:
+    def action(service: CoreApplication) -> dict[str, Any]:
         with _progress_reporter()(verbosity=ctx.obj.get("verbosity", 0)) as progress:
             return execute_analyze(
                 service,
@@ -333,7 +337,7 @@ def duplicates(
         _run_in_background(config, "duplicates", argv, json_output=json_output)
         return
 
-    def action(service: WorkspaceApplication) -> dict[str, Any]:
+    def action(service: CoreApplication) -> dict[str, Any]:
         if list_:
             return execute_duplicates(
                 service,
@@ -503,12 +507,12 @@ def refresh(
         _run_in_background(config, "refresh", argv, json_output=json_output)
         return
 
-    def action(service: WorkspaceApplication) -> dict[str, Any]:
+    def action(service: CoreApplication) -> dict[str, Any]:
         with _progress_reporter()(verbosity=ctx.obj.get("verbosity", 0)) as progress:
-            return service.refresh(
+            return execute_refresh(
+                service,
+                RefreshRequest(workers=workers, track_timeout=track_timeout),
                 progress=progress,
-                workers=workers,
-                track_timeout=track_timeout,
             )
 
     _run(config, action, json_output=json_output)

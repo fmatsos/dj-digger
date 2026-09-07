@@ -120,6 +120,9 @@ __all__ = [
     "ProgressEventReporter",
     "ProgressReporter",
     "ProgressSink",
+    "RefreshRequest",
+    "RefreshResult",
+    "RefreshUseCase",
     "QualityMarkResult",
     "NullProgressReporter",
     "OptimizeDatabaseUseCase",
@@ -135,6 +138,7 @@ __all__ = [
     "SnapshotRequest",
     "SnapshotResult",
     "SnapshotUseCase",
+    "worst_status",
 ]
 
 
@@ -160,6 +164,20 @@ def __getattr__(name: str) -> Any:
         from dj_digger.core.application.analyze import AnalyzeRequest, AnalyzeUseCase
 
         return {"AnalyzeRequest": AnalyzeRequest, "AnalyzeUseCase": AnalyzeUseCase}[name]
+    if name in {"RefreshRequest", "RefreshResult", "RefreshUseCase", "worst_status"}:
+        from dj_digger.core.application.refresh import (
+            RefreshRequest,
+            RefreshResult,
+            RefreshUseCase,
+            worst_status,
+        )
+
+        return {
+            "RefreshRequest": RefreshRequest,
+            "RefreshResult": RefreshResult,
+            "RefreshUseCase": RefreshUseCase,
+            "worst_status": worst_status,
+        }[name]
     duplicate_names = {
         "DuplicateAnalysisResult",
         "DuplicateAnalyzeRequest",

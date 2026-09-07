@@ -14,7 +14,7 @@ from dj_digger.core.analysis.pipeline import (
     TimedAnalysisExtractor,
 )
 from dj_digger.core.analysis.worker_client import IsolatedAnalysisExtractor
-from dj_digger.core.application.analysis_progress import NullProgressReporter, ProgressReporter
+from dj_digger.core.application.analysis_progress import ProgressReporter
 from dj_digger.core.application.analyze import AnalyzeRequest, AnalyzeUseCase
 from dj_digger.core.application.curation import CurationRequest, CurationResult, CurationUseCase
 from dj_digger.core.application.duplicates import (
@@ -48,7 +48,13 @@ from dj_digger.core.application.operations import (
     has_chromaprint_muxer,
 )
 from dj_digger.core.application.progress import ProgressSink
-from dj_digger.core.application.scan import ScanRequest, ScanRunResult, ScanUseCase
+from dj_digger.core.application.refresh import RefreshRequest, RefreshResult, RefreshUseCase
+from dj_digger.core.application.scan import (
+    ScanRequest,
+    ScanRunResult,
+    ScanSourceResult,
+    ScanUseCase,
+)
 from dj_digger.core.application.snapshot import SnapshotRequest, SnapshotResult, SnapshotUseCase
 from dj_digger.core.catalog.database import Database
 from dj_digger.core.catalog.repositories import SourceRepository
@@ -397,61 +403,60 @@ class WorkspaceApplication:
 
     def refresh(
         self,
+        request: RefreshRequest | None = None,
         *,
         workers: int = 1,
         track_timeout: float = 1800.0,
-        progress: ProgressReporter | None = None,
-    ) -> dict[str, Any]:
-        reporter = progress or NullProgressReporter()
-        reporter.phase_started("scan", 0, 4)
-        scans = self._scan_for_refresh(enabled_only=True)
-        reporter.phase_finished("scan", 1, 4)
-        eligible = {source.id for source in self.config.sources if source.set_eligible}
-        required_failure = any(
-            not result.succeeded and result.source_id in eligible for result in scans
-        )
-        if required_failure:
-            return {
-                "event": "refresh",
-                "status": "failed",
-                "published": False,
-                "scans": [result.__dict__ for result in scans],
-            }
-        reporter.phase_started("metadata", 1, 4)
-        metadata = self.metadata()
-        reporter.phase_finished("metadata", 2, 4)
-        reporter.phase_started("analysis", 2, 4)
-        analysis = self.analyze(workers=workers, track_timeout=track_timeout, progress=reporter)
-        reporter.phase_finished("analysis", 3, 4)
-        status = _worst_status(
-            "succeeded" if all(result.succeeded for result in scans) else "partial",
-            metadata.status,
-            analysis.status,
-        )
-        reporter.phase_started("exports", 3, 4)
-        try:
-            exports = self._legacy_export()
-        except Exception as error:
-            reporter.phase_finished("exports", 4, 4)
-            return {
-                "event": "refresh",
-                "status": "failed",
-                "published": False,
-                "error": str(error),
-                "scans": [result.__dict__ for result in scans],
-                "metadata": metadata.__dict__,
-                "analysis": analysis.__dict__,
-            }
-        reporter.phase_finished("exports", 4, 4)
-        return {
-            "event": "refresh",
-            "status": status,
-            "published": True,
-            "scans": [result.__dict__ for result in scans],
-            "metadata": metadata.__dict__,
-            "analysis": analysis.__dict__,
-            "exports": exports,
-        }
+        progress: ProgressReporter | ProgressSink | None = None,
+    ) -> RefreshResult:
+        """Run scan, metadata, analysis, and one atomic export publication."""
+        effective = request or RefreshRequest(workers=workers, track_timeout=track_timeout)
+        if request is not None and (workers != 1 or track_timeout != 1800.0):
+            raise ValueError("refresh request conflicts with worker options")
+        return RefreshUseCase(
+            self.database,
+            self.config,
+            self._analysis_identity,
+            self._analysis_extractor,
+            scan=self._refresh_scan_dependency,
+            metadata=self._refresh_metadata_dependency,
+            analyze=self._refresh_analyze_dependency,
+            export=self._refresh_export_dependency,
+        ).execute(effective, progress=progress)
+
+    def _refresh_scan_dependency(self, request: ScanRequest) -> ScanRunResult:
+        """Call the typed scan path, retaining old in-process test adapters."""
+        if "_scan_for_refresh" in self.__dict__:
+            return _typed_scan_result(self._scan_for_refresh(enabled_only=request.enabled_only))
+        if "scan" in self.__dict__:
+            result = (
+                self.scan(request)
+                if isinstance(self, CoreApplication)
+                else self.scan(enabled_only=request.enabled_only)
+            )
+            return _typed_scan_result(result)
+        return self._scan_result(request)
+
+    def _refresh_metadata_dependency(self, request: MetadataRequest) -> MetadataRunResult:
+        if "metadata" in self.__dict__:
+            return self.metadata()
+        return self._metadata_result(request)
+
+    def _refresh_analyze_dependency(
+        self, request: AnalyzeRequest, progress: ProgressReporter | ProgressSink
+    ) -> AnalysisRunResult:
+        if "analyze" in self.__dict__:
+            return self.analyze(
+                workers=request.workers,
+                track_timeout=request.track_timeout,
+                progress=cast(ProgressReporter, progress),
+            )
+        return self._analyze_request(request, progress=progress)
+
+    def _refresh_export_dependency(self, request: ExportRequest) -> ExportResult | list[str]:
+        if "export" in self.__dict__:
+            return self.export()
+        return ExportUseCase(self.database, self.config).execute(request)
 
     def status(self) -> dict[str, Any]:
         return StatusUseCase(self.database, self.config).execute().as_dict()
@@ -656,9 +661,20 @@ def _legacy_scan_results(result: ScanRunResult) -> list[ScanResult]:
     ]
 
 
-def _worst_status(*statuses: str) -> str:
-    order = {"succeeded": 0, "partial": 1, "failed": 2}
-    return max(statuses, key=lambda status: order.get(status, 2))
+def _typed_scan_result(result: ScanRunResult | list[Any]) -> ScanRunResult:
+    if isinstance(result, ScanRunResult):
+        return result
+    return ScanRunResult(
+        tuple(
+            ScanSourceResult(
+                source_id=item.source_id,
+                succeeded=item.succeeded,
+                run_id=getattr(item, "run_id", None),
+                error=getattr(item, "error", None),
+            )
+            for item in result
+        )
+    )
 
 
 def _has_chromaprint_muxer() -> bool:

@@ -6,8 +6,13 @@ from types import SimpleNamespace
 import pytest
 from typer.testing import CliRunner
 
-from dj_digger.application import WorkspaceApplication
 from dj_digger.cli import app
+from dj_digger.core.application import (
+    AnalyzeRequest,
+    CoreApplication,
+    MetadataRequest,
+    RefreshRequest,
+)
 
 
 def _config(tmp_path: Path) -> Path:
@@ -48,13 +53,31 @@ def test_extract_commands_map_status_to_exit_code(
         if command == "metadata"
         else SimpleNamespace(status=status, eligible=1, analyzed=1, reused=0, failed=0)
     )
-    monkeypatch.setattr(WorkspaceApplication, command, lambda *_args, **_kwargs: result)
+    received: list[object] = []
+    if command == "metadata":
+
+        def metadata(_self: CoreApplication, request: MetadataRequest) -> SimpleNamespace:
+            received.append(request)
+            return result
+
+        monkeypatch.setattr(CoreApplication, "metadata", metadata)
+    else:
+
+        def analyze(
+            _self: CoreApplication, request: AnalyzeRequest, **_kwargs: object
+        ) -> SimpleNamespace:
+            received.append(request)
+            return result
+
+        monkeypatch.setattr(CoreApplication, "analyze", analyze)
 
     response = CliRunner().invoke(app, [command, "--config", str(_config(tmp_path)), "--json"])
 
     assert response.exit_code == exit_code
     assert f'"event":"{command}"' in response.output
     assert f'"status":"{status}"' in response.output
+    assert len(received) == 1
+    assert isinstance(received[0], MetadataRequest if command == "metadata" else AnalyzeRequest)
 
 
 @pytest.mark.parametrize(("status", "exit_code"), (("succeeded", 0), ("partial", 2), ("failed", 1)))
@@ -64,12 +87,23 @@ def test_refresh_maps_status_to_exit_code(
     status: str,
     exit_code: int,
 ) -> None:
+    received: list[object] = []
+
+    def refresh(
+        _self: CoreApplication, request: RefreshRequest, **_kwargs: object
+    ) -> dict[str, str]:
+        received.append(request)
+        return {"event": "refresh", "status": status}
+
     monkeypatch.setattr(
-        "dj_digger.cli.WorkspaceApplication.refresh",
-        lambda *_args, **_kwargs: {"event": "refresh", "status": status},
+        CoreApplication,
+        "refresh",
+        refresh,
     )
 
     response = CliRunner().invoke(app, ["refresh", "--config", str(_config(tmp_path)), "--json"])
 
     assert response.exit_code == exit_code
     assert response.output.strip() == f'{{"event":"refresh","status":"{status}"}}'
+    assert len(received) == 1
+    assert isinstance(received[0], RefreshRequest)
