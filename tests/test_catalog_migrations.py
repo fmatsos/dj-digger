@@ -2,6 +2,7 @@ import sqlite3
 import subprocess
 import sys
 import zipfile
+from importlib.resources import files as resource_files
 from pathlib import Path
 
 import pytest
@@ -184,11 +185,14 @@ def _normalized_schema(connection: sqlite3.Connection) -> dict[tuple[str, str], 
     }
 
 
-def test_current_schema_copy_matches_packaged_schema() -> None:
+def test_current_schema_resource_matches_source_file() -> None:
     root = Path(__file__).parents[1]
-    assert (root / "src/dj_digger/core/catalog/sql/catalog.sql").read_bytes() == (
-        root / "src/dj_digger/core/catalog/sql/catalog.sql"
-    ).read_bytes()
+    source = root / "src/dj_digger/core/catalog/sql/catalog.sql"
+    packaged = resource_files("dj_digger.core.catalog").joinpath("sql", "catalog.sql")
+
+    assert source.is_file()
+    assert packaged.is_file()
+    assert packaged.read_bytes() == source.read_bytes()
 
 
 def test_wheel_migrates_without_the_checkout_schema(tmp_path: Path) -> None:
@@ -202,7 +206,11 @@ def test_wheel_migrates_without_the_checkout_schema(tmp_path: Path) -> None:
     isolated_package = tmp_path / "installed"
     with zipfile.ZipFile(wheel) as archive:
         packaged_files = set(archive.namelist())
+        source_schema = (
+            Path(__file__).parents[1] / "src/dj_digger/core/catalog/sql/catalog.sql"
+        ).read_bytes()
         assert "dj_digger/core/catalog/sql/catalog.sql" in packaged_files
+        assert archive.read("dj_digger/core/catalog/sql/catalog.sql") == source_schema
         assert "dj_digger/core/catalog/sql/migrate-20260907063758.sql" in packaged_files
         assert "dj_digger/core/catalog/sql/migrate-20260905221652.sql" in packaged_files
         assert "dj_digger/core/catalog/sql/migrate-20260827105404.sql" in packaged_files
