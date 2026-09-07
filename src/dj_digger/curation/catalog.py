@@ -1,4 +1,4 @@
-"""Read-only, privacy-bounded projections over Catalog V9."""
+"""Read-only, privacy-bounded projections over the current catalog."""
 
 from __future__ import annotations
 
@@ -92,7 +92,9 @@ class CurationCatalog:
             version = int(database.scalar("PRAGMA user_version") or 0)
             if version != CURRENT_VERSION:
                 database.close()
-                raise CurationCatalogError("catalog version is unsupported; prepare a Catalog V9")
+                raise CurationCatalogError(
+                    "catalog is not current; run the normal workflow before using curation"
+                )
             return database
         except CurationCatalogError:
             raise

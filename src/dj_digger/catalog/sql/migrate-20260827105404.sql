@@ -1,4 +1,4 @@
--- DJ Digger catalog migration V6 to V7
+-- DJ Digger catalog migration 20260827105404
 
 CREATE INDEX idx_audio_analysis_success_lookup
 ON audio_analysis (

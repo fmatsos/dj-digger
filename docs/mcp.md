@@ -10,7 +10,7 @@ never reads source audio or accepts SQL.
 
 Prepare the catalog with the normal workflow first (`refresh`, duplicate
 fingerprinting, and quality/mastering analysis when needed). The server refuses
-missing, empty, or non-V11 catalogs.
+missing, empty, or unprepared catalogs.
 
 ```bash
 uv run dj-digger mcp --config config/demo.toml
@@ -98,8 +98,7 @@ order, limits, failure behavior, review, and export commands.
 ## Troubleshooting
 
 * Missing or empty database: run `refresh` with the same config.
-* Unsupported catalog version: migrate or recreate through the normal catalog
-  workflow; MCP never migrates a database.
+* Unprepared catalog: run the normal catalog workflow; MCP never migrates a database.
 * `missing` analysis: run `analyze` for the eligible source.
 * `unverified_unfingerprinted`: fingerprint the library; the track remains a
   candidate because absence of a fingerprint is uncertainty, not exclusion.

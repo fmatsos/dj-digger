@@ -182,8 +182,8 @@ def _normalized_schema(connection: sqlite3.Connection) -> dict[tuple[str, str], 
 
 def test_current_schema_copy_matches_packaged_schema() -> None:
     root = Path(__file__).parents[1]
-    assert (root / "schemas/catalog-v11.sql").read_bytes() == (
-        root / "src/dj_digger/catalog/sql/catalog-v11.sql"
+    assert (root / "schemas/catalog.sql").read_bytes() == (
+        root / "src/dj_digger/catalog/sql/catalog.sql"
     ).read_bytes()
 
 
@@ -198,11 +198,12 @@ def test_wheel_migrates_without_the_checkout_schema(tmp_path: Path) -> None:
     isolated_package = tmp_path / "installed"
     with zipfile.ZipFile(wheel) as archive:
         packaged_files = set(archive.namelist())
-        assert "dj_digger/catalog/sql/catalog-v11.sql" in packaged_files
-        assert "dj_digger/catalog/sql/migrate-v10-to-v11.sql" in packaged_files
-        assert "dj_digger/catalog/sql/migrate-v9-to-v10.sql" in packaged_files
-        assert "dj_digger/catalog/sql/migrate-v6-to-v7.sql" in packaged_files
-        assert "dj_digger/catalog/sql/migrate-v8-to-v9.sql" in packaged_files
+        assert "dj_digger/catalog/sql/catalog.sql" in packaged_files
+        assert "dj_digger/catalog/sql/migrate-20260907063758.sql" in packaged_files
+        assert "dj_digger/catalog/sql/migrate-20260905221652.sql" in packaged_files
+        assert "dj_digger/catalog/sql/migrate-20260827105404.sql" in packaged_files
+        assert "dj_digger/catalog/sql/migrate-20260827225144.sql" in packaged_files
+        assert "dj_digger/catalog/sql/migrate-20260828150213.sql" in packaged_files
         archive.extractall(isolated_package)
 
     result = subprocess.run(
@@ -323,12 +324,12 @@ def test_catalog_migrations_are_recorded_by_sqlite_utils(tmp_path: Path) -> None
     assert database.execute(
         "SELECT name FROM _sqlite_migrations WHERE migration_set = 'dj-digger' ORDER BY name"
     ).fetchall() == [
-        ("dj_digger_000_initialize_v11",),
-        ("dj_digger_006_to_007",),
-        ("dj_digger_007_to_008",),
-        ("dj_digger_008_to_009",),
-        ("dj_digger_009_to_010",),
-        ("dj_digger_010_to_011",),
+        ("dj_digger_20260824134417",),
+        ("dj_digger_20260827105404",),
+        ("dj_digger_20260827225144",),
+        ("dj_digger_20260828150213",),
+        ("dj_digger_20260905221652",),
+        ("dj_digger_20260907063758",),
     ]
 
 
