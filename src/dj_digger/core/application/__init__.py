@@ -17,6 +17,7 @@ from dj_digger.core.application.errors import (
     ResourceNotFoundError,
     StateConflictError,
 )
+from dj_digger.core.application.export import ExportRequest, ExportResult, ExportUseCase
 from dj_digger.core.application.metadata import MetadataRequest, MetadataRunResult, MetadataUseCase
 from dj_digger.core.application.progress import ProgressEvent, ProgressSink
 from dj_digger.core.application.scan import (
@@ -27,6 +28,9 @@ from dj_digger.core.application.scan import (
 
 __all__ = [
     "CoreApplication",
+    "ExportRequest",
+    "ExportResult",
+    "ExportUseCase",
     "AnalyzeRequest",
     "AnalyzeUseCase",
     "DuplicateAnalysisResult",
@@ -57,6 +61,9 @@ __all__ = [
     "ScanRunResult",
     "ScanSourceResult",
     "StateConflictError",
+    "SnapshotRequest",
+    "SnapshotResult",
+    "SnapshotUseCase",
 ]
 
 
@@ -85,4 +92,16 @@ def __getattr__(name: str) -> Any:
         from dj_digger.core.application import duplicates
 
         return getattr(duplicates, name)
+    if name in {"SnapshotRequest", "SnapshotResult", "SnapshotUseCase"}:
+        from dj_digger.core.application.snapshot import (
+            SnapshotRequest,
+            SnapshotResult,
+            SnapshotUseCase,
+        )
+
+        return {
+            "SnapshotRequest": SnapshotRequest,
+            "SnapshotResult": SnapshotResult,
+            "SnapshotUseCase": SnapshotUseCase,
+        }[name]
     raise AttributeError(name)

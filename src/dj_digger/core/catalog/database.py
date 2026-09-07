@@ -177,8 +177,11 @@ class Database:
     @contextmanager
     def read_transaction(self) -> Iterator[None]:
         """Keep related export queries on one consistent SQLite snapshot."""
-        self._connection.execute("BEGIN")
+        nested = self._connection.in_transaction
+        if not nested:
+            self._connection.execute("BEGIN")
         try:
             yield
         finally:
-            self._connection.rollback()
+            if not nested:
+                self._connection.rollback()

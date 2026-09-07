@@ -3,7 +3,6 @@
 import json
 from collections import defaultdict
 from collections.abc import Mapping
-from importlib.resources import files
 from typing import Any
 
 from jsonschema import (  # type: ignore[import-untyped]
@@ -12,14 +11,13 @@ from jsonschema import (  # type: ignore[import-untyped]
     ValidationError,
 )
 
+from dj_digger.core.resources import read_text
+
 _CURRENT_SCHEMA_ID = "https://dj-digger.local/schemas/v1/curation-result.schema.json"
 
 
 def _load_schema(name: str) -> dict[str, Any]:
-    resource = files("dj_digger").joinpath("schemas", name)
-    if not resource.is_file():
-        raise FileNotFoundError(f"required packaged resource missing: dj_digger/schemas/{name}")
-    value: object = json.loads(resource.read_text(encoding="utf-8"))
+    value: object = json.loads(read_text(f"core/schemas/{name}"))
     if not isinstance(value, dict):
         raise RuntimeError(f"packaged schema is not an object: {name}")
     return value

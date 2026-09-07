@@ -281,7 +281,7 @@ def test_wheel_contains_valid_analysis_schemas_outside_checkout(tmp_path: Path) 
         "from jsonschema import Draft202012Validator; import json; "
         "from dj_digger.curation.validation import validate_curation_result; "
         "assert callable(validate_curation_result); "
-        "base=r.files('dj_digger').joinpath('schemas'); "
+        "base=r.files('dj_digger').joinpath('core', 'schemas'); "
         "[Draft202012Validator.check_schema(json.loads(base.joinpath(name).read_text())) "
         "for name in "
         "('dj-analysis.schema.json','dj-sections.schema.json','dj-analysis-run.schema.json',"

@@ -43,7 +43,7 @@ def _payload() -> dict[str, object]:
 
 
 def test_export_publishes_source_aware_validated_analysis_facets(tmp_path: Path) -> None:
-    from dj_digger.analysis.exporters import AnalysisExporter
+    from dj_digger.core.analysis.exporters import AnalysisExporter
 
     database = Database.open(tmp_path / "catalog.sqlite")
     database.migrate()
@@ -105,7 +105,7 @@ def test_export_publishes_source_aware_validated_analysis_facets(tmp_path: Path)
 def test_export_rolls_back_all_previous_facets_when_second_publish_replace_fails(
     tmp_path: Path, monkeypatch
 ) -> None:
-    from dj_digger.analysis.exporters import AnalysisExporter
+    from dj_digger.core.analysis.exporters import AnalysisExporter
 
     database = Database.open(tmp_path / "catalog.sqlite")
     database.migrate()
