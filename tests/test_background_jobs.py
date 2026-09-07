@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from dj_digger import background
+from dj_digger.cli import background
 from dj_digger.core.jobs import JobRepository, JobStateError
 
 _VENV_PYTHON = Path(__file__).resolve().parent.parent / ".venv" / "bin" / "python"

@@ -4,11 +4,11 @@ from pathlib import Path
 
 import pytest
 
-from dj_digger.config import LibrarySourceConfig, WorkspaceConfig
 from dj_digger.core.application import CoreApplication, InvalidInputError
 from dj_digger.core.application.metadata import MetadataRequest, MetadataRunResult
 from dj_digger.core.catalog.database import Database
 from dj_digger.core.catalog.repositories import ScanRunRepository, TrackRepository
+from dj_digger.core.config import LibrarySourceConfig, WorkspaceConfig
 
 
 def workspace_config(tmp_path: Path) -> WorkspaceConfig:

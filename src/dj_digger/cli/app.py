@@ -28,10 +28,11 @@ from dj_digger.cli.commands.operations import (
 from dj_digger.cli.commands.refresh import execute as execute_refresh
 from dj_digger.cli.commands.scan import execute as execute_scan
 from dj_digger.cli.commands.snapshot import execute as execute_snapshot
+from dj_digger.cli.completion import install_patches
 from dj_digger.cli.presenters.copy import copy_payload, copy_progress_lines
 from dj_digger.cli.presenters.jobs import jobs_payload
-from dj_digger.cli.progress import RichProgressReporter
-from dj_digger.completion import install_patches
+from dj_digger.cli.rich_progress import RichProgressReporter
+from dj_digger.cli.terminal import render
 from dj_digger.core.application import (
     AnalyzeRequest,
     CopySetRequest,
@@ -44,8 +45,7 @@ from dj_digger.core.application import (
     SnapshotRequest,
 )
 from dj_digger.core.config import WorkspaceConfig
-from dj_digger.logging import RunLogger
-from dj_digger.terminal import render
+from dj_digger.core.run_log import RunLogger
 
 install_patches()
 

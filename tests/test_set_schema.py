@@ -3,7 +3,7 @@ import copy
 import pytest
 from jsonschema import ValidationError
 
-from dj_digger.curation.validation import validate_curation_result
+from dj_digger.core.curation.validation import validate_curation_result
 
 
 def fixture_result() -> dict[str, object]:

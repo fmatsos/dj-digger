@@ -512,7 +512,7 @@ Add these stable files to the project sources or knowledge base:
 - `skills/electronic-dj-set-curator/references/source-contracts.md`;
 - `skills/electronic-dj-set-curator/references/compatibility-engine.md`;
 - `skills/electronic-dj-set-curator/references/set-emission.md`;
-- `schemas/dj-set.schema.json`.
+- `src/dj_digger/core/schemas/dj-set.schema.json`.
 
 Before each curation, replace the previous runtime exports with the files from the
 same successful or partial DJ Digger export run:

@@ -3,8 +3,8 @@ from pathlib import Path
 
 import pytest
 
-from dj_digger.catalog.database import Database
-from dj_digger.catalog.read_repositories import LibraryReadRepository
+from dj_digger.core.catalog.database import Database
+from dj_digger.core.catalog.read_repositories import LibraryReadRepository
 
 
 @pytest.fixture

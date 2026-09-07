@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 from mastering_fixture import generate_fixture
 
-from dj_digger.analysis.ebur128 import EbuR128Analyzer
+from dj_digger.core.analysis.ebur128 import EbuR128Analyzer
 
 
 @pytest.mark.skipif(__import__("shutil").which("ffmpeg") is None, reason="FFmpeg unavailable")

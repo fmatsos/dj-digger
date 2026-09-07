@@ -4,7 +4,7 @@ from pathlib import Path
 from queue import Queue
 from threading import Event, Lock, Thread
 
-from dj_digger.catalog.factory import DatabaseFactory
+from dj_digger.core.catalog.factory import DatabaseFactory
 
 THREAD_TIMEOUT_SECONDS = 3.0
 READER_COUNT = 8

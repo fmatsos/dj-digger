@@ -4,8 +4,8 @@ from pathlib import Path
 from typer.testing import CliRunner
 
 from dj_digger.cli import app
-from dj_digger.duplicates.quality import QualityMarkResult
-from dj_digger.duplicates.service import (
+from dj_digger.core.duplicates.quality import QualityMarkResult
+from dj_digger.core.duplicates.service import (
     DuplicateAnalysisResult,
     DuplicateGroupDescription,
     DuplicateMemberDescription,

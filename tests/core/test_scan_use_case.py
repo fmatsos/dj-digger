@@ -2,9 +2,9 @@
 
 from pathlib import Path
 
-from dj_digger.config import LibrarySourceConfig, WorkspaceConfig
 from dj_digger.core.application import CoreApplication, ScanRequest, ScanRunResult, ScanSourceResult
 from dj_digger.core.catalog.database import Database
+from dj_digger.core.config import LibrarySourceConfig, WorkspaceConfig
 
 
 def workspace_config(tmp_path: Path) -> WorkspaceConfig:

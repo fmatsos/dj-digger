@@ -8,14 +8,14 @@ from typing import Any
 
 import pytest
 
-from dj_digger.catalog.database import Database
-from dj_digger.catalog.models import Track
-from dj_digger.catalog.repositories import ScanRunRepository, SourceRepository, TrackRepository
-from dj_digger.config import DspConfig
 from dj_digger.core.analysis.config import AnalysisIdentity
 from dj_digger.core.analysis.extractor import AnalysisExtractionError
 from dj_digger.core.analysis.pipeline import AnalysisPipeline, TimedAnalysisExtractor
 from dj_digger.core.analysis.worker_client import IsolatedAnalysisExtractor
+from dj_digger.core.catalog.database import Database
+from dj_digger.core.catalog.models import Track
+from dj_digger.core.catalog.repositories import ScanRunRepository, SourceRepository, TrackRepository
+from dj_digger.core.config import DspConfig
 
 IDENTITY = AnalysisIdentity(schema_version=2, analyzer_version="test", config_hash="a" * 64)
 

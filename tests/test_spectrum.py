@@ -1,7 +1,7 @@
 from dataclasses import replace
 from pathlib import Path
 
-from dj_digger.analysis.spectrum import SpectrumAnalyzer, SpectrumConfig, SpectrumFacts
+from dj_digger.core.analysis.spectrum import SpectrumAnalyzer, SpectrumConfig, SpectrumFacts
 
 
 class StubSpectrumAdapter:

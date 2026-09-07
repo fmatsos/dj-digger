@@ -4,7 +4,6 @@ from pathlib import Path
 
 import pytest
 
-from dj_digger.application import WorkspaceApplication
 from dj_digger.core.application import (
     CoreApplication,
     DuplicateAnalysisResult,
@@ -15,6 +14,7 @@ from dj_digger.core.application import (
     QualityMarkResult,
     ResourceNotFoundError,
 )
+from dj_digger.core.application.app import WorkspaceApplication
 from dj_digger.core.config import LibrarySourceConfig, WorkspaceConfig
 
 

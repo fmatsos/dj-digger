@@ -2,6 +2,11 @@
 
 This scope covers Python 3.12 application code, CLI entry points, and command composition.
 
+Canonical implementation is split between `src/dj_digger/core/` (framework-free
+use cases, catalog, workers, and resources) and `src/dj_digger/cli/` (Typer,
+Rich, terminal rendering, completion, and process launching). There are no
+top-level compatibility modules outside those packages.
+
 ## Python and type safety
 
 All Python code in this layer must pass:

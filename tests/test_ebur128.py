@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from dj_digger.analysis.ebur128 import (
+from dj_digger.core.analysis.ebur128 import (
     EbuR128AnalysisError,
     EbuR128Analyzer,
     parse_ebur128_output,
@@ -50,7 +50,7 @@ def test_analyzer_isolates_locale_and_path_arguments(monkeypatch) -> None:
         observed["env"] = kwargs["env"]
         return type("Result", (), {"stdout": SAMPLE, "stderr": "", "returncode": 0})()
 
-    monkeypatch.setattr("dj_digger.analysis.ebur128.subprocess.run", run)
+    monkeypatch.setattr("dj_digger.core.analysis.ebur128.subprocess.run", run)
     EbuR128Analyzer().analyze(Path("odd;name [x].wav"), timeout=2.0)
     assert observed["argv"][0:5] == ["ffmpeg", "-nostdin", "-v", "info", "-i"]
     assert observed["argv"][5] == "odd;name [x].wav"
@@ -62,7 +62,7 @@ def test_analyzer_classifies_timeout(monkeypatch) -> None:
     def run(*_args, **_kwargs):
         raise subprocess.TimeoutExpired("ffmpeg", 1)
 
-    monkeypatch.setattr("dj_digger.analysis.ebur128.subprocess.run", run)
+    monkeypatch.setattr("dj_digger.core.analysis.ebur128.subprocess.run", run)
     with pytest.raises(EbuR128AnalysisError, match="timed out") as error:
         EbuR128Analyzer().analyze(Path("track.wav"), timeout=1.0)
     assert error.value.stage == "timeout"

@@ -24,7 +24,7 @@ fall back to Read/Grep/rg without blocking when it is absent.
 This file applies to all work on the repository. Scoped `AGENTS.md` files below
 each major directory define rules specific to their scope. Source code changes
 require consultation of the closest scoped file before editing: check
-`src/dj_digger/AGENTS.md` before editing application code, `src/dj_digger/catalog/AGENTS.md`
+`src/dj_digger/AGENTS.md` before editing application code, `src/dj_digger/core/catalog/AGENTS.md`
 for schema or migrations, `tests/AGENTS.md` for test changes, and `docs/AGENTS.md`
 for documentation changes. No edit to code below a scoped directory may proceed
 without reading that directory's closest `AGENTS.md` first.

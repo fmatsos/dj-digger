@@ -35,18 +35,18 @@ root=$(git rev-parse --show-toplevel)
   errors=0
   required_files='dj_digger/analysis.toml
 dj_digger/schema-bundle.json
-dj_digger/schemas/tracks.schema.json
-dj_digger/schemas/library-artifacts.schema.json
-dj_digger/schemas/snapshot-manifest.schema.json
-dj_digger/schemas/dj-analysis.schema.json
-dj_digger/schemas/dj-sections.schema.json
-dj_digger/schemas/dj-analysis-run.schema.json
-dj_digger/catalog/sql/catalog.sql
-dj_digger/catalog/sql/migrate-20260827105404.sql
-dj_digger/catalog/sql/migrate-20260827225144.sql
-dj_digger/catalog/sql/migrate-20260828150213.sql
-dj_digger/catalog/sql/migrate-20260905221652.sql
-dj_digger/catalog/sql/migrate-20260907063758.sql'
+dj_digger/core/schemas/tracks.schema.json
+dj_digger/core/schemas/library-artifacts.schema.json
+dj_digger/core/schemas/snapshot-manifest.schema.json
+dj_digger/core/schemas/dj-analysis.schema.json
+dj_digger/core/schemas/dj-sections.schema.json
+dj_digger/core/schemas/dj-analysis-run.schema.json
+dj_digger/core/catalog/sql/catalog.sql
+dj_digger/core/catalog/sql/migrate-20260827105404.sql
+dj_digger/core/catalog/sql/migrate-20260827225144.sql
+dj_digger/core/catalog/sql/migrate-20260828150213.sql
+dj_digger/core/catalog/sql/migrate-20260905221652.sql
+dj_digger/core/catalog/sql/migrate-20260907063758.sql'
   while IFS= read -r required; do
     [ -z "$required" ] && continue
     if [ ! -f "$required" ]; then

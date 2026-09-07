@@ -2,7 +2,7 @@
 
 import re
 
-from dj_digger.catalog.database import Database
+from dj_digger.core.catalog.database import Database
 
 _SCAN = re.compile(r"^\s*SCAN\s+(?P<table>\S+)", re.IGNORECASE)
 

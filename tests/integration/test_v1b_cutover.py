@@ -6,9 +6,9 @@ from pathlib import Path
 
 from analysis_fixture import analysis_fixture
 
-from dj_digger.application import WorkspaceApplication
-from dj_digger.config import WorkspaceConfig
-from dj_digger.metadata.exiftool import MetadataRunResult, MetadataService
+from dj_digger.core.application.app import WorkspaceApplication
+from dj_digger.core.config import WorkspaceConfig
+from dj_digger.core.metadata.exiftool import MetadataRunResult, MetadataService
 
 
 @dataclass(frozen=True)

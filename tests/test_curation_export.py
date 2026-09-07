@@ -4,12 +4,12 @@ from typing import cast
 import pytest
 from typer.testing import CliRunner
 
-import dj_digger.exports.curation as curation_export_module
-from dj_digger.catalog.database import Database
+import dj_digger.core.exports.curation as curation_export_module
 from dj_digger.cli import app
-from dj_digger.config import LibrarySourceConfig, WorkspaceConfig
-from dj_digger.curation import CreateCurationDraft, CurationRepository, CurationTrack
-from dj_digger.exports.curation import CurationExportContent, export_curation
+from dj_digger.core.catalog.database import Database
+from dj_digger.core.config import LibrarySourceConfig, WorkspaceConfig
+from dj_digger.core.curation import CreateCurationDraft, CurationRepository, CurationTrack
+from dj_digger.core.exports.curation import CurationExportContent, export_curation
 
 
 def _fixture(tmp_path: Path, *, multiple_sources: bool = False) -> tuple[Database, WorkspaceConfig]:

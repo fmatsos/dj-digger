@@ -5,7 +5,7 @@ import sqlite3
 from collections.abc import Iterable
 from pathlib import Path
 
-from dj_digger.catalog.database import Database
+from dj_digger.core.catalog.database import Database
 
 SCENARIOS = ((10_000, 1), (50_000, 5), (100_000, 5), (250_000, 10))
 
