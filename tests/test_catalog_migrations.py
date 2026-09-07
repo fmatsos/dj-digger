@@ -348,6 +348,38 @@ def test_existing_current_catalog_is_adopted_by_sqlite_utils(tmp_path: Path) -> 
     assert database.scalar("SELECT COUNT(*) FROM _sqlite_migrations") == 6
 
 
+@pytest.mark.parametrize(
+    ("legacy_prompt", "legacy_report"),
+    [("", "report"), ("prompt", "   ")],
+)
+def test_v10_upgrade_preserves_creations_with_legacy_blank_text(
+    tmp_path: Path, legacy_prompt: str, legacy_report: str
+) -> None:
+    path = tmp_path / "catalog.sqlite"
+    connection = sqlite3.connect(path)
+    root = Path(__file__).parents[1]
+    connection.executescript((root / "schemas/catalog-v10.sql").read_text(encoding="utf-8"))
+    connection.execute(
+        """INSERT INTO curation_creations VALUES
+        ('creation', 'Name', 'set', ?, ?, 'draft', 'now', 'now', NULL, '{}')""",
+        (legacy_prompt, legacy_report),
+    )
+    connection.execute("PRAGMA user_version = 10")
+    connection.commit()
+    connection.close()
+
+    database = Database.open(path)
+    database.migrate()
+
+    assert database.scalar("PRAGMA user_version") == 11
+    assert database.execute(
+        "SELECT user_prompt, report_markdown FROM curation_creations WHERE id = 'creation'"
+    ).fetchone() == (
+        legacy_prompt if legacy_prompt.strip() else "Legacy prompt unavailable",
+        legacy_report if legacy_report.strip() else "Legacy report unavailable",
+    )
+
+
 def test_current_sections_reference_current_analysis_table(tmp_path: Path) -> None:
     database = Database.open(tmp_path / "catalog.sqlite")
     database.migrate()

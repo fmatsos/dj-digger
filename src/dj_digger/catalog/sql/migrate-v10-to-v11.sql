@@ -30,7 +30,36 @@ CREATE TABLE curation_creation_tracks (
     UNIQUE (creation_id, position)
 );
 
-INSERT INTO curation_creations SELECT * FROM curation_creations_backup;
+INSERT INTO curation_creations (
+    id,
+    name,
+    kind,
+    user_prompt,
+    report_markdown,
+    status,
+    created_at,
+    updated_at,
+    validated_at,
+    model_config_json
+)
+SELECT
+    id,
+    name,
+    kind,
+    CASE
+        WHEN length(trim(user_prompt)) > 0 THEN user_prompt
+        ELSE 'Legacy prompt unavailable'
+    END,
+    CASE
+        WHEN length(trim(report_markdown)) > 0 THEN report_markdown
+        ELSE 'Legacy report unavailable'
+    END,
+    status,
+    created_at,
+    updated_at,
+    validated_at,
+    model_config_json
+FROM curation_creations_backup;
 INSERT INTO curation_creation_tracks SELECT * FROM curation_creation_tracks_backup;
 DROP TABLE curation_creation_tracks_backup;
 DROP TABLE curation_creations_backup;
