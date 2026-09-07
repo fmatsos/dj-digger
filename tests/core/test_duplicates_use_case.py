@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pytest
 
+from dj_digger.application import WorkspaceApplication
 from dj_digger.core.application import (
     CoreApplication,
     DuplicateAnalysisResult,
@@ -36,6 +37,20 @@ def test_duplicate_workflows_return_typed_core_results(tmp_path: Path) -> None:
     assert isinstance(analyzed, DuplicateAnalysisResult)
     assert isinstance(listed, list)
     assert all(isinstance(group, DuplicateGroupDescription) for group in listed)
+    assert isinstance(marked, QualityMarkResult)
+
+
+@pytest.mark.parametrize("application_type", (CoreApplication, WorkspaceApplication))
+def test_duplicate_workflows_preserve_legacy_source_id_keyword(
+    application_type: type[WorkspaceApplication], tmp_path: Path
+) -> None:
+    with application_type(_config(tmp_path)) as application:
+        analyzed = application.duplicates_analyze(source_id="source")
+        listed = application.duplicates_list(source_id="source")
+        marked = application.duplicates_mark_best_quality(source_id="source")
+
+    assert isinstance(analyzed, DuplicateAnalysisResult)
+    assert listed == []
     assert isinstance(marked, QualityMarkResult)
 
 
