@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "dj-digger"
-version = "0.1.0"
+version = "0.1.0a2"
 description = "Catalog and export DJ music libraries."
 readme = "README.md"
 requires-python = ">=3.12"
