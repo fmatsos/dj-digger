@@ -19,6 +19,15 @@ from dj_digger.core.analysis.pipeline import (
 from dj_digger.core.analysis.worker_client import IsolatedAnalysisExtractor
 from dj_digger.core.application.analysis_progress import NullProgressReporter, ProgressReporter
 from dj_digger.core.application.analyze import AnalyzeRequest, AnalyzeUseCase
+from dj_digger.core.application.duplicates import (
+    DuplicateAnalyzeRequest,
+    DuplicateAnalyzeUseCase,
+    DuplicateListRequest,
+    DuplicateListUseCase,
+    DuplicateMarkBestRequest,
+    DuplicateMarkBestUseCase,
+)
+from dj_digger.core.application.errors import ResourceNotFoundError
 from dj_digger.core.application.metadata import (
     MetadataRequest,
     MetadataRunResult,
@@ -31,14 +40,14 @@ from dj_digger.core.catalog.database import Database
 from dj_digger.core.catalog.migrations import CURRENT_VERSION
 from dj_digger.core.catalog.repositories import SourceRepository
 from dj_digger.core.config import LibrarySourceConfig, WorkspaceConfig
-from dj_digger.curation import CurationCreation, CurationRepository, CurationStatus
-from dj_digger.curation.agent import CurationAgent, CurationRequest, CurationResult
-from dj_digger.duplicates.quality import QualityMarkResult
-from dj_digger.duplicates.service import (
+from dj_digger.core.duplicates.quality import QualityMarkResult
+from dj_digger.core.duplicates.service import (
     DuplicateAnalysisResult,
     DuplicateGroupDescription,
     DuplicateService,
 )
+from dj_digger.curation import CurationCreation, CurationRepository, CurationStatus
+from dj_digger.curation.agent import CurationAgent, CurationRequest, CurationResult
 from dj_digger.exports.audit import AuditExporter
 from dj_digger.exports.curation import CurationExportContent, CurationExportResult, export_curation
 from dj_digger.exports.snapshot import SnapshotExporter, SnapshotResult
@@ -180,7 +189,7 @@ class WorkspaceApplication:
 
     def duplicates_analyze(
         self,
-        source_id: str | None = None,
+        request: DuplicateAnalyzeRequest | str | None = None,
         *,
         workers: int = 1,
         track_timeout: float = 1800.0,
@@ -188,28 +197,80 @@ class WorkspaceApplication:
         mastering: bool = False,
         progress: ProgressReporter | None = None,
     ) -> DuplicateAnalysisResult:
-        """Fingerprint present tracks and derive duplicate groups in the requested scope."""
-        if source_id is not None:
-            self._selected_sources(source_id, enabled_only=True)
-        return self._duplicate_service(progress=progress).analyze(
-            source_id=source_id,
-            workers=workers,
-            track_timeout=track_timeout,
-            mark_best_quality=mark_best_quality,
-            mastering=mastering,
+        """Run duplicate analysis through the typed core request contract."""
+        effective = (
+            request
+            if isinstance(request, DuplicateAnalyzeRequest)
+            else DuplicateAnalyzeRequest(
+                source_id=request if isinstance(request, str) else None,
+                workers=workers,
+                track_timeout=track_timeout,
+                mark_best_quality=mark_best_quality,
+                mastering=mastering,
+            )
         )
+        return self._duplicate_analyze_request(effective, progress=progress)
 
-    def duplicates_list(self, source_id: str | None = None) -> list[DuplicateGroupDescription]:
-        """List duplicate groups enriched with technical facts and quality state."""
-        if source_id is not None:
-            self._selected_sources(source_id, enabled_only=True)
-        return self._duplicate_service().describe_groups(source_id)
+    def _duplicate_analyze_request(
+        self,
+        request: DuplicateAnalyzeRequest,
+        *,
+        progress: ProgressReporter | None = None,
+    ) -> DuplicateAnalysisResult:
+        self._require_duplicate_source(request.source_id)
+        return DuplicateAnalyzeUseCase(
+            self.database,
+            {source.id: source.path for source in self.config.sources},
+            mastering_config=self.config.mastering,
+        ).execute(request, progress=progress)
 
-    def duplicates_mark_best_quality(self, source_id: str | None = None) -> QualityMarkResult:
-        """Elect and persist the best-quality track per duplicate group, standalone."""
-        if source_id is not None:
+    def duplicates_list(
+        self, request: DuplicateListRequest | str | None = None
+    ) -> list[DuplicateGroupDescription]:
+        """List duplicate groups through the typed core request contract."""
+        effective = (
+            request
+            if isinstance(request, DuplicateListRequest)
+            else DuplicateListRequest(source_id=request if isinstance(request, str) else None)
+        )
+        return self._duplicate_list_request(effective)
+
+    def _duplicate_list_request(
+        self, request: DuplicateListRequest
+    ) -> list[DuplicateGroupDescription]:
+        self._require_duplicate_source(request.source_id)
+        return DuplicateListUseCase(
+            self.database,
+            {source.id: source.path for source in self.config.sources},
+            mastering_config=self.config.mastering,
+        ).execute(request)
+
+    def duplicates_mark_best_quality(
+        self, request: DuplicateMarkBestRequest | str | None = None
+    ) -> QualityMarkResult:
+        """Mark the best-quality copy through the typed core request contract."""
+        effective = (
+            request
+            if isinstance(request, DuplicateMarkBestRequest)
+            else DuplicateMarkBestRequest(source_id=request if isinstance(request, str) else None)
+        )
+        return self._duplicate_mark_best_request(effective)
+
+    def _duplicate_mark_best_request(self, request: DuplicateMarkBestRequest) -> QualityMarkResult:
+        self._require_duplicate_source(request.source_id)
+        return DuplicateMarkBestUseCase(
+            self.database,
+            {source.id: source.path for source in self.config.sources},
+            mastering_config=self.config.mastering,
+        ).execute(request)
+
+    def _require_duplicate_source(self, source_id: str | None) -> None:
+        if source_id is None:
+            return
+        try:
             self._selected_sources(source_id, enabled_only=True)
-        return self._duplicate_service().mark_best_quality(source_id)
+        except ValueError as error:
+            raise ResourceNotFoundError(str(error)) from error
 
     def curation_create(self, request: CurationRequest) -> CurationResult:
         """Run and persist one catalog-grounded draft through the application boundary."""

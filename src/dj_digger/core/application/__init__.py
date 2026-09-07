@@ -29,6 +29,14 @@ __all__ = [
     "CoreApplication",
     "AnalyzeRequest",
     "AnalyzeUseCase",
+    "DuplicateAnalysisResult",
+    "DuplicateAnalyzeRequest",
+    "DuplicateAnalyzeUseCase",
+    "DuplicateGroupDescription",
+    "DuplicateListRequest",
+    "DuplicateListUseCase",
+    "DuplicateMarkBestRequest",
+    "DuplicateMarkBestUseCase",
     "AnalysisProgressReporter",
     "CoreError",
     "DependencyError",
@@ -42,6 +50,7 @@ __all__ = [
     "ProgressEventReporter",
     "ProgressReporter",
     "ProgressSink",
+    "QualityMarkResult",
     "NullProgressReporter",
     "ResourceNotFoundError",
     "ScanRequest",
@@ -61,4 +70,19 @@ def __getattr__(name: str) -> Any:
         from dj_digger.core.application.analyze import AnalyzeRequest, AnalyzeUseCase
 
         return {"AnalyzeRequest": AnalyzeRequest, "AnalyzeUseCase": AnalyzeUseCase}[name]
+    duplicate_names = {
+        "DuplicateAnalysisResult",
+        "DuplicateAnalyzeRequest",
+        "DuplicateAnalyzeUseCase",
+        "DuplicateGroupDescription",
+        "DuplicateListRequest",
+        "DuplicateListUseCase",
+        "DuplicateMarkBestRequest",
+        "DuplicateMarkBestUseCase",
+        "QualityMarkResult",
+    }
+    if name in duplicate_names:
+        from dj_digger.core.application import duplicates
+
+        return getattr(duplicates, name)
     raise AttributeError(name)
