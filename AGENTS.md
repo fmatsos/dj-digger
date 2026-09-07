@@ -3,7 +3,7 @@
 ## Mission and architecture
 
 DJ Digger is a music library analysis system that ingests track metadata, runs
-analysis workers, maintains a SQLite V9 catalog, and exports structured data.
+analysis workers, maintains a SQLite V11 catalog, and exports structured data.
 The public entry point is the CLI application. Docker Agent may orchestrate
 bounded work while Codex remains the implementation worker; direct Codex use
 continues as the fallback. Changes stay vertically scoped from CLI flags through catalog mutations to worker
