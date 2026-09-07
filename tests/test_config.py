@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from dj_digger.config import DspConfig, WorkspaceConfig
+from dj_digger.core.config import DspConfig, WorkspaceConfig
 
 FIXTURES = Path(__file__).parent / "fixtures"
 
@@ -152,7 +152,7 @@ def test_canonical_dsp_config_requires_packaged_resource(monkeypatch: pytest.Mon
         def is_file(self) -> bool:
             return False
 
-    monkeypatch.setattr("dj_digger.config.files", lambda _package: MissingResource())
+    monkeypatch.setattr("dj_digger.core.config.files", lambda _package: MissingResource())
 
     with pytest.raises(FileNotFoundError, match="dj_digger/analysis.toml"):
         DspConfig.canonical()

@@ -4,16 +4,16 @@ from pathlib import Path
 
 import pytest
 
-from dj_digger.catalog.database import Database
-from dj_digger.config import WorkspaceConfig
-from dj_digger.exports.audit import AuditExporter
+from dj_digger.core.catalog.database import Database
+from dj_digger.core.config import WorkspaceConfig
+from dj_digger.core.exports.audit import AuditExporter
 
 
 def test_removed_legacy_python_interfaces_are_absent() -> None:
-    import dj_digger.analysis.persistence as persistence
-    import dj_digger.catalog.repositories as repositories
+    import dj_digger.core.analysis.persistence as persistence
+    import dj_digger.core.catalog.repositories as repositories
 
-    assert importlib.util.find_spec("dj_digger.exports.legacy") is None
+    assert importlib.util.find_spec("dj_digger.core.exports.legacy") is None
     assert not hasattr(persistence.AnalysisPersistence, "persist_run")
     assert not hasattr(persistence.AnalysisPersistence, "store_success")
     assert not hasattr(persistence.AnalysisPersistence, "store_failure")

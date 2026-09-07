@@ -8,14 +8,14 @@ from typing import Any
 
 import pytest
 
-from dj_digger.analysis.config import AnalysisIdentity
-from dj_digger.analysis.extractor import AnalysisExtractionError
-from dj_digger.analysis.pipeline import AnalysisPipeline, TimedAnalysisExtractor
-from dj_digger.analysis.worker_client import IsolatedAnalysisExtractor
-from dj_digger.catalog.database import Database
-from dj_digger.catalog.models import Track
-from dj_digger.catalog.repositories import ScanRunRepository, SourceRepository, TrackRepository
-from dj_digger.config import DspConfig
+from dj_digger.core.analysis.config import AnalysisIdentity
+from dj_digger.core.analysis.extractor import AnalysisExtractionError
+from dj_digger.core.analysis.pipeline import AnalysisPipeline, TimedAnalysisExtractor
+from dj_digger.core.analysis.worker_client import IsolatedAnalysisExtractor
+from dj_digger.core.catalog.database import Database
+from dj_digger.core.catalog.models import Track
+from dj_digger.core.catalog.repositories import ScanRunRepository, SourceRepository, TrackRepository
+from dj_digger.core.config import DspConfig
 
 IDENTITY = AnalysisIdentity(schema_version=2, analyzer_version="test", config_hash="a" * 64)
 
@@ -64,7 +64,7 @@ def _track(database: Database, source_id: str, path: str) -> Track:
 
 
 def _pipeline(database: Database, calls: list[str]):
-    from dj_digger.analysis.pipeline import AnalysisPipeline
+    from dj_digger.core.analysis.pipeline import AnalysisPipeline
 
     def extract(track: Any) -> Mapping[str, object]:
         calls.append(track.relative_path)
@@ -317,8 +317,8 @@ def test_pipeline_force_reports_partial_when_reuse_and_pending_failure_coexist(
 def test_pipeline_aggregates_empty_success_partial_and_failure_statuses(
     tmp_path: Path, outcomes: list[str], expected: str
 ) -> None:
-    from dj_digger.analysis.extractor import AnalysisExtractionError
-    from dj_digger.analysis.pipeline import AnalysisPipeline
+    from dj_digger.core.analysis.extractor import AnalysisExtractionError
+    from dj_digger.core.analysis.pipeline import AnalysisPipeline
 
     database = Database.open(tmp_path / "catalog.sqlite")
     database.migrate()
@@ -412,7 +412,7 @@ def test_pipeline_never_runs_more_extractions_than_workers(tmp_path: Path) -> No
 
 
 def test_pipeline_reconciles_interrupted_run_before_pending_selection(tmp_path: Path) -> None:
-    from dj_digger.analysis.persistence import AnalysisOutcome, AnalysisPersistence
+    from dj_digger.core.analysis.persistence import AnalysisOutcome, AnalysisPersistence
 
     database = Database.open(tmp_path / "catalog.sqlite")
     database.migrate()
@@ -443,7 +443,7 @@ def test_pipeline_reconciles_interrupted_run_before_pending_selection(tmp_path: 
 def test_pipeline_propagates_outcome_persistence_error_and_leaves_run_running(
     tmp_path: Path,
 ) -> None:
-    from dj_digger.analysis.extractor import AnalysisExtractionResult
+    from dj_digger.core.analysis.extractor import AnalysisExtractionResult
 
     database = Database.open(tmp_path / "catalog.sqlite")
     database.migrate()
@@ -467,7 +467,7 @@ def test_pipeline_propagates_outcome_persistence_error_and_leaves_run_running(
 
 
 def test_concurrent_pipeline_fails_without_reconciling_the_active_run(tmp_path: Path) -> None:
-    from dj_digger.analysis.persistence import AnalysisPersistence
+    from dj_digger.core.analysis.persistence import AnalysisPersistence
 
     catalog_path = tmp_path / "catalog.sqlite"
     active_database = Database.open(catalog_path)

@@ -1,16 +1,16 @@
 from pathlib import Path
 
-from dj_digger.catalog.database import Database
-from dj_digger.catalog.models import Track
-from dj_digger.catalog.repositories import (
+from dj_digger.core.catalog.database import Database
+from dj_digger.core.catalog.models import Track
+from dj_digger.core.catalog.repositories import (
     ScanRunRepository,
     SourceRepository,
     TechnicalAudioMetadataRepository,
     TrackRepository,
 )
-from dj_digger.duplicates.fingerprint import FINGERPRINT_VERSION, Fingerprint
-from dj_digger.duplicates.quality import QualitySelector
-from dj_digger.duplicates.repository import DuplicateRepository
+from dj_digger.core.duplicates.fingerprint import FINGERPRINT_VERSION, Fingerprint
+from dj_digger.core.duplicates.quality import QualitySelector
+from dj_digger.core.duplicates.repository import DuplicateRepository
 
 
 def _track(
@@ -57,7 +57,7 @@ def _facts(
     sample_rate: int | None = None,
     bitrate: int | None = None,
 ) -> None:
-    from dj_digger.analysis.audio import TechnicalAudioMetadata
+    from dj_digger.core.analysis.audio import TechnicalAudioMetadata
 
     with database.transaction():
         TechnicalAudioMetadataRepository(database).upsert_facts(

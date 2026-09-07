@@ -11,21 +11,21 @@ from typing import Any
 import anyio
 import pytest
 
-from dj_digger.catalog.database import Database
-from dj_digger.config import CurationConfig, WorkspaceConfig
-from dj_digger.curation.agent import (
+from dj_digger.core.catalog.database import Database
+from dj_digger.core.config import CurationConfig, WorkspaceConfig
+from dj_digger.core.curation.agent import (
     CurationAgent,
     CurationGroundingError,
     CurationRequest,
     CurationResult,
     CurationTurnLimitError,
 )
-from dj_digger.curation.client import (
+from dj_digger.core.curation.client import (
     CurationResponseError,
     CurationTimeoutError,
     OpenAICompatibleClient,
 )
-from dj_digger.curation.prompts import CUSTOM_SYSTEM_PROMPT_PREFIX, SYSTEM_PROMPT
+from dj_digger.core.curation.prompts import CUSTOM_SYSTEM_PROMPT_PREFIX, SYSTEM_PROMPT
 
 
 class _Handler(BaseHTTPRequestHandler):

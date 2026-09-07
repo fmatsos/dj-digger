@@ -5,7 +5,7 @@ from pathlib import Path
 
 from typer import _completion_shared
 
-from dj_digger.completion import _read_profile, replace_profile_region
+from dj_digger.cli.completion import _read_profile, replace_profile_region
 
 
 def _run_cli(*args: str, env: dict[str, str] | None = None) -> subprocess.CompletedProcess[str]:

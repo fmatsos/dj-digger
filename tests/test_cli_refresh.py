@@ -5,6 +5,7 @@ import pytest
 from typer.testing import CliRunner
 
 from dj_digger.cli import app
+from dj_digger.core.application import CoreApplication
 
 
 def write_config(path: Path, *, source: Path, exports: Path) -> Path:
@@ -78,12 +79,12 @@ def test_refresh_passes_the_live_reporter_to_the_application(monkeypatch, tmp_pa
         def __exit__(self, exc_type, exc_value, traceback):
             return None
 
-    def refresh(self, *, progress=None, workers=1, track_timeout=1800.0):
-        received.extend([progress, workers, track_timeout])
+    def refresh(self, request, *, progress=None):
+        received.extend([progress, request.workers, request.track_timeout])
         return {"event": "refresh", "status": "succeeded", "published": True}
 
     monkeypatch.setattr("dj_digger.cli.RichProgressReporter", ReporterContext)
-    monkeypatch.setattr("dj_digger.cli.WorkspaceApplication.refresh", refresh)
+    monkeypatch.setattr(CoreApplication, "refresh", refresh)
 
     result = CliRunner().invoke(
         app,
@@ -110,11 +111,11 @@ def test_refresh_uses_safe_execution_defaults(monkeypatch, tmp_path: Path) -> No
     config = write_config(tmp_path, source=source, exports=tmp_path / "exports")
     received: dict[str, object] = {}
 
-    def refresh(self, **options):
-        received.update(options)
+    def refresh(self, request, *, progress=None):
+        received.update(workers=request.workers, track_timeout=request.track_timeout)
         return {"event": "refresh", "status": "succeeded", "published": True}
 
-    monkeypatch.setattr("dj_digger.cli.WorkspaceApplication.refresh", refresh)
+    monkeypatch.setattr(CoreApplication, "refresh", refresh)
 
     result = CliRunner().invoke(app, ["refresh", "--config", str(config)])
 
@@ -172,8 +173,8 @@ def test_refresh_global_verbosity_count_is_zero_one_or_two(monkeypatch, tmp_path
 
     monkeypatch.setattr("dj_digger.cli.RichProgressReporter", ReporterContext)
     monkeypatch.setattr(
-        "dj_digger.cli.WorkspaceApplication.refresh",
-        lambda self, *, progress=None, workers=1, track_timeout=1800.0: {
+        "dj_digger.core.application.app.CoreApplication.refresh",
+        lambda self, request, *, progress=None: {
             "event": "refresh",
             "status": "succeeded",
         },

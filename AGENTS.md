@@ -3,7 +3,7 @@
 ## Mission and architecture
 
 DJ Digger is a music library analysis system that ingests track metadata, runs
-analysis workers, maintains a SQLite V9 catalog, and exports structured data.
+analysis workers, maintains a SQLite V11 catalog, and exports structured data.
 The public entry point is the CLI application. Docker Agent may orchestrate
 bounded work while Codex remains the implementation worker; direct Codex use
 continues as the fallback. Changes stay vertically scoped from CLI flags through catalog mutations to worker
@@ -24,7 +24,7 @@ fall back to Read/Grep/rg without blocking when it is absent.
 This file applies to all work on the repository. Scoped `AGENTS.md` files below
 each major directory define rules specific to their scope. Source code changes
 require consultation of the closest scoped file before editing: check
-`src/dj_digger/AGENTS.md` before editing application code, `src/dj_digger/catalog/AGENTS.md`
+`src/dj_digger/AGENTS.md` before editing application code, `src/dj_digger/core/catalog/AGENTS.md`
 for schema or migrations, `tests/AGENTS.md` for test changes, and `docs/AGENTS.md`
 for documentation changes. No edit to code below a scoped directory may proceed
 without reading that directory's closest `AGENTS.md` first.

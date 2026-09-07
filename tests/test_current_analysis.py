@@ -4,13 +4,13 @@ from pathlib import Path
 
 import pytest
 
-from dj_digger.analysis.config import AnalysisIdentity
-from dj_digger.analysis.extractor import AnalysisExtractionResult
-from dj_digger.analysis.persistence import AnalysisOutcome, AnalysisPersistence
-from dj_digger.catalog.current_analysis import CurrentAnalysisProjector
-from dj_digger.catalog.database import Database
-from dj_digger.catalog.models import Track
-from dj_digger.catalog.repositories import ScanRunRepository, SourceRepository, TrackRepository
+from dj_digger.core.analysis.config import AnalysisIdentity
+from dj_digger.core.analysis.extractor import AnalysisExtractionResult
+from dj_digger.core.analysis.persistence import AnalysisOutcome, AnalysisPersistence
+from dj_digger.core.catalog.current_analysis import CurrentAnalysisProjector
+from dj_digger.core.catalog.database import Database
+from dj_digger.core.catalog.models import Track
+from dj_digger.core.catalog.repositories import ScanRunRepository, SourceRepository, TrackRepository
 
 
 @pytest.fixture
@@ -270,7 +270,7 @@ def test_projection_failure_rolls_back_attempt_sections_event_and_counter(
 def test_latest_attempt_export_remains_failed_while_projection_keeps_latest_success(
     database: Database, track: Track, tmp_path: Path
 ) -> None:
-    from dj_digger.analysis.exporters import AnalysisExporter
+    from dj_digger.core.analysis.exporters import AnalysisExporter
 
     _, success_id = _success(database, track, occurred_at="one", bpm=128.0, key="8A")
     _failure(database, track, occurred_at="two")

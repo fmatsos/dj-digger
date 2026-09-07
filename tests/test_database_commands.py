@@ -3,8 +3,8 @@ from pathlib import Path
 
 from typer.testing import CliRunner
 
-from dj_digger.catalog.database import Database
 from dj_digger.cli import app
+from dj_digger.core.catalog.database import Database
 
 
 def _write_config(tmp_path: Path) -> Path:

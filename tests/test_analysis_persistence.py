@@ -3,9 +3,9 @@ from pathlib import Path
 
 import pytest
 
-from dj_digger.analysis.config import AnalysisIdentity
-from dj_digger.catalog.database import Database
-from dj_digger.catalog.repositories import ScanRunRepository, SourceRepository, TrackRepository
+from dj_digger.core.analysis.config import AnalysisIdentity
+from dj_digger.core.catalog.database import Database
+from dj_digger.core.catalog.repositories import ScanRunRepository, SourceRepository, TrackRepository
 
 
 @pytest.fixture
@@ -41,8 +41,8 @@ def identity(config_hash: str) -> AnalysisIdentity:
 def test_incremental_lifecycle_persists_outcome_and_derives_interrupted_status(
     database, track
 ) -> None:
-    from dj_digger.analysis.extractor import AnalysisExtractionResult
-    from dj_digger.analysis.persistence import AnalysisOutcome, AnalysisPersistence
+    from dj_digger.core.analysis.extractor import AnalysisExtractionResult
+    from dj_digger.core.analysis.persistence import AnalysisOutcome, AnalysisPersistence
 
     persistence = AnalysisPersistence(database)
     ident = identity("d" * 64)
@@ -88,8 +88,8 @@ def test_incremental_lifecycle_persists_outcome_and_derives_interrupted_status(
 
 
 def test_incremental_outcome_rolls_back_attempt_sections_event_and_counter(database, track) -> None:
-    from dj_digger.analysis.extractor import AnalysisExtractionResult
-    from dj_digger.analysis.persistence import AnalysisOutcome, AnalysisPersistence
+    from dj_digger.core.analysis.extractor import AnalysisExtractionResult
+    from dj_digger.core.analysis.persistence import AnalysisOutcome, AnalysisPersistence
 
     persistence = AnalysisPersistence(database)
     ident = identity("e" * 64)
@@ -126,7 +126,7 @@ def test_incremental_outcome_rolls_back_attempt_sections_event_and_counter(datab
 def test_reconcile_running_run_refreshes_attempt_counters_without_new_history(
     database, track, eligible: int, reused: int, outcome_kind: str, expected: tuple[str, int, int]
 ) -> None:
-    from dj_digger.analysis.persistence import AnalysisOutcome, AnalysisPersistence
+    from dj_digger.core.analysis.persistence import AnalysisOutcome, AnalysisPersistence
 
     persistence = AnalysisPersistence(database)
     ident = identity("f" * 64)

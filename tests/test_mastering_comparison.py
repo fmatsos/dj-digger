@@ -1,5 +1,5 @@
-from dj_digger.config import ComparisonThresholds, MasteringConfig
-from dj_digger.duplicates.mastering_comparison import compare_group
+from dj_digger.core.config import ComparisonThresholds, MasteringConfig
+from dj_digger.core.duplicates.mastering_comparison import compare_group
 
 
 def test_review_thresholds_are_independent_from_variant_thresholds() -> None:

@@ -3,15 +3,15 @@ from threading import Event, Lock
 
 import pytest
 
-from dj_digger.catalog.database import Database
-from dj_digger.catalog.models import Track
-from dj_digger.catalog.repositories import ScanRunRepository, SourceRepository, TrackRepository
-from dj_digger.duplicates.fingerprint import (
+from dj_digger.core.catalog.database import Database
+from dj_digger.core.catalog.models import Track
+from dj_digger.core.catalog.repositories import ScanRunRepository, SourceRepository, TrackRepository
+from dj_digger.core.duplicates.fingerprint import (
     FINGERPRINT_VERSION,
     Fingerprint,
     FingerprintExtractionError,
 )
-from dj_digger.duplicates.service import DuplicateService
+from dj_digger.core.duplicates.service import DuplicateService
 
 
 class FakeExtractor:

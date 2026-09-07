@@ -1,7 +1,7 @@
 from rich.console import Console
 
-from dj_digger.progress import NullProgressReporter
-from dj_digger.rich_progress import RichProgressReporter
+from dj_digger.cli.rich_progress import RichProgressReporter
+from dj_digger.core.application.analysis_progress import NullProgressReporter
 
 
 def test_null_progress_reporter_accepts_the_complete_lifecycle() -> None:
