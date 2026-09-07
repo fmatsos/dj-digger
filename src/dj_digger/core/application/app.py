@@ -2,10 +2,9 @@
 
 import importlib.util
 import shutil
-from dataclasses import dataclass, replace
 from pathlib import Path
 from types import TracebackType
-from typing import Any, Self, cast, overload
+from typing import Self
 
 from dj_digger.core.analysis.config import CURRENT_ANALYZER_VERSION, AnalysisIdentity
 from dj_digger.core.analysis.pipeline import (
@@ -14,7 +13,7 @@ from dj_digger.core.analysis.pipeline import (
     TimedAnalysisExtractor,
 )
 from dj_digger.core.analysis.worker_client import IsolatedAnalysisExtractor
-from dj_digger.core.application.analysis_progress import ProgressReporter
+from dj_digger.core.application.analysis_progress import ProgressEventReporter, ProgressReporter
 from dj_digger.core.application.analyze import AnalyzeRequest, AnalyzeUseCase
 from dj_digger.core.application.curation import CurationRequest, CurationResult, CurationUseCase
 from dj_digger.core.application.duplicates import (
@@ -25,7 +24,7 @@ from dj_digger.core.application.duplicates import (
     DuplicateMarkBestRequest,
     DuplicateMarkBestUseCase,
 )
-from dj_digger.core.application.errors import InvalidInputError, ResourceNotFoundError
+from dj_digger.core.application.errors import ResourceNotFoundError
 from dj_digger.core.application.export import ExportRequest, ExportResult, ExportUseCase
 from dj_digger.core.application.metadata import (
     MetadataRequest,
@@ -52,7 +51,6 @@ from dj_digger.core.application.refresh import RefreshRequest, RefreshResult, Re
 from dj_digger.core.application.scan import (
     ScanRequest,
     ScanRunResult,
-    ScanSourceResult,
     ScanUseCase,
 )
 from dj_digger.core.application.snapshot import SnapshotRequest, SnapshotResult, SnapshotUseCase
@@ -65,7 +63,6 @@ from dj_digger.core.duplicates.quality import QualityMarkResult
 from dj_digger.core.duplicates.service import (
     DuplicateAnalysisResult,
     DuplicateGroupDescription,
-    DuplicateService,
 )
 from dj_digger.core.exports.curation import (
     CurationExportContent,
@@ -74,15 +71,7 @@ from dj_digger.core.exports.curation import (
 )
 
 
-@dataclass(frozen=True)
-class ScanResult:
-    source_id: str
-    succeeded: bool
-    run_id: int | None
-    error: str | None = None
-
-
-class WorkspaceApplication:
+class CoreApplication:
     """Coordinate catalog scanning, metadata, analysis, and publication."""
 
     def __init__(
@@ -137,32 +126,19 @@ class WorkspaceApplication:
     ) -> None:
         self.close()
 
-    def scan(self, source_id: str | None = None, *, enabled_only: bool = False) -> list[ScanResult]:
-        """Run the legacy scan contract retained for existing Python callers."""
-        request = ScanRequest(source_id=source_id, enabled_only=enabled_only)
-        return _legacy_scan_results(self._scan_result(request))
+    def scan(self, request: ScanRequest | None = None) -> ScanRunResult:
+        """Scan configured sources through the typed core request contract."""
+        return self._scan_result(request or ScanRequest())
 
     def _scan_result(self, request: ScanRequest) -> ScanRunResult:
         """Execute one canonical scan orchestration for all application facades."""
         return ScanUseCase(self.database, self.config).execute(request)
 
-    def _scan_for_refresh(self, *, enabled_only: bool) -> list[ScanResult]:
-        """Adapt the legacy scan result required by the refresh composition."""
-        return self.scan(enabled_only=enabled_only)
-
     def metadata(
         self,
-        source_id: str | MetadataRequest | None = None,
-        *,
-        path_prefix: str | None = None,
-        force: bool = False,
+        request: MetadataRequest | None = None,
     ) -> MetadataRunResult:
-        request = (
-            source_id
-            if isinstance(source_id, MetadataRequest)
-            else MetadataRequest(source_id=source_id, path_prefix=path_prefix, force=force)
-        )
-        return self._metadata_result(request)
+        return self._metadata_result(request or MetadataRequest())
 
     def _metadata_result(self, request: MetadataRequest) -> MetadataRunResult:
         """Execute one canonical metadata orchestration for all facades."""
@@ -170,30 +146,11 @@ class WorkspaceApplication:
 
     def analyze(
         self,
-        request: AnalyzeRequest | str | None = None,
-        *,
-        source_id: str | None = None,
-        path_prefix: str | None = None,
-        limit: int | None = None,
-        force: bool = False,
-        workers: int = 1,
-        track_timeout: float = 1800.0,
-        progress: ProgressReporter | None = None,
+        request: AnalyzeRequest | None = None,
+        progress: ProgressSink | ProgressReporter | None = None,
     ) -> AnalysisRunResult:
-        """Run the configured injectable audio analysis extractor."""
-        effective = (
-            request
-            if isinstance(request, AnalyzeRequest)
-            else AnalyzeRequest(
-                source_id=request if isinstance(request, str) else source_id,
-                path_prefix=path_prefix,
-                limit=limit,
-                force=force,
-                workers=workers,
-                track_timeout=track_timeout,
-            )
-        )
-        return self._analyze_request(effective, progress=progress)
+        """Analyze through the typed core request contract."""
+        return self._analyze_request(request or AnalyzeRequest(), progress=progress)
 
     def _analyze_request(
         self,
@@ -209,54 +166,33 @@ class WorkspaceApplication:
 
     def duplicates_analyze(
         self,
-        request: DuplicateAnalyzeRequest | str | None = None,
+        request: DuplicateAnalyzeRequest,
         *,
-        source_id: str | None = None,
-        workers: int = 1,
-        track_timeout: float = 1800.0,
-        mark_best_quality: bool = False,
-        mastering: bool = False,
-        progress: ProgressReporter | None = None,
+        progress: ProgressReporter | ProgressSink | None = None,
     ) -> DuplicateAnalysisResult:
         """Run duplicate analysis through the typed core request contract."""
-        if isinstance(request, DuplicateAnalyzeRequest):
-            effective = replace(request, source_id=_legacy_source(request.source_id, source_id))
-        else:
-            effective = DuplicateAnalyzeRequest(
-                source_id=_legacy_source(request, source_id),
-                workers=workers,
-                track_timeout=track_timeout,
-                mark_best_quality=mark_best_quality,
-                mastering=mastering,
-            )
-        return self._duplicate_analyze_request(effective, progress=progress)
+        return self._duplicate_analyze_request(request, progress=progress)
 
     def _duplicate_analyze_request(
         self,
         request: DuplicateAnalyzeRequest,
         *,
-        progress: ProgressReporter | None = None,
+        progress: ProgressReporter | ProgressSink | None = None,
     ) -> DuplicateAnalysisResult:
         self._require_duplicate_source(request.source_id)
+        reporter = ProgressEventReporter(progress) if callable(progress) else progress
         return DuplicateAnalyzeUseCase(
             self.database,
             {source.id: source.path for source in self.config.sources},
             mastering_config=self.config.mastering,
-        ).execute(request, progress=progress)
+        ).execute(request, progress=reporter)
 
     def duplicates_list(
         self,
-        request: DuplicateListRequest | str | None = None,
-        *,
-        source_id: str | None = None,
+        request: DuplicateListRequest,
     ) -> list[DuplicateGroupDescription]:
         """List duplicate groups through the typed core request contract."""
-        effective = (
-            replace(request, source_id=_legacy_source(request.source_id, source_id))
-            if isinstance(request, DuplicateListRequest)
-            else DuplicateListRequest(source_id=_legacy_source(request, source_id))
-        )
-        return self._duplicate_list_request(effective)
+        return self._duplicate_list_request(request)
 
     def _duplicate_list_request(
         self, request: DuplicateListRequest
@@ -270,17 +206,10 @@ class WorkspaceApplication:
 
     def duplicates_mark_best_quality(
         self,
-        request: DuplicateMarkBestRequest | str | None = None,
-        *,
-        source_id: str | None = None,
+        request: DuplicateMarkBestRequest,
     ) -> QualityMarkResult:
         """Mark the best-quality copy through the typed core request contract."""
-        effective = (
-            replace(request, source_id=_legacy_source(request.source_id, source_id))
-            if isinstance(request, DuplicateMarkBestRequest)
-            else DuplicateMarkBestRequest(source_id=_legacy_source(request, source_id))
-        )
-        return self._duplicate_mark_best_request(effective)
+        return self._duplicate_mark_best_request(request)
 
     def _duplicate_mark_best_request(self, request: DuplicateMarkBestRequest) -> QualityMarkResult:
         self._require_duplicate_source(request.source_id)
@@ -302,15 +231,15 @@ class WorkspaceApplication:
         """Run and persist one catalog-grounded draft asynchronously."""
         return await CurationUseCase(self.config).execute(request)
 
-    def curation_get(self, creation_id: str) -> CurationCreation | None:
+    def get_curation(self, creation_id: str) -> CurationCreation | None:
         """Return one durable curation."""
         return CurationRepository(self.database).get(creation_id)
 
-    def curation_list(self, status: CurationStatus | None = None) -> tuple[CurationCreation, ...]:
+    def list_curations(self, status: CurationStatus | None = None) -> tuple[CurationCreation, ...]:
         """List durable curations for CLI and future web consumers."""
         return CurationRepository(self.database).list(status)
 
-    def curation_validate(self, creation_id: str) -> CurationCreation:
+    def validate_curation(self, creation_id: str) -> CurationCreation:
         """Explicitly transition a draft to validated."""
         creation = CurationRepository(self.database).get(creation_id)
         if creation is None:
@@ -319,7 +248,7 @@ class WorkspaceApplication:
             raise RuntimeError("curation is already validated")
         return CurationRepository(self.database).validate(creation_id)
 
-    def curation_export(
+    def export_curation(
         self,
         creation_id: str,
         *,
@@ -337,68 +266,12 @@ class WorkspaceApplication:
             output=output,
         )
 
-    def _duplicate_service(self, *, progress: ProgressReporter | None = None) -> DuplicateService:
-        return DuplicateService(
-            self.database,
-            {source.id: source.path for source in self.config.sources},
-            progress=progress,
-            mastering_config=self.config.mastering,
-        )
+    def export(self, request: ExportRequest) -> ExportResult:
+        """Publish one typed export request."""
+        return ExportUseCase(self.database, self.config).execute(request)
 
-    @overload
-    def export(
-        self,
-        facet: ExportRequest,
-        *,
-        type: str | None = None,
-        format: str | None = None,
-        fields: str | None = None,
-    ) -> ExportResult: ...
-
-    @overload
-    def export(
-        self,
-        facet: str | None = None,
-        *,
-        type: str | None = None,
-        format: str | None = None,
-        fields: str | None = None,
-    ) -> list[str]: ...
-
-    def export(
-        self,
-        facet: str | ExportRequest | None = None,
-        *,
-        type: str | None = None,
-        format: str | None = None,
-        fields: str | None = None,
-    ) -> ExportResult | list[str]:
-        request = (
-            facet
-            if isinstance(facet, ExportRequest)
-            else ExportRequest(facet=facet, type=type, format=format, fields=fields)
-        )
-        try:
-            result = ExportUseCase(self.database, self.config).execute(request)
-        except InvalidInputError as error:
-            # Keep the historical facade's exception type stable. Core callers
-            # use ExportUseCase/CoreApplication and receive InvalidInputError.
-            raise ValueError(str(error)) from error
-        if isinstance(facet, ExportRequest):
-            return result
-        return [str(path) for path in result.paths]
-
-    def _legacy_export(self) -> list[str]:
-        """Publish the historical all-facets result for refresh composition."""
-        result = self.export()
-        if isinstance(result, ExportResult):
-            return [str(path) for path in result.paths]
-        return result
-
-    def snapshot(self, output: Path | SnapshotRequest, archive: bool = False) -> SnapshotResult:
-        request = (
-            output if isinstance(output, SnapshotRequest) else SnapshotRequest(output, archive)
-        )
+    def snapshot(self, request: SnapshotRequest) -> SnapshotResult:
+        """Publish one typed snapshot request."""
         return SnapshotUseCase(self.database).execute(request)
 
     def refresh(
@@ -425,70 +298,46 @@ class WorkspaceApplication:
         ).execute(effective, progress=progress)
 
     def _refresh_scan_dependency(self, request: ScanRequest) -> ScanRunResult:
-        """Call the typed scan path, retaining old in-process test adapters."""
-        if "_scan_for_refresh" in self.__dict__:
-            return _typed_scan_result(self._scan_for_refresh(enabled_only=request.enabled_only))
-        if "scan" in self.__dict__:
-            result = (
-                self.scan(request)
-                if isinstance(self, CoreApplication)
-                else self.scan(enabled_only=request.enabled_only)
-            )
-            return _typed_scan_result(result)
-        return self._scan_result(request)
+        return self.scan(request)
 
     def _refresh_metadata_dependency(self, request: MetadataRequest) -> MetadataRunResult:
-        if "metadata" in self.__dict__:
-            return self.metadata()
-        return self._metadata_result(request)
+        return self.metadata(request)
 
     def _refresh_analyze_dependency(
         self, request: AnalyzeRequest, progress: ProgressReporter | ProgressSink
     ) -> AnalysisRunResult:
-        if "analyze" in self.__dict__:
-            return self.analyze(
-                workers=request.workers,
-                track_timeout=request.track_timeout,
-                progress=cast(ProgressReporter, progress),
-            )
-        return self._analyze_request(request, progress=progress)
+        return self.analyze(request, progress)
 
-    def _refresh_export_dependency(self, request: ExportRequest) -> ExportResult | list[str]:
-        if "export" in self.__dict__:
-            return self.export()
-        return ExportUseCase(self.database, self.config).execute(request)
+    def _refresh_export_dependency(self, request: ExportRequest) -> ExportResult:
+        return self.export(request)
 
-    def status(self) -> dict[str, Any]:
-        return StatusUseCase(self.database, self.config).execute().as_dict()
+    def status(self) -> StatusResult:
+        return StatusUseCase(self.database, self.config).execute()
 
-    def optimize_database(self) -> dict[str, Any]:
+    def optimize_database(self) -> DatabaseOptimizeResult:
         """Run SQLite's bounded planner-statistics maintenance."""
-        return OptimizeDatabaseUseCase(self.database).execute().as_dict()
+        return OptimizeDatabaseUseCase(self.database).execute()
 
-    def quick_check_database(self) -> dict[str, Any]:
+    def quick_check_database(self) -> DatabaseQuickCheckResult:
         """Run the lightweight SQLite consistency check explicitly."""
-        return QuickCheckDatabaseUseCase(self.database).execute().as_dict()
+        return QuickCheckDatabaseUseCase(self.database).execute()
 
-    def integrity_check_database(self) -> dict[str, Any]:
+    def integrity_check_database(self) -> DatabaseIntegrityCheckResult:
         """Run SQLite's full integrity check explicitly."""
-        return IntegrityCheckDatabaseUseCase(self.database).execute().as_dict()
+        return IntegrityCheckDatabaseUseCase(self.database).execute()
 
-    def rebuild_current_analysis(self) -> dict[str, Any]:
+    def rebuild_current_analysis(self) -> DatabaseRebuildResult:
         """Rebuild the derived latest-success projection, then update planner statistics."""
-        return RebuildCurrentAnalysisUseCase(self.database).execute().as_dict()
+        return RebuildCurrentAnalysisUseCase(self.database).execute()
 
-    def doctor(self) -> dict[str, Any]:
-        return (
-            DoctorUseCase(
-                self.database,
-                self.config,
-                chromaprint_check=_has_chromaprint_muxer,
-                which=shutil.which,
-                find_spec=importlib.util.find_spec,
-            )
-            .execute()
-            .as_dict()
-        )
+    def doctor(self) -> DoctorResult:
+        return DoctorUseCase(
+            self.database,
+            self.config,
+            chromaprint_check=_has_chromaprint_muxer,
+            which=shutil.which,
+            find_spec=importlib.util.find_spec,
+        ).execute()
 
     def _selected_sources(
         self, source_id: str | None, *, enabled_only: bool
@@ -504,179 +353,6 @@ class WorkspaceApplication:
         return selected
 
 
-class CoreApplication(WorkspaceApplication):
-    """Framework-independent application boundary for core use cases."""
-
-    def __init__(
-        self, config: WorkspaceConfig, *, analysis_extractor: object | None = None
-    ) -> None:
-        super().__init__(
-            config,
-            analysis_extractor=cast(AnalysisExtractor | None, analysis_extractor),
-        )
-
-    def status(self) -> StatusResult:  # type: ignore[override]
-        """Return the typed workspace status contract."""
-        return StatusUseCase(self.database, self.config).execute()
-
-    def doctor(self) -> DoctorResult:  # type: ignore[override]
-        """Return typed workspace and SQLite diagnostics."""
-        return DoctorUseCase(
-            self.database,
-            self.config,
-            chromaprint_check=_has_chromaprint_muxer,
-            which=shutil.which,
-            find_spec=importlib.util.find_spec,
-        ).execute()
-
-    def optimize_database(self) -> DatabaseOptimizeResult:  # type: ignore[override]
-        return OptimizeDatabaseUseCase(self.database).execute()
-
-    def quick_check_database(self) -> DatabaseQuickCheckResult:  # type: ignore[override]
-        return QuickCheckDatabaseUseCase(self.database).execute()
-
-    def integrity_check_database(self) -> DatabaseIntegrityCheckResult:  # type: ignore[override]
-        return IntegrityCheckDatabaseUseCase(self.database).execute()
-
-    def rebuild_current_analysis(self) -> DatabaseRebuildResult:  # type: ignore[override]
-        return RebuildCurrentAnalysisUseCase(self.database).execute()
-
-    def get_curation(self, creation_id: str) -> CurationCreation | None:
-        """Return one durable curation through the typed core boundary."""
-        return self.curation_get(creation_id)
-
-    def list_curations(self, status: CurationStatus | None = None) -> tuple[CurationCreation, ...]:
-        """List durable curations through the typed core boundary."""
-        return self.curation_list(status)
-
-    def validate_curation(self, creation_id: str) -> CurationCreation:
-        """Transition one draft to validated through the typed core boundary."""
-        return self.curation_validate(creation_id)
-
-    def export_curation(
-        self,
-        creation_id: str,
-        *,
-        content: CurationExportContent,
-        copy_files: bool,
-        output: Path,
-    ) -> CurationExportResult:
-        """Publish one persisted curation through the typed core boundary."""
-        return self.curation_export(
-            creation_id, content=content, copy_files=copy_files, output=output
-        )
-
-    def scan(self, request: ScanRequest) -> ScanRunResult:  # type: ignore[override]
-        """Scan the requested sources and return immutable typed results."""
-        return self._scan_result(request)
-
-    def metadata(self, request: MetadataRequest | None = None) -> MetadataRunResult:  # type: ignore[override]
-        """Refresh metadata through the typed core contract."""
-        return super().metadata(request or MetadataRequest())
-
-    def analyze(
-        self,
-        request: AnalyzeRequest | str | None = None,
-        progress: ProgressSink | ProgressReporter | None = None,
-        *,
-        source_id: str | None = None,
-        path_prefix: str | None = None,
-        limit: int | None = None,
-        force: bool = False,
-        workers: int = 1,
-        track_timeout: float = 1800.0,
-    ) -> AnalysisRunResult:
-        """Analyze through the typed core request, retaining refresh compatibility."""
-        effective = (
-            request
-            if isinstance(request, AnalyzeRequest)
-            else AnalyzeRequest(
-                source_id=request if isinstance(request, str) else source_id,
-                path_prefix=path_prefix,
-                limit=limit,
-                force=force,
-                workers=workers,
-                track_timeout=track_timeout,
-            )
-        )
-        return self._analyze_request(effective, progress=progress)
-
-    def _scan_for_refresh(self, *, enabled_only: bool) -> list[ScanResult]:
-        """Keep inherited refresh compatible with the typed scan contract."""
-        return _legacy_scan_results(self.scan(ScanRequest(enabled_only=enabled_only)))
-
-    @overload
-    def export(
-        self,
-        facet: ExportRequest,
-        *,
-        type: str | None = None,
-        format: str | None = None,
-        fields: str | None = None,
-    ) -> ExportResult: ...
-
-    @overload
-    def export(
-        self,
-        facet: str | None = None,
-        *,
-        type: str | None = None,
-        format: str | None = None,
-        fields: str | None = None,
-    ) -> list[str]: ...
-
-    def export(
-        self,
-        facet: str | ExportRequest | None = None,
-        *,
-        type: str | None = None,
-        format: str | None = None,
-        fields: str | None = None,
-    ) -> ExportResult | list[str]:
-        """Publish through the typed core export contract."""
-        if isinstance(facet, ExportRequest):
-            return ExportUseCase(self.database, self.config).execute(facet)
-        return super().export(facet, type=type, format=format, fields=fields)
-
-    def snapshot(self, request: Path | SnapshotRequest, archive: bool = False) -> SnapshotResult:
-        """Publish through the typed core snapshot contract."""
-        effective = (
-            request if isinstance(request, SnapshotRequest) else SnapshotRequest(request, archive)
-        )
-        return SnapshotUseCase(self.database).execute(effective)
-
-
-def _legacy_source(request: str | None, source_id: str | None) -> str | None:
-    """Normalize the historical positional and keyword source arguments."""
-    if request is not None and source_id is not None and request != source_id:
-        raise ValueError("conflicting duplicate source identifiers")
-    return request if request is not None else source_id
-
-
-def _legacy_scan_results(result: ScanRunResult) -> list[ScanResult]:
-    """Adapt one typed result for the historical application contract."""
-    return [
-        ScanResult(item.source_id, item.succeeded, item.run_id, item.error)
-        for item in result.sources
-    ]
-
-
-def _typed_scan_result(result: ScanRunResult | list[Any]) -> ScanRunResult:
-    if isinstance(result, ScanRunResult):
-        return result
-    return ScanRunResult(
-        tuple(
-            ScanSourceResult(
-                source_id=item.source_id,
-                succeeded=item.succeeded,
-                run_id=getattr(item, "run_id", None),
-                error=getattr(item, "error", None),
-            )
-            for item in result
-        )
-    )
-
-
 def _has_chromaprint_muxer() -> bool:
-    """Compatibility hook for tests and legacy callers."""
+    """Return whether the duplicate-analysis runtime dependency is available."""
     return has_chromaprint_muxer()

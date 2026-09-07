@@ -19,9 +19,9 @@ No warnings, hints, or deferred types are permitted.
 ## Modules and composition
 
 Code is organized into focused, single-responsibility modules.
-The `WorkspaceApplication` class is the catalog command composition boundary
+The `CoreApplication` class is the catalog command composition boundary
 for runtime resource loading and session lifecycle. Initialization errors in
-`WorkspaceApplication` are fatal and must be caught and reported at the CLI level.
+`CoreApplication` are fatal and must be caught and reported at the CLI level.
 
 All runtime resources (templates, schema, data files) load through
 `importlib.resources` to remain independent of the checkout directory.

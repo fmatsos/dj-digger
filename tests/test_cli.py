@@ -108,6 +108,23 @@ def test_scan_command_uses_failure_exit_code(monkeypatch, tmp_path: Path) -> Non
     assert json.loads(result.stdout)["status"] == "failed"
 
 
+@pytest.mark.parametrize("command", ["scan", "metadata", "refresh"])
+def test_malformed_config_returns_typed_json_failure(
+    tmp_path: Path, command: str
+) -> None:
+    config = tmp_path / "malformed.toml"
+    config.write_text("[workspace\n", encoding="utf-8")
+
+    result = CliRunner().invoke(app, [command, "--config", str(config), "--json"])
+
+    assert result.exit_code == 1
+    payload = json.loads(result.stdout)
+    assert payload["event"] == command
+    assert payload["status"] == "failed"
+    assert payload["code"] == "invalid_config"
+    assert "invalid configuration" in payload["error"]
+
+
 @pytest.mark.parametrize("relative_path", ["config.toml", "config/config.toml"])
 def test_status_discovers_config_in_current_workspace(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, relative_path: str
@@ -205,7 +222,7 @@ def test_run_closes_its_application_when_the_action_fails(monkeypatch) -> None:
 
     config = type("Config", (), {"database": Path("catalog.sqlite")})()
     monkeypatch.setattr("dj_digger.cli.WorkspaceConfig.load", lambda _path: config)
-    monkeypatch.setattr("dj_digger.cli.WorkspaceApplication", FakeApplication)
+    monkeypatch.setattr("dj_digger.cli.CoreApplication", FakeApplication)
     monkeypatch.setattr("dj_digger.cli.RunLogger", FakeLogger)
 
     with pytest.raises(typer.Exit):

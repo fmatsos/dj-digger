@@ -1,6 +1,8 @@
 """Architecture checks for the core/application boundary."""
 
 import ast
+import importlib
+import importlib.util
 from pathlib import Path
 
 
@@ -142,3 +144,12 @@ def test_source_tests_and_scripts_do_not_import_legacy_internal_paths() -> None:
                 if any(module == item or module.startswith(f"{item}.") for item in legacy):
                     violations.append(f"{path}: {module}")
     assert not violations, "legacy internal imports remain:\n" + "\n".join(sorted(violations))
+
+
+def test_removed_application_compatibility_surfaces_are_not_shipped() -> None:
+    cli = importlib.import_module("dj_digger.cli")
+    application = importlib.import_module("dj_digger.core.application.app")
+
+    assert not hasattr(cli, "WorkspaceApplication")
+    assert not hasattr(application, "WorkspaceApplication")
+    assert importlib.util.find_spec("dj_digger.cli.commands.jobs") is None

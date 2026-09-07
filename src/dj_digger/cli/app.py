@@ -32,6 +32,7 @@ from dj_digger.cli.completion import install_patches
 from dj_digger.cli.presenters.copy import copy_payload, copy_progress_lines
 from dj_digger.cli.presenters.jobs import jobs_payload
 from dj_digger.cli.rich_progress import RichProgressReporter
+from dj_digger.cli.runtime import ConfigLoadError, config_failure, load_config
 from dj_digger.cli.terminal import render
 from dj_digger.core.application import (
     AnalyzeRequest,
@@ -44,12 +45,9 @@ from dj_digger.core.application import (
     RefreshRequest,
     SnapshotRequest,
 )
-from dj_digger.core.config import WorkspaceConfig
 from dj_digger.core.run_log import RunLogger
 
 install_patches()
-
-WorkspaceApplication = CoreApplication
 
 app = typer.Typer(
     help="Catalog and export DJ music libraries.",
@@ -146,24 +144,31 @@ BackgroundOption = Annotated[
 ]
 
 
-def _run(config_path: Path, action: Any, *, json_output: bool = False) -> None:
+def _run(
+    config_path: Path, action: Any, *, event: str = "command", json_output: bool = False
+) -> None:
     package = sys.modules.get("dj_digger.cli")
-    config_type = (
-        WorkspaceConfig if package is None else getattr(package, "WorkspaceConfig", WorkspaceConfig)
-    )
     application_type = (
-        WorkspaceApplication
-        if package is None
-        else getattr(package, "WorkspaceApplication", WorkspaceApplication)
+        CoreApplication if package is None else getattr(package, "CoreApplication", CoreApplication)
     )
     logger_type = RunLogger if package is None else getattr(package, "RunLogger", RunLogger)
-    config = config_type.load(config_path)
+    try:
+        config = load_config(config_path)
+    except ConfigLoadError as error:
+        diagnostic = config_failure(event, error)
+        if json_output:
+            typer.echo(
+                json.dumps(diagnostic, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+            )
+        else:
+            render(diagnostic)
+        raise typer.Exit(1) from None
     logger = logger_type(config.database)
     try:
         with application_type(config) as service:
             diagnostic = action(service)
     except Exception as error:
-        diagnostic = {"event": "command", "status": "failed", "error": str(error)}
+        diagnostic = {"event": event, "status": "failed", "error": str(error)}
     logger.write(diagnostic)
     job_id = background.current_job_id()
     if job_id is not None:
@@ -183,7 +188,17 @@ def _run(config_path: Path, action: Any, *, json_output: bool = False) -> None:
 def _run_in_background(
     config_path: Path, command: str, argv: list[str], *, json_output: bool = False
 ) -> None:
-    config = WorkspaceConfig.load(config_path)
+    try:
+        config = load_config(config_path)
+    except ConfigLoadError as error:
+        diagnostic = config_failure(command, error)
+        if json_output:
+            typer.echo(
+                json.dumps(diagnostic, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+            )
+        else:
+            render(diagnostic)
+        raise typer.Exit(1) from None
     info = background.launch(config.database, command, argv)
     diagnostic = {"event": command, "status": "background", **info}
     if json_output:
@@ -286,7 +301,7 @@ def analyze(
                 progress=progress,
             )
 
-    _run(config, action, json_output=json_output)
+    _run(config, action, event="analyze", json_output=json_output)
 
 
 @app.command()
@@ -362,7 +377,7 @@ def duplicates(
             DuplicateMarkBestRequest(source_id=source),
         )
 
-    _run(config, action, json_output=json_output)
+    _run(config, action, event="duplicates", json_output=json_output)
 
 
 def _was_passed_on_command_line(ctx: typer.Context, name: str) -> bool:
@@ -386,6 +401,7 @@ def export(
             service,
             ExportRequest(facet=facet, type=type_, format=format_, fields=fields),
         ),
+        event="export",
         json_output=json_output,
     )
 
@@ -447,6 +463,7 @@ def snapshot(
     _run(
         config,
         lambda service: execute_snapshot(service, SnapshotRequest(output, archive)),
+        event="snapshot",
         json_output=json_output,
     )
 
@@ -454,31 +471,31 @@ def snapshot(
 @app.command()
 def doctor(config: ConfigOption, json_output: JsonOption = False) -> None:
     """Check workspace roots, schema migrations, and required binaries."""
-    _run(config, execute_doctor, json_output=json_output)
+    _run(config, execute_doctor, event="doctor", json_output=json_output)
 
 
 @app.command()
 def status(config: ConfigOption, json_output: JsonOption = False) -> None:
     """Report source freshness and currently known catalog state."""
-    _run(config, execute_status, json_output=json_output)
+    _run(config, execute_status, event="status", json_output=json_output)
 
 
 @database_app.command("optimize")
 def database_optimize(config: ConfigOption, json_output: JsonOption = False) -> None:
     """Update SQLite planner statistics when useful."""
-    _run(config, execute_optimize, json_output=json_output)
+    _run(config, execute_optimize, event="database.optimize", json_output=json_output)
 
 
 @database_app.command("quick-check")
 def database_quick_check(config: ConfigOption, json_output: JsonOption = False) -> None:
     """Run SQLite's lightweight consistency check."""
-    _run(config, execute_quick_check, json_output=json_output)
+    _run(config, execute_quick_check, event="database.quick-check", json_output=json_output)
 
 
 @database_app.command("integrity-check")
 def database_integrity_check(config: ConfigOption, json_output: JsonOption = False) -> None:
     """Run SQLite's explicit full integrity check."""
-    _run(config, execute_integrity_check, json_output=json_output)
+    _run(config, execute_integrity_check, event="database.integrity-check", json_output=json_output)
 
 
 @database_app.command("rebuild-current-analysis")
@@ -486,7 +503,12 @@ def database_rebuild_current_analysis(
     config: ConfigOption, json_output: JsonOption = False
 ) -> None:
     """Rebuild the derived latest-successful-analysis projection."""
-    _run(config, execute_rebuild, json_output=json_output)
+    _run(
+        config,
+        execute_rebuild,
+        event="database.rebuild-current-analysis",
+        json_output=json_output,
+    )
 
 
 @app.command()
@@ -515,13 +537,23 @@ def refresh(
                 progress=progress,
             )
 
-    _run(config, action, json_output=json_output)
+    _run(config, action, event="refresh", json_output=json_output)
 
 
 @app.command()
 def jobs(config: ConfigOption, json_output: JsonOption = False) -> None:
     """List background jobs launched with --background and their status."""
-    workspace_config = WorkspaceConfig.load(config)
+    try:
+        workspace_config = load_config(config)
+    except ConfigLoadError as error:
+        diagnostic = config_failure("jobs", error)
+        if json_output:
+            typer.echo(
+                json.dumps(diagnostic, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+            )
+        else:
+            render(diagnostic)
+        raise typer.Exit(1) from None
     payload = jobs_payload(background.list_jobs(workspace_config.database))
     if json_output:
         typer.echo(json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")))

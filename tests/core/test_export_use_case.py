@@ -2,11 +2,11 @@
 
 import threading
 from pathlib import Path
-from types import SimpleNamespace
 
 import pytest
 
 import dj_digger.core.application.export as export_module
+from dj_digger.core.analysis.pipeline import AnalysisRunResult
 from dj_digger.core.application import (
     CoreApplication,
     DependencyError,
@@ -15,6 +15,9 @@ from dj_digger.core.application import (
     ExportResult,
     ExportUseCase,
     InvalidInputError,
+    MetadataRunResult,
+    ScanRunResult,
+    ScanSourceResult,
 )
 from dj_digger.core.config import LibrarySourceConfig, WorkspaceConfig
 from dj_digger.core.exports.tracks import PublishedFacet
@@ -296,31 +299,32 @@ def test_group_switch_is_old_or_new_for_a_concurrent_reader(
     )
 
 
-def test_core_refresh_keeps_legacy_export_payload(
+def test_core_refresh_composes_typed_dependencies(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     config = _config(tmp_path)
     with CoreApplication(config) as core:
         monkeypatch.setattr(
             core,
-            "_scan_for_refresh",
-            lambda **_kwargs: [SimpleNamespace(source_id="source", succeeded=True)],
+            "scan",
+            lambda _request: ScanRunResult((ScanSourceResult("source", True, 1),)),
         )
-        monkeypatch.setattr(core, "metadata", lambda: SimpleNamespace(status="succeeded"))
-        monkeypatch.setattr(core, "analyze", lambda **_kwargs: SimpleNamespace(status="succeeded"))
-        monkeypatch.setattr(core, "export", lambda: ["tracks.tsv"])
+        monkeypatch.setattr(core, "metadata", lambda _request: MetadataRunResult(0, 0, 0))
+        monkeypatch.setattr(
+            core,
+            "analyze",
+            lambda _request, _progress: AnalysisRunResult(1, 1, 0, 0, 0, "succeeded"),
+        )
+        monkeypatch.setattr(core, "export", lambda _request: ["tracks.tsv"])
 
         result = core.refresh()
 
-    assert result == {
-        "event": "refresh",
-        "status": "succeeded",
-        "published": True,
-        "scans": [{"source_id": "source", "succeeded": True}],
-        "metadata": {"status": "succeeded"},
-        "analysis": {"status": "succeeded"},
-        "exports": ["tracks.tsv"],
-    }
+    assert result.status == "succeeded"
+    assert result.published is True
+    assert result.scans.sources[0].source_id == "source"
+    assert result.metadata is not None and result.metadata.status == "succeeded"
+    assert result.analysis is not None and result.analysis.status == "succeeded"
+    assert result.exports == ["tracks.tsv"]
 
 
 @pytest.mark.parametrize(

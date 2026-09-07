@@ -94,8 +94,14 @@ def test_track_timeout_requires_analyze(tmp_path: Path) -> None:
 def test_analyze_propagates_source_and_execution_options(monkeypatch, tmp_path: Path) -> None:
     received: dict[str, object] = {}
 
-    def duplicates_analyze(self, source_id=None, **options):
-        received.update(source_id=source_id, **options)
+    def duplicates_analyze(self, request, *, progress=None):
+        received.update(
+            source_id=request.source_id,
+            workers=request.workers,
+            track_timeout=request.track_timeout,
+            mark_best_quality=request.mark_best_quality,
+            mastering=request.mastering,
+        )
         return DuplicateAnalysisResult(
             files_total=1,
             analyzed=1,
@@ -106,7 +112,7 @@ def test_analyze_propagates_source_and_execution_options(monkeypatch, tmp_path: 
             elapsed_seconds=0.1,
         )
 
-    monkeypatch.setattr("dj_digger.cli.WorkspaceApplication.duplicates_analyze", duplicates_analyze)
+    monkeypatch.setattr("dj_digger.cli.CoreApplication.duplicates_analyze", duplicates_analyze)
 
     result = CliRunner().invoke(
         app,
@@ -139,8 +145,12 @@ def test_analyze_propagates_source_and_execution_options(monkeypatch, tmp_path: 
 def test_analyze_uses_safe_execution_defaults(monkeypatch, tmp_path: Path) -> None:
     received: dict[str, object] = {}
 
-    def duplicates_analyze(self, source_id=None, **options):
-        received.update(options)
+    def duplicates_analyze(self, request, *, progress=None):
+        received.update(
+            workers=request.workers,
+            track_timeout=request.track_timeout,
+            mark_best_quality=request.mark_best_quality,
+        )
         return DuplicateAnalysisResult(
             files_total=0,
             analyzed=0,
@@ -151,7 +161,7 @@ def test_analyze_uses_safe_execution_defaults(monkeypatch, tmp_path: Path) -> No
             elapsed_seconds=0.0,
         )
 
-    monkeypatch.setattr("dj_digger.cli.WorkspaceApplication.duplicates_analyze", duplicates_analyze)
+    monkeypatch.setattr("dj_digger.cli.CoreApplication.duplicates_analyze", duplicates_analyze)
 
     result = CliRunner().invoke(
         app, ["duplicates", "--analyze", "--config", str(_config(tmp_path)), "--json"]
@@ -164,7 +174,7 @@ def test_analyze_uses_safe_execution_defaults(monkeypatch, tmp_path: Path) -> No
 
 
 def test_analyze_maps_partial_failure_to_exit_code_two(monkeypatch, tmp_path: Path) -> None:
-    def duplicates_analyze(self, source_id=None, **options):
+    def duplicates_analyze(self, request, *, progress=None):
         return DuplicateAnalysisResult(
             files_total=2,
             analyzed=1,
@@ -175,7 +185,7 @@ def test_analyze_maps_partial_failure_to_exit_code_two(monkeypatch, tmp_path: Pa
             elapsed_seconds=0.0,
         )
 
-    monkeypatch.setattr("dj_digger.cli.WorkspaceApplication.duplicates_analyze", duplicates_analyze)
+    monkeypatch.setattr("dj_digger.cli.CoreApplication.duplicates_analyze", duplicates_analyze)
 
     result = CliRunner().invoke(
         app, ["duplicates", "--analyze", "--config", str(_config(tmp_path)), "--json"]
@@ -188,7 +198,7 @@ def test_analyze_maps_partial_failure_to_exit_code_two(monkeypatch, tmp_path: Pa
 def test_list_emits_ordered_groups_with_members_and_quality_state(
     monkeypatch, tmp_path: Path
 ) -> None:
-    def duplicates_list(self, source_id=None):
+    def duplicates_list(self, request):
         return [
             DuplicateGroupDescription(
                 group_id="hash-1",
@@ -211,7 +221,7 @@ def test_list_emits_ordered_groups_with_members_and_quality_state(
             )
         ]
 
-    monkeypatch.setattr("dj_digger.cli.WorkspaceApplication.duplicates_list", duplicates_list)
+    monkeypatch.setattr("dj_digger.cli.CoreApplication.duplicates_list", duplicates_list)
 
     result = CliRunner().invoke(
         app, ["duplicates", "--list", "--config", str(_config(tmp_path)), "--json"]
@@ -226,13 +236,13 @@ def test_list_emits_ordered_groups_with_members_and_quality_state(
 def test_review_sort_changes_presentation_order_without_changing_group_membership(
     monkeypatch, tmp_path: Path
 ) -> None:
-    def duplicates_list(self, source_id=None):
+    def duplicates_list(self, request):
         return [
             DuplicateGroupDescription(group_id="z-group", members=(), dj_review_recommended=True),
             DuplicateGroupDescription(group_id="a-group", members=(), dj_review_recommended=True),
         ]
 
-    monkeypatch.setattr("dj_digger.cli.WorkspaceApplication.duplicates_list", duplicates_list)
+    monkeypatch.setattr("dj_digger.cli.CoreApplication.duplicates_list", duplicates_list)
 
     result = CliRunner().invoke(
         app,
@@ -246,11 +256,11 @@ def test_review_sort_changes_presentation_order_without_changing_group_membershi
 
 
 def test_mark_best_quality_reports_failed_status_and_exit_code(monkeypatch, tmp_path: Path) -> None:
-    def duplicates_mark_best_quality(self, source_id=None):
+    def duplicates_mark_best_quality(self, request):
         return QualityMarkResult(status="failed", marked_best=0, incomplete_track_ids=(3, 5))
 
     monkeypatch.setattr(
-        "dj_digger.cli.WorkspaceApplication.duplicates_mark_best_quality",
+        "dj_digger.cli.CoreApplication.duplicates_mark_best_quality",
         duplicates_mark_best_quality,
     )
 

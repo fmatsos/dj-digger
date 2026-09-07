@@ -56,12 +56,10 @@ The main implementation layers are:
 | Curation exporter | `src/dj_digger/core/exports/curation.py` | Atomically publishes reports, playlists, and optional portable track copies. |
 | Curation skill | `skills/electronic-dj-set-curator/` | Consumes published evidence without accessing SQLite or source files. |
 
-`CoreApplication` is the framework-independent orchestration boundary used by
+`CoreApplication` is the sole framework-independent orchestration boundary used by
 catalog commands. It opens and migrates the database, registers configured sources
-in one transaction, dispatches the requested use case, and closes the connection
-even when the command fails. `WorkspaceApplication` remains the concrete base
-implementation for the legacy result-shaped methods used internally; new typed
-composition enters through `CoreApplication`.
+in one transaction, dispatches typed use cases, and closes the connection even when
+the command fails.
 
 The package dependency direction is one-way: `dj_digger.core` contains configuration,
 catalog, workers, use cases, and persistence contracts; `dj_digger.cli` contains

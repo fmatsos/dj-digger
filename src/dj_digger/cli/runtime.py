@@ -1,6 +1,7 @@
 """Runtime composition helpers for CLI commands."""
 
 import json
+import tomllib
 from pathlib import Path
 from typing import Any
 
@@ -15,9 +16,29 @@ from dj_digger.core.config import WorkspaceConfig
 from dj_digger.core.run_log import RunLogger
 
 
+class ConfigLoadError(ValueError):
+    """A workspace configuration could not be parsed or validated."""
+
+
+def load_config(config_path: Path) -> WorkspaceConfig:
+    """Load one workspace config with a stable, actionable CLI error."""
+    try:
+        return WorkspaceConfig.load(config_path)
+    except (OSError, tomllib.TOMLDecodeError, ValueError) as error:
+        detail = str(error).strip() or "configuration is invalid"
+        raise ConfigLoadError(f"invalid configuration: {detail}") from None
+
+
+def config_failure(event: str, error: ConfigLoadError) -> dict[str, Any]:
+    return {"event": event, "status": "failed", "code": "invalid_config", "error": str(error)}
+
+
 def run_scan(config_path: Path, source_id: str | None) -> dict[str, Any]:
     """Run the core scan use case and return its compact diagnostic payload."""
-    config = WorkspaceConfig.load(config_path)
+    try:
+        config = load_config(config_path)
+    except ConfigLoadError as error:
+        return config_failure("scan", error)
     logger = RunLogger(config.database)
     try:
         with CoreApplication(config) as service:
@@ -35,7 +56,10 @@ def run_metadata(
     force: bool,
 ) -> dict[str, Any]:
     """Run the core metadata use case and return its compact payload."""
-    config = WorkspaceConfig.load(config_path)
+    try:
+        config = load_config(config_path)
+    except ConfigLoadError as error:
+        return config_failure("metadata", error)
     logger = RunLogger(config.database)
     try:
         with CoreApplication(config) as service:
@@ -58,7 +82,10 @@ def run_refresh(
 ) -> dict[str, Any]:
     """Run the typed refresh use case and return its compact payload."""
 
-    config = WorkspaceConfig.load(config_path)
+    try:
+        config = load_config(config_path)
+    except ConfigLoadError as error:
+        return config_failure("refresh", error)
     logger = RunLogger(config.database)
     try:
         with CoreApplication(config) as service:

@@ -12,7 +12,7 @@ import os
 import re
 import tempfile
 import threading
-from collections.abc import Iterator
+from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -273,7 +273,10 @@ def list_jobs(database_path: Path) -> list[dict[str, Any]]:
     return [record.as_dict() for record in JobRepository(database_path).list()]
 
 
-def _from_dict(payload: dict[str, Any]) -> JobRecord:
+def _from_dict(payload: object) -> JobRecord:
+    """Decode one durable record, rejecting non-object JSON consistently."""
+    if not isinstance(payload, Mapping):
+        raise ValueError("durable job record must be a JSON object")
     status = payload.get("status", "unknown")
     if status not in {"starting", "running", "succeeded", "partial", "failed", "unknown"}:
         raise ValueError("invalid durable job status")
