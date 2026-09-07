@@ -36,7 +36,13 @@ from dj_digger.core.application.export import (
     ExportResult,
     ExportUseCase,
 )
-from dj_digger.core.application.jobs import JobsUseCase
+from dj_digger.core.application.jobs import (
+    JobRecord,
+    JobRepository,
+    JobStateError,
+    JobStatus,
+    JobsUseCase,
+)
 from dj_digger.core.application.metadata import MetadataRequest, MetadataRunResult, MetadataUseCase
 from dj_digger.core.application.operations import (
     DatabaseIntegrityCheckResult,
@@ -102,6 +108,10 @@ __all__ = [
     "IntegrityError",
     "InvalidInputError",
     "IntegrityCheckDatabaseUseCase",
+    "JobRecord",
+    "JobRepository",
+    "JobStateError",
+    "JobStatus",
     "JobsUseCase",
     "MetadataRequest",
     "MetadataRunResult",

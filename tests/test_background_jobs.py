@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 
 from dj_digger import background
+from dj_digger.core.jobs import JobRepository, JobStateError
 
 _VENV_PYTHON = Path(__file__).resolve().parent.parent / ".venv" / "bin" / "python"
 
@@ -85,3 +86,102 @@ def test_list_jobs_flags_a_dead_process_that_never_reported(tmp_path: Path) -> N
 
 def test_list_jobs_returns_empty_when_no_jobs_ran(tmp_path: Path) -> None:
     assert background.list_jobs(tmp_path / "catalog.sqlite") == []
+
+
+def test_launcher_failure_records_safe_terminal_job(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    real_open = Path.open
+
+    def fail_open(path: Path, *args, **kwargs):
+        if path.suffix == ".log":
+            raise OSError("/private/library/root/local-secret")
+        return real_open(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "open", fail_open)
+
+    with pytest.raises(RuntimeError, match="launch_failed"):
+        background.launch(tmp_path / "catalog.sqlite", "status", ["status"])
+
+    jobs = JobRepository(tmp_path / "catalog.sqlite").list()
+    assert jobs[0].status == "failed"
+    serialized = (tmp_path / "jobs" / f"{jobs[0].job_id}.json").read_text(encoding="utf-8")
+    assert "local-secret" not in serialized
+    assert "/private/library/root" not in serialized
+
+
+def test_launcher_spawn_failure_records_safe_terminal_job(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(
+        "dj_digger.cli.commands.jobs.subprocess.Popen",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            OSError("/private/library/root/local-secret")
+        ),
+    )
+
+    with pytest.raises(RuntimeError, match="launch_failed"):
+        background.launch(tmp_path / "catalog.sqlite", "status", ["status"])
+
+    jobs = JobRepository(tmp_path / "catalog.sqlite").list()
+    assert jobs[0].status == "failed"
+
+
+def test_launcher_start_failure_reaps_child_and_records_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    events: list[str] = []
+
+    class Child:
+        pid = 4242
+
+        def terminate(self) -> None:
+            events.append("terminate")
+
+        def wait(self, timeout: float) -> None:
+            events.append(f"wait:{timeout}")
+
+    monkeypatch.setattr(
+        "dj_digger.cli.commands.jobs.subprocess.Popen", lambda *_args, **_kwargs: Child()
+    )
+    monkeypatch.setattr(
+        JobRepository,
+        "start",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(JobStateError("race")),
+    )
+    monkeypatch.setattr(
+        "dj_digger.cli.commands.jobs.os.killpg",
+        lambda *_args: (_ for _ in ()).throw(OSError()),
+    )
+
+    with pytest.raises(RuntimeError, match="launch_start_failed"):
+        background.launch(tmp_path / "catalog.sqlite", "status", ["status"])
+
+    assert events == ["terminate", "wait:1.0"]
+
+
+def test_launcher_does_not_overwrite_child_result_when_start_races(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    class Child:
+        pid = 4242
+
+        def poll(self) -> int:
+            return 0
+
+    original_start = JobRepository.start
+
+    def race_start(repository: JobRepository, job_id: str, pid: int):
+        repository.record_result(job_id, {"status": "succeeded", "event": "status"})
+        return original_start(repository, job_id, pid)
+
+    monkeypatch.setattr(
+        "dj_digger.cli.commands.jobs.subprocess.Popen", lambda *_args, **_kwargs: Child()
+    )
+    monkeypatch.setattr(JobRepository, "start", race_start)
+
+    info = background.launch(tmp_path / "catalog.sqlite", "status", ["status"])
+
+    assert info["pid"] == 4242
+    job = JobRepository(tmp_path / "catalog.sqlite").list()[0]
+    assert job.status == "succeeded"
