@@ -36,7 +36,9 @@ exports = "../demo-workspace/exports"
 
 [curation]
 base_url = "https://models.example.invalid/v1"
+endpoint = "chat/completions"
 model = "aurora-selector-demo"
+reasoning_effort = "none"
 api_key_env = "DJ_DIGGER_CURATION_CREDENTIAL"
 request_timeout_seconds = 30
 total_timeout_seconds = 120
@@ -45,8 +47,12 @@ max_output_tokens = 2000
 max_output_tracks = 20
 ```
 
-`base_url` is the HTTP(S) API root; DJ Digger sends requests to its
-`/chat/completions` resource. `model` is passed unchanged to that API. Configure the
+`base_url` is the HTTP(S) API root. `endpoint` accepts `chat/completions` (the
+default) or `responses`; a leading slash is optional. The legacy `/completions`
+resource is not supported because it cannot run the required function tools.
+`reasoning_effort` defaults to `none` and accepts `none`, `minimal`, `low`, `medium`,
+`high`, `xhigh`, or `max`; support still depends on the selected model and endpoint.
+`model` is passed unchanged to that API. Configure the
 *name* of the credential variable with `api_key_env`, then inject its value only into
 the command environment:
 
@@ -71,7 +77,8 @@ Each HTTPS request contains:
 - OpenAI function definitions for the four MCP tools;
 - prior assistant tool calls and the sanitized structured results returned by those
   tools during this run;
-- `tool_choice: auto` and the configured output-token limit.
+- `tool_choice: auto`, the configured reasoning effort, and the configured
+  output-token limit.
 
 Tool results may include source IDs, track IDs, source-relative paths, discovery
 metadata (including artist and title), audio format and quality, current analysis,

@@ -8,7 +8,7 @@ from dataclasses import dataclass, field
 from importlib.resources import as_file, files
 from math import isfinite
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal, cast
 
 
 @dataclass(frozen=True)
@@ -154,7 +154,9 @@ class CurationConfig:
     """Bounded OpenAI-compatible curation runtime configuration."""
 
     base_url: str = "https://api.openai.com/v1"
+    endpoint: Literal["chat/completions", "responses"] = "chat/completions"
     model: str = "gpt-5-mini"
+    reasoning_effort: Literal["none", "minimal", "low", "medium", "high", "xhigh", "max"] = "none"
     api_key_env: str = "OPENAI_API_KEY"
     request_timeout_seconds: float = 30.0
     total_timeout_seconds: float = 120.0
@@ -332,6 +334,17 @@ def _curation_config(value: object) -> CurationConfig:
     if not base_url.startswith(("http://", "https://")):
         raise ValueError("curation.base_url must be an HTTP(S) URL")
     model = _non_empty_string(table.get("model", defaults.model), "curation.model")
+    endpoint = _non_empty_string(
+        table.get("endpoint", defaults.endpoint), "curation.endpoint"
+    ).strip("/")
+    if endpoint not in {"chat/completions", "responses"}:
+        raise ValueError("curation.endpoint must be 'chat/completions' or 'responses'")
+    reasoning_effort = _non_empty_string(
+        table.get("reasoning_effort", defaults.reasoning_effort),
+        "curation.reasoning_effort",
+    )
+    if reasoning_effort not in {"none", "minimal", "low", "medium", "high", "xhigh", "max"}:
+        raise ValueError("curation.reasoning_effort is not supported")
     api_key_env = _non_empty_string(
         table.get("api_key_env", defaults.api_key_env), "curation.api_key_env"
     )
@@ -358,7 +371,12 @@ def _curation_config(value: object) -> CurationConfig:
         raise ValueError("curation turn and output limits are outside supported bounds")
     return CurationConfig(
         base_url=base_url.rstrip("/"),
+        endpoint=cast(Literal["chat/completions", "responses"], endpoint),
         model=model,
+        reasoning_effort=cast(
+            Literal["none", "minimal", "low", "medium", "high", "xhigh", "max"],
+            reasoning_effort,
+        ),
         api_key_env=api_key_env,
         request_timeout_seconds=request_timeout,
         total_timeout_seconds=total_timeout,

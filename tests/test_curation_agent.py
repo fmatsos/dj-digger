@@ -6,7 +6,7 @@ import time
 from collections.abc import Iterator
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import anyio
 import pytest
@@ -14,6 +14,7 @@ import pytest
 from dj_digger.core.catalog.database import Database
 from dj_digger.core.config import CurationConfig, WorkspaceConfig
 from dj_digger.core.curation.agent import (
+    ALLOWED_TOOLS,
     CurationAgent,
     CurationGroundingError,
     CurationRequest,
@@ -34,9 +35,11 @@ class _Handler(BaseHTTPRequestHandler):
     requests: list[dict[str, Any]] = []
     delay = 0.0
     status = 200
+    paths: list[str] = []
 
     def do_POST(self) -> None:  # noqa: N802
         length = int(self.headers["Content-Length"])
+        type(self).paths.append(self.path)
         type(self).requests.append(json.loads(self.rfile.read(length)))
         time.sleep(type(self).delay)
         reply = type(self).replies.pop(0)
@@ -60,6 +63,7 @@ def endpoint() -> Iterator[tuple[str, type[_Handler]]]:
     _Handler.requests = []
     _Handler.delay = 0.0
     _Handler.status = 200
+    _Handler.paths = []
     server = ThreadingHTTPServer(("127.0.0.1", 0), _Handler)
     thread = threading.Thread(target=server.serve_forever)
     thread.start()
@@ -77,6 +81,7 @@ def _workspace(
     request_timeout_seconds: float = 1.0,
     total_timeout_seconds: float = 5.0,
     max_turns: int = 5,
+    api_endpoint: Literal["chat/completions", "responses"] = "chat/completions",
 ) -> WorkspaceConfig:
     with Database.open(path) as database:
         database.migrate()
@@ -105,6 +110,7 @@ def _workspace(
         sources=(),
         curation=CurationConfig(
             base_url=endpoint,
+            endpoint=api_endpoint,
             model="local-model",
             request_timeout_seconds=request_timeout_seconds,
             total_timeout_seconds=total_timeout_seconds,
@@ -196,7 +202,44 @@ def test_successive_tools_and_catalog_regrounding(
         "create_curation",
     }
     assert handler.requests[0]["max_completion_tokens"] == 1_000
+    assert handler.requests[0]["reasoning_effort"] == "none"
     assert "max_tokens" not in handler.requests[0]
+
+
+def test_responses_endpoint_translates_function_tools_and_calls(
+    tmp_path: Path, endpoint: tuple[str, type[_Handler]]
+) -> None:
+    url, handler = endpoint
+    handler.replies = [
+        {
+            "output": [
+                {
+                    "type": "function_call",
+                    "call_id": "create",
+                    "name": "create_curation",
+                    "arguments": json.dumps(
+                        {
+                            "name": "Opening set",
+                            "kind": "set",
+                            "user_prompt": "model-rewritten prompt",
+                            "report_markdown": "# Selection\nFits.",
+                            "tracks": [{"source_id": "source-a", "track_id": 1}],
+                        }
+                    ),
+                }
+            ]
+        }
+    ]
+
+    result = _run(_workspace(tmp_path / "catalog.sqlite", url, api_endpoint="responses"))
+
+    assert result.creation.status == "draft"
+    assert handler.paths == ["/v1/responses"]
+    assert handler.requests[0]["reasoning"] == {"effort": "none"}
+    assert handler.requests[0]["max_output_tokens"] == 1_000
+    assert handler.requests[0]["store"] is False
+    assert all("function" not in tool for tool in handler.requests[0]["tools"])
+    assert {tool["name"] for tool in handler.requests[0]["tools"]} == set(ALLOWED_TOOLS)
 
 
 def test_custom_system_prompt_is_subordinate_and_cannot_expand_tools(
