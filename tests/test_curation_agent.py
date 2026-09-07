@@ -23,6 +23,7 @@ from dj_digger.core.curation.agent import (
 from dj_digger.core.curation.client import (
     CurationResponseError,
     CurationTimeoutError,
+    CurationTransportError,
     OpenAICompatibleClient,
 )
 from dj_digger.core.curation.prompts import CUSTOM_SYSTEM_PROMPT_PREFIX, SYSTEM_PROMPT
@@ -32,6 +33,7 @@ class _Handler(BaseHTTPRequestHandler):
     replies: list[dict[str, Any] | bytes] = []
     requests: list[dict[str, Any]] = []
     delay = 0.0
+    status = 200
 
     def do_POST(self) -> None:  # noqa: N802
         length = int(self.headers["Content-Length"])
@@ -39,7 +41,7 @@ class _Handler(BaseHTTPRequestHandler):
         time.sleep(type(self).delay)
         reply = type(self).replies.pop(0)
         payload = reply if isinstance(reply, bytes) else json.dumps(reply).encode()
-        self.send_response(200)
+        self.send_response(type(self).status)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(payload)))
         self.end_headers()
@@ -57,6 +59,7 @@ def endpoint() -> Iterator[tuple[str, type[_Handler]]]:
     _Handler.replies = []
     _Handler.requests = []
     _Handler.delay = 0.0
+    _Handler.status = 200
     server = ThreadingHTTPServer(("127.0.0.1", 0), _Handler)
     thread = threading.Thread(target=server.serve_forever)
     thread.start()
@@ -317,4 +320,32 @@ def test_timeout_and_errors_never_expose_secret(
             CurationAgent(config, OpenAICompatibleClient(config.curation, secret)).run,
             CurationRequest(prompt="Build a set"),
         )
+    assert secret not in str(captured.value)
+
+
+def test_http_error_detail_reaches_the_caller_without_the_credential(
+    tmp_path: Path,
+    endpoint: tuple[str, type[_Handler]],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    url, handler = endpoint
+    secret = "never-report-this-credential"
+    monkeypatch.setenv("OPENAI_API_KEY", secret)
+    handler.status = 400
+    handler.replies = [
+        {
+            "error": {
+                "message": f"Unsupported parameter: max_tokens; credential={secret}",
+                "code": "unsupported_parameter",
+            }
+        }
+    ]
+
+    with pytest.raises(CurationTransportError) as captured:
+        anyio.run(
+            CurationAgent(_workspace(tmp_path / "catalog.sqlite", url)).run,
+            CurationRequest(prompt="Build a set"),
+        )
+
+    assert "HTTP 400: Unsupported parameter: max_tokens" in str(captured.value)
     assert secret not in str(captured.value)

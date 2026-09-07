@@ -39,12 +39,19 @@ def _error_code(error: Exception) -> str:
     return "transport"
 
 
-def _response(*, message: dict[str, Any] | None = None, error: str | None = None) -> bytes:
+def _response(
+    *,
+    message: dict[str, Any] | None = None,
+    error: str | None = None,
+    detail: str | None = None,
+) -> bytes:
     value: dict[str, Any] = {"protocol_version": PROTOCOL_VERSION, "ok": error is None}
     if message is not None:
         value["message"] = message
     if error is not None:
         value["error"] = error
+    if detail is not None:
+        value["detail"] = detail[:2_000]
     return json.dumps(value, separators=(",", ":")).encode()
 
 
@@ -81,7 +88,7 @@ def main() -> int:
         CurationTimeoutError,
         CurationTransportError,
     ) as error:
-        output = _response(error=_error_code(error))
+        output = _response(error=_error_code(error), detail=str(error))
     except (TypeError, ValueError, json.JSONDecodeError):
         output = _response(error="response")
     if len(output) > MAX_RESPONSE_BYTES:

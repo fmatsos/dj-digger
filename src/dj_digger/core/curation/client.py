@@ -135,7 +135,8 @@ class OpenAICompatibleClient:
                 raise CurationAuthenticationError(
                     "curation model rejected the configured credential"
                 ) from None
-            raise CurationTransportError("curation model request failed") from None
+            detail = _http_error_detail(error, self._api_key)
+            raise CurationTransportError(detail) from None
         except (urllib.error.URLError, OSError):
             raise CurationTransportError("curation model request failed") from None
         if len(raw) > self._config.max_output_tokens * 16:
@@ -212,7 +213,10 @@ async def complete_in_subprocess(
                 raise CurationTimeoutError("curation model request timed out")
             if error == "response":
                 raise CurationResponseError("curation model returned an invalid response")
-            raise CurationTransportError("curation model request failed")
+            detail = value.get("detail")
+            if not isinstance(detail, str) or not detail:
+                detail = "curation model request failed"
+            raise CurationTransportError(detail)
         message = value.get("message")
         if not isinstance(message, dict):
             raise ValueError
@@ -226,3 +230,19 @@ async def complete_in_subprocess(
         raise
     except (UnicodeDecodeError, json.JSONDecodeError, TypeError, ValueError, ValidationError):
         raise CurationResponseError("curation model returned an invalid response") from None
+
+
+def _http_error_detail(error: urllib.error.HTTPError, api_key: str) -> str:
+    """Return a bounded provider error without ever exposing the credential."""
+    raw = error.read(16_384)
+    message = ""
+    try:
+        value = json.loads(raw)
+        provider_error = value.get("error") if isinstance(value, dict) else None
+        if isinstance(provider_error, dict) and isinstance(provider_error.get("message"), str):
+            message = " ".join(provider_error["message"].split())
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        pass
+    message = message.replace(api_key, "[REDACTED]")[:2_000]
+    suffix = f": {message}" if message else ""
+    return f"HTTP {error.code}{suffix}"
