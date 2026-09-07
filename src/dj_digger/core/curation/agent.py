@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
-from typing import Any
+from typing import Any, cast
 
 from mcp.types import CallToolResult
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
@@ -14,6 +14,7 @@ from dj_digger.core.catalog.database import Database
 from dj_digger.core.config import WorkspaceConfig
 from dj_digger.core.curation.catalog import CurationCatalog, CurationCatalogError
 from dj_digger.core.curation.client import (
+    CompletionClient,
     CurationClientError,
     CurationResponseError,
     OpenAICompatibleClient,
@@ -95,14 +96,26 @@ class CurationResult(BaseModel):
 
 
 class CurationAgent:
-    def __init__(
-        self, config: WorkspaceConfig, client: OpenAICompatibleClient | None = None
-    ) -> None:
+    """Run grounded curation with a terminable default transport.
+
+    The default ``OpenAICompatibleClient`` runs in a fresh subprocess and is
+    hard-terminated at the aggregate deadline. An explicitly injected
+    ``CompletionClient`` is called through its synchronous seam in a worker
+    thread for test/custom integration; cancellation is bounded, but arbitrary
+    injected code is not claimed to be hard-killable.
+    """
+
+    def __init__(self, config: WorkspaceConfig, client: CompletionClient | None = None) -> None:
         self._config = config
         self._catalog = CurationCatalog(config.database)
         self._server = create_curation_mcp_server(config)
-        self._client = client or OpenAICompatibleClient(
-            config.curation, os.environ.get(config.curation.api_key_env)
+        self._uses_default_transport = client is None
+        self._client: CompletionClient = (
+            client
+            if client is not None
+            else OpenAICompatibleClient(
+                config.curation, os.environ.get(config.curation.api_key_env)
+            )
         )
 
     async def run(self, request: CurationRequest) -> CurationResult:
@@ -147,12 +160,18 @@ class CurationAgent:
                     remaining = deadline - asyncio.get_running_loop().time()
                     if remaining <= 0:
                         raise CurationTurnLimitError("curation agent exceeded its total timeout")
-                    response = await complete_in_subprocess(
-                        self._client,
-                        messages,
-                        tool_defs,
-                        timeout=remaining,
-                    )
+                    if self._uses_default_transport:
+                        response = await complete_in_subprocess(
+                            cast(OpenAICompatibleClient, self._client),
+                            messages,
+                            tool_defs,
+                            timeout=remaining,
+                        )
+                    else:
+                        response = await asyncio.wait_for(
+                            asyncio.to_thread(self._client.complete, messages, tool_defs),
+                            timeout=remaining,
+                        )
                     assistant = response.model_dump(mode="json", exclude_defaults=True)
                     messages.append(assistant)
                     if response.tool_calls:

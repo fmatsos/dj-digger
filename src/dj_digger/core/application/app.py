@@ -41,7 +41,8 @@ from dj_digger.core.catalog.database import Database
 from dj_digger.core.catalog.migrations import CURRENT_VERSION
 from dj_digger.core.catalog.repositories import SourceRepository
 from dj_digger.core.config import LibrarySourceConfig, WorkspaceConfig
-from dj_digger.core.curation import CurationCreation, CurationRepository, CurationStatus
+from dj_digger.core.curation.models import CurationCreation, CurationStatus
+from dj_digger.core.curation.repository import CurationRepository
 from dj_digger.core.duplicates.quality import QualityMarkResult
 from dj_digger.core.duplicates.service import (
     DuplicateAnalysisResult,

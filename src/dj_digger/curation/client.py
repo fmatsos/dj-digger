@@ -2,6 +2,7 @@
 
 from dj_digger.core.curation.client import (
     AssistantMessage,
+    CompletionClient,
     CurationAuthenticationError,
     CurationClientError,
     CurationResponseError,
@@ -22,4 +23,5 @@ __all__ = [
     "AssistantMessage",
     "OpenAICompatibleClient",
     "complete_in_subprocess",
+    "CompletionClient",
 ]

@@ -10,7 +10,7 @@ import urllib.error
 import urllib.request
 from collections.abc import Mapping, Sequence
 from dataclasses import asdict
-from typing import Any
+from typing import Any, Protocol
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
@@ -26,6 +26,7 @@ __all__ = [
     "AssistantMessage",
     "OpenAICompatibleClient",
     "complete_in_subprocess",
+    "CompletionClient",
 ]
 
 
@@ -67,6 +68,14 @@ class AssistantMessage(BaseModel):
     role: str
     content: str | None
     tool_calls: list[ToolCall] = Field(default_factory=list)
+
+
+class CompletionClient(Protocol):
+    """Explicit synchronous seam for injected curation completions."""
+
+    def complete(
+        self, messages: Sequence[Mapping[str, Any]], tools: Sequence[Mapping[str, Any]]
+    ) -> AssistantMessage: ...
 
 
 class _Choice(BaseModel):
