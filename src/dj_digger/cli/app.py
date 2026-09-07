@@ -13,11 +13,17 @@ import typer
 from dj_digger import background
 from dj_digger.application import WorkspaceApplication
 from dj_digger.cli.commands.analyze import execute as execute_analyze
+from dj_digger.cli.commands.duplicates import execute as execute_duplicates
 from dj_digger.cli.commands.metadata import execute as execute_metadata
 from dj_digger.cli.commands.scan import execute as execute_scan
 from dj_digger.cli.progress import RichProgressReporter
 from dj_digger.completion import install_patches
-from dj_digger.core.application import AnalyzeRequest
+from dj_digger.core.application import (
+    AnalyzeRequest,
+    DuplicateAnalyzeRequest,
+    DuplicateListRequest,
+    DuplicateMarkBestRequest,
+)
 from dj_digger.core.config import WorkspaceConfig
 from dj_digger.curation import CurationCatalog, CurationCreation, CurationStatus
 from dj_digger.curation.agent import (
@@ -532,41 +538,28 @@ def duplicates(
 
     def action(service: WorkspaceApplication) -> dict[str, Any]:
         if list_:
-            groups = service.duplicates_list(source)
-            if dj_review:
-                groups = [
-                    group
-                    for group in groups
-                    if getattr(group, "dj_review_recommended", None) is True
-                ]
-                groups.sort(key=lambda group: _review_sort_key(group))
-            return {
-                "event": "duplicates",
-                "status": "succeeded",
-                "groups": [_group_json(group) for group in groups],
-            }
+            return execute_duplicates(
+                service,
+                DuplicateListRequest(source_id=source),
+                dj_review=dj_review,
+            )
         if analyze:
             with _progress_reporter()(verbosity=ctx.obj.get("verbosity", 0)) as progress:
-                result = service.duplicates_analyze(
-                    source,
-                    workers=workers,
-                    track_timeout=track_timeout,
-                    mark_best_quality=mark_best_quality,
-                    mastering=mastering,
+                return execute_duplicates(
+                    service,
+                    DuplicateAnalyzeRequest(
+                        source_id=source,
+                        workers=workers,
+                        track_timeout=track_timeout,
+                        mark_best_quality=mark_best_quality,
+                        mastering=mastering,
+                    ),
                     progress=progress,
                 )
-            return {
-                "event": "duplicates",
-                "status": _result_status(result),
-                **result.__dict__,
-            }
-        mark_result = service.duplicates_mark_best_quality(source)
-        return {
-            "event": "duplicates",
-            "status": mark_result.status,
-            "marked_best": mark_result.marked_best,
-            "incomplete_track_ids": list(mark_result.incomplete_track_ids),
-        }
+        return execute_duplicates(
+            service,
+            DuplicateMarkBestRequest(source_id=source),
+        )
 
     _run(config, action, json_output=json_output)
 
@@ -574,61 +567,6 @@ def duplicates(
 def _was_passed_on_command_line(ctx: typer.Context, name: str) -> bool:
     source = ctx.get_parameter_source(name)
     return source is not None and source.name == "COMMANDLINE"
-
-
-def _group_json(group: Any) -> dict[str, Any]:
-    return {
-        "group_id": group.group_id,
-        "mastering_variant": getattr(group, "mastering_variant", None),
-        "dj_review_recommended": getattr(group, "dj_review_recommended", None),
-        "analysis_complete": getattr(group, "analysis_complete", False),
-        "comparison_status": getattr(group, "comparison_status", "missing_best_quality"),
-        "members": [
-            {
-                "source": member.source_id,
-                "track_id": member.track_id,
-                "relative_path": member.relative_path,
-                "technical_facts": member.technical_facts,
-                "best_quality": member.best_quality,
-                "audio_analysis": getattr(member, "audio_analysis", None),
-                "dj_analysis": getattr(member, "dj_analysis", None),
-                "mastering_comparison": (
-                    None
-                    if getattr(member, "mastering_comparison", None) is None
-                    else member.mastering_comparison.__dict__
-                ),
-            }
-            for member in group.members
-        ],
-    }
-
-
-def _review_sort_key(group: Any) -> tuple[int, float, float, str]:
-    deficits = [
-        member.dj_analysis.get("gain_deficit_db")
-        for member in group.members
-        if member.dj_analysis is not None and member.dj_analysis.get("gain_deficit_db") is not None
-    ]
-    deltas = []
-    for member in group.members:
-        comparison = member.mastering_comparison
-        if comparison is None:
-            continue
-        for name in (
-            "active_loudness_delta_db",
-            "true_peak_delta_db",
-            "plr_delta_db",
-            "gain_deficit_delta_db",
-        ):
-            value = getattr(comparison, name)
-            if value is not None:
-                deltas.append(abs(value))
-    return (
-        0 if deficits else 1,
-        -(max(deficits) if deficits else 0.0),
-        -(max(deltas) if deltas else 0.0),
-        group.group_id,
-    )
 
 
 @app.command()
@@ -808,15 +746,6 @@ def jobs(config: ConfigOption, json_output: JsonOption = False) -> None:
 def main() -> None:
     """Run the DJ Digger command-line application."""
     app()
-
-
-def _result_status(result: Any) -> str:
-    status = getattr(result, "status", None)
-    if isinstance(status, str) and status in {"succeeded", "partial", "failed"}:
-        return status
-    failed = int(getattr(result, "failed", 0))
-    analyzed = int(getattr(result, "analyzed", 0))
-    return "failed" if failed and not analyzed else ("partial" if failed else "succeeded")
 
 
 if __name__ == "__main__":

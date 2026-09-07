@@ -223,6 +223,28 @@ def test_list_emits_ordered_groups_with_members_and_quality_state(
     assert [member["track_id"] for member in payload["groups"][0]["members"]] == [1, 2]
 
 
+def test_review_sort_changes_presentation_order_without_changing_group_membership(
+    monkeypatch, tmp_path: Path
+) -> None:
+    def duplicates_list(self, source_id=None):
+        return [
+            DuplicateGroupDescription(group_id="z-group", members=(), dj_review_recommended=True),
+            DuplicateGroupDescription(group_id="a-group", members=(), dj_review_recommended=True),
+        ]
+
+    monkeypatch.setattr("dj_digger.cli.WorkspaceApplication.duplicates_list", duplicates_list)
+
+    result = CliRunner().invoke(
+        app,
+        ["duplicates", "--list", "--dj-review", "--config", str(_config(tmp_path)), "--json"],
+    )
+
+    assert result.exit_code == 0
+    group_ids = [group["group_id"] for group in json.loads(result.stdout)["groups"]]
+    assert group_ids == ["a-group", "z-group"]
+    assert set(group_ids) == {"a-group", "z-group"}
+
+
 def test_mark_best_quality_reports_failed_status_and_exit_code(monkeypatch, tmp_path: Path) -> None:
     def duplicates_mark_best_quality(self, source_id=None):
         return QualityMarkResult(status="failed", marked_best=0, incomplete_track_ids=(3, 5))

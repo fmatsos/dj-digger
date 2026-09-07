@@ -1,17 +1,5 @@
-"""Public result value for bounded duplicate-group mastering analysis."""
+"""Compatibility re-exports for canonical mastering service results."""
 
-from dataclasses import dataclass
+from dj_digger.core.duplicates.mastering_service import MasteringAnalysisResult
 
-
-@dataclass(frozen=True)
-class MasteringAnalysisResult:
-    """Counters from one mastering phase."""
-
-    files_total: int
-    analyzed: int
-    reused: int
-    failed: int
-
-    @property
-    def status(self) -> str:
-        return "partial" if self.failed else "succeeded"
+__all__ = ["MasteringAnalysisResult"]

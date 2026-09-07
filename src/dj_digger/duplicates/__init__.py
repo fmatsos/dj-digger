@@ -1,1 +1,1 @@
-"""Duplicate detection: audio fingerprinting and quality selection."""
+"""Compatibility facade for :mod:`dj_digger.core.duplicates`."""
