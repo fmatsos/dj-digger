@@ -1,6 +1,5 @@
 """Application-level orchestration for the DJ Digger command line."""
 
-import asyncio
 import importlib.util
 import shutil
 import subprocess
@@ -18,6 +17,7 @@ from dj_digger.core.analysis.pipeline import (
 from dj_digger.core.analysis.worker_client import IsolatedAnalysisExtractor
 from dj_digger.core.application.analysis_progress import NullProgressReporter, ProgressReporter
 from dj_digger.core.application.analyze import AnalyzeRequest, AnalyzeUseCase
+from dj_digger.core.application.curation import CurationRequest, CurationResult, CurationUseCase
 from dj_digger.core.application.duplicates import (
     DuplicateAnalyzeRequest,
     DuplicateAnalyzeUseCase,
@@ -41,6 +41,7 @@ from dj_digger.core.catalog.database import Database
 from dj_digger.core.catalog.migrations import CURRENT_VERSION
 from dj_digger.core.catalog.repositories import SourceRepository
 from dj_digger.core.config import LibrarySourceConfig, WorkspaceConfig
+from dj_digger.core.curation import CurationCreation, CurationRepository, CurationStatus
 from dj_digger.core.duplicates.quality import QualityMarkResult
 from dj_digger.core.duplicates.service import (
     DuplicateAnalysisResult,
@@ -52,8 +53,6 @@ from dj_digger.core.exports.curation import (
     CurationExportResult,
     export_curation,
 )
-from dj_digger.curation import CurationCreation, CurationRepository, CurationStatus
-from dj_digger.curation.agent import CurationAgent, CurationRequest, CurationResult
 
 
 @dataclass(frozen=True)
@@ -280,9 +279,9 @@ class WorkspaceApplication:
         except ValueError as error:
             raise ResourceNotFoundError(str(error)) from error
 
-    def curation_create(self, request: CurationRequest) -> CurationResult:
-        """Run and persist one catalog-grounded draft through the application boundary."""
-        return asyncio.run(CurationAgent(self.config).run(request))
+    async def create_curation(self, request: CurationRequest) -> CurationResult:
+        """Run and persist one catalog-grounded draft asynchronously."""
+        return await CurationUseCase(self.config).execute(request)
 
     def curation_get(self, creation_id: str) -> CurationCreation | None:
         """Return one durable curation."""
@@ -618,6 +617,31 @@ class CoreApplication(WorkspaceApplication):
         super().__init__(
             config,
             analysis_extractor=cast(AnalysisExtractor | None, analysis_extractor),
+        )
+
+    def get_curation(self, creation_id: str) -> CurationCreation | None:
+        """Return one durable curation through the typed core boundary."""
+        return self.curation_get(creation_id)
+
+    def list_curations(self, status: CurationStatus | None = None) -> tuple[CurationCreation, ...]:
+        """List durable curations through the typed core boundary."""
+        return self.curation_list(status)
+
+    def validate_curation(self, creation_id: str) -> CurationCreation:
+        """Transition one draft to validated through the typed core boundary."""
+        return self.curation_validate(creation_id)
+
+    def export_curation(
+        self,
+        creation_id: str,
+        *,
+        content: CurationExportContent,
+        copy_files: bool,
+        output: Path,
+    ) -> CurationExportResult:
+        """Publish one persisted curation through the typed core boundary."""
+        return self.curation_export(
+            creation_id, content=content, copy_files=copy_files, output=output
         )
 
     def scan(self, request: ScanRequest) -> ScanRunResult:  # type: ignore[override]

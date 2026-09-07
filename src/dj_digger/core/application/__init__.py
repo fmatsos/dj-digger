@@ -8,6 +8,19 @@ from dj_digger.core.application.analysis_progress import (
     ProgressEventReporter,
     ProgressReporter,
 )
+from dj_digger.core.application.curation import (
+    CurationAuthenticationError,
+    CurationClientError,
+    CurationGroundingError,
+    CurationMCPError,
+    CurationRequest,
+    CurationResponseError,
+    CurationResult,
+    CurationTimeoutError,
+    CurationTransportError,
+    CurationTurnLimitError,
+    CurationUseCase,
+)
 from dj_digger.core.application.errors import (
     CoreError,
     DependencyError,
@@ -33,6 +46,17 @@ from dj_digger.core.application.scan import (
 
 __all__ = [
     "CoreApplication",
+    "CurationAuthenticationError",
+    "CurationClientError",
+    "CurationGroundingError",
+    "CurationMCPError",
+    "CurationRequest",
+    "CurationResponseError",
+    "CurationResult",
+    "CurationTimeoutError",
+    "CurationTransportError",
+    "CurationTurnLimitError",
+    "CurationUseCase",
     "CopySetRequest",
     "CopySetUseCase",
     "SetCopyResult",
