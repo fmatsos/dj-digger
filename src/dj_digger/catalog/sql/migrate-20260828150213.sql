@@ -1,4 +1,4 @@
--- DJ Digger catalog migration V8 to V9.
+-- DJ Digger catalog migration 20260828150213.
 CREATE TABLE mastering_analysis (
     id INTEGER PRIMARY KEY,
     track_id INTEGER NOT NULL REFERENCES tracks(id),
