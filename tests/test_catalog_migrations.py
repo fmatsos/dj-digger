@@ -766,7 +766,7 @@ def test_v9_upgrade_rolls_back_schema_and_version_on_error(
     connection = sqlite3.connect(path)
     connection.execute("PRAGMA foreign_keys = ON")
 
-    from dj_digger.catalog import migrations
+    from dj_digger.core.catalog import migrations
 
     original = migrations._load_sql
     monkeypatch.setattr(

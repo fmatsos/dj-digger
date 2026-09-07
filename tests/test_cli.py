@@ -1,4 +1,5 @@
 import json
+from importlib import import_module
 from pathlib import Path
 
 import pytest
@@ -6,6 +7,8 @@ import typer
 from typer.testing import CliRunner
 
 from dj_digger.cli import _run, app
+from dj_digger.cli.presenters.scan import scan_payload
+from dj_digger.core.application import ScanRunResult, ScanSourceResult
 
 
 def _write_config(path: Path, filename: str = "config.toml", *, source_id: str = "library") -> Path:
@@ -43,6 +46,35 @@ def test_no_command_displays_help_and_available_commands() -> None:
     result = CliRunner().invoke(app)
 
     assert result.exit_code == 0
+
+
+def test_scan_presenter_preserves_compact_success_and_failure_keys() -> None:
+    success = scan_payload(ScanRunResult((ScanSourceResult("source", True, 4),)))
+    failure = scan_payload(ScanRunResult((ScanSourceResult("source", False, 5, "unavailable"),)))
+
+    assert success == {
+        "event": "scan",
+        "status": "succeeded",
+        "scans": [{"source_id": "source", "succeeded": True, "run_id": 4, "error": None}],
+    }
+    assert failure["status"] == "failed"
+    assert failure["scans"][0]["error"] == "unavailable"
+
+
+def test_scan_command_uses_failure_exit_code(monkeypatch, tmp_path: Path) -> None:
+    config = tmp_path / "config.toml"
+    config.write_text("", encoding="utf-8")
+    cli_module = import_module("dj_digger.cli.app")
+    monkeypatch.setattr(
+        cli_module,
+        "execute_scan",
+        lambda _config, _source: {"event": "scan", "status": "failed", "scans": []},
+    )
+
+    result = CliRunner().invoke(app, ["scan", "--config", str(config), "--json"])
+
+    assert result.exit_code == 1
+    assert json.loads(result.stdout)["status"] == "failed"
 
 
 @pytest.mark.parametrize("relative_path", ["config.toml", "config/config.toml"])

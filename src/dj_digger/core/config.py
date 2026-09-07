@@ -3,7 +3,6 @@
 import hashlib
 import json
 import re
-import sys
 import tomllib
 from dataclasses import dataclass, field
 from importlib.resources import as_file, files
@@ -55,11 +54,7 @@ class DspConfig:
 
     @classmethod
     def canonical(cls) -> "DspConfig":
-        resource_files = files
-        legacy = sys.modules.get("dj_digger.config")
-        if legacy is not None:
-            resource_files = getattr(legacy, "files", files)
-        resource = resource_files("dj_digger").joinpath("analysis.toml")
+        resource = files("dj_digger").joinpath("analysis.toml")
         if not resource.is_file():
             raise FileNotFoundError("required packaged resource missing: dj_digger/analysis.toml")
         with as_file(resource) as path:

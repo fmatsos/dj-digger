@@ -4,11 +4,10 @@ import asyncio
 import importlib.util
 import shutil
 import subprocess
-import sys
 from dataclasses import dataclass
 from pathlib import Path
 from types import TracebackType
-from typing import Any, Self
+from typing import Any, Self, cast
 
 from dj_digger.analysis.config import CURRENT_ANALYZER_VERSION, AnalysisIdentity
 from dj_digger.analysis.exporters import AnalysisExporter
@@ -25,8 +24,6 @@ from dj_digger.core.catalog.database import Database
 from dj_digger.core.catalog.migrations import CURRENT_VERSION
 from dj_digger.core.catalog.repositories import SourceRepository
 from dj_digger.core.config import LibrarySourceConfig, WorkspaceConfig
-from dj_digger.core.scanning.lifecycle import ScanLifecycle
-from dj_digger.core.scanning.scanner import SourceScanner
 from dj_digger.curation import CurationCreation, CurationRepository, CurationStatus
 from dj_digger.curation.agent import CurationAgent, CurationRequest, CurationResult
 from dj_digger.duplicates.quality import QualityMarkResult
@@ -108,32 +105,16 @@ class WorkspaceApplication:
 
     def scan(self, source_id: str | None = None, *, enabled_only: bool = False) -> list[ScanResult]:
         """Run the legacy scan contract retained for existing Python callers."""
-        return self._scan_legacy(source_id, enabled_only=enabled_only)
+        request = ScanRequest(source_id=source_id, enabled_only=enabled_only)
+        return _legacy_scan_results(self._scan_result(request))
 
-    def _scan_legacy(
-        self, source_id: str | None = None, *, enabled_only: bool = False
-    ) -> list[ScanResult]:
-        sources = self._selected_sources(source_id, enabled_only=enabled_only)
-        lifecycle = ScanLifecycle(self.database)
-        scanner = SourceScanner()
-        results: list[ScanResult] = []
-        for source in sources:
-            run_id: int | None = None
-            try:
-                run_id = lifecycle.begin(source.id)
-                observation = scanner.scan(source, run_id)
-                lifecycle.observe(run_id, observation)
-                lifecycle.succeed(run_id)
-            except Exception as error:
-                if run_id is not None:
-                    try:
-                        lifecycle.fail(run_id, "scan", str(error))
-                    except Exception:
-                        pass
-                results.append(ScanResult(source.id, False, run_id, str(error)))
-            else:
-                results.append(ScanResult(source.id, True, run_id))
-        return results
+    def _scan_result(self, request: ScanRequest) -> ScanRunResult:
+        """Execute one canonical scan orchestration for all application facades."""
+        return ScanUseCase(self.database, self.config).execute(request)
+
+    def _scan_for_refresh(self, *, enabled_only: bool) -> list[ScanResult]:
+        """Adapt the legacy scan result required by the refresh composition."""
+        return self.scan(enabled_only=enabled_only)
 
     def metadata(
         self, source_id: str | None = None, *, path_prefix: str | None = None, force: bool = False
@@ -325,7 +306,7 @@ class WorkspaceApplication:
     ) -> dict[str, Any]:
         reporter = progress or NullProgressReporter()
         reporter.phase_started("scan", 0, 4)
-        scans = self.scan(enabled_only=True)
+        scans = self._scan_for_refresh(enabled_only=True)
         reporter.phase_finished("scan", 1, 4)
         eligible = {source.id for source in self.config.sources if source.set_eligible}
         required_failure = any(
@@ -495,11 +476,7 @@ class WorkspaceApplication:
                     DspConfig.load(self.config.dsp_path)
                 except (OSError, ValueError) as error:
                     issues.append(f"DSP configuration invalid: {error}")
-        checker = _has_chromaprint_muxer
-        legacy = sys.modules.get("dj_digger.application")
-        if legacy is not None:
-            checker = getattr(legacy, "_has_chromaprint_muxer", checker)
-        if duplicates_expected and ffmpeg_available and not checker():
+        if duplicates_expected and ffmpeg_available and not _has_chromaprint_muxer():
             issues.append("ffmpeg is missing the chromaprint muxer required for duplicates")
         database = self.database.diagnostics()
         version = int(database["schema_version"])
@@ -549,9 +526,29 @@ class WorkspaceApplication:
 class CoreApplication(WorkspaceApplication):
     """Framework-independent application boundary for core use cases."""
 
+    def __init__(
+        self, config: WorkspaceConfig, *, analysis_extractor: object | None = None
+    ) -> None:
+        super().__init__(
+            config,
+            analysis_extractor=cast(AnalysisExtractor | None, analysis_extractor),
+        )
+
     def scan(self, request: ScanRequest) -> ScanRunResult:  # type: ignore[override]
         """Scan the requested sources and return immutable typed results."""
-        return ScanUseCase(self.database, self.config).execute(request)
+        return self._scan_result(request)
+
+    def _scan_for_refresh(self, *, enabled_only: bool) -> list[ScanResult]:
+        """Keep inherited refresh compatible with the typed scan contract."""
+        return _legacy_scan_results(self.scan(ScanRequest(enabled_only=enabled_only)))
+
+
+def _legacy_scan_results(result: ScanRunResult) -> list[ScanResult]:
+    """Adapt one typed result for the historical application contract."""
+    return [
+        ScanResult(item.source_id, item.succeeded, item.run_id, item.error)
+        for item in result.sources
+    ]
 
 
 def _worst_status(*statuses: str) -> str:

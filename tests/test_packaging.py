@@ -2,8 +2,8 @@ from pathlib import Path
 
 import pytest
 
-from dj_digger import resources
-from dj_digger.catalog import migrations
+from dj_digger.core import resources
+from dj_digger.core.catalog import migrations
 
 
 def test_mcp_dependencies_and_factory_are_importable() -> None:

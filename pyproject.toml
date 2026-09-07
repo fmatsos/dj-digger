@@ -20,7 +20,7 @@ dependencies = [
 ]
 
 [project.scripts]
-dj-digger = "dj_digger.cli:main"
+dj-digger = "dj_digger.cli:app"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/dj_digger"]
