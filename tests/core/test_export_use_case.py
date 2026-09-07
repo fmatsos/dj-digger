@@ -9,6 +9,7 @@ import pytest
 import dj_digger.core.application.export as export_module
 from dj_digger.core.application import (
     CoreApplication,
+    DependencyError,
     ExportRequest,
     ExportResult,
     ExportUseCase,
@@ -37,6 +38,7 @@ def test_export_returns_typed_facets_and_row_counts(tmp_path: Path) -> None:
     assert isinstance(result, ExportResult)
     assert [(facet.path.name, facet.row_count) for facet in result.facets] == [("tracks.tsv", 0)]
     assert result.paths == (config.exports / "tracks.tsv",)
+    assert result.generation_path.is_dir()
     assert not list(tmp_path.glob(".exports-*"))
 
 
@@ -51,10 +53,127 @@ def test_export_cleanup_runs_after_publication_failure(
     )
 
     with CoreApplication(config) as core:
-        with pytest.raises(OSError, match="link failed"):
+        with pytest.raises(DependencyError, match="POSIX directory symlink"):
             core.export(ExportRequest(facet="tracks"))
 
     assert not list(tmp_path.glob(".exports-*"))
+
+
+def test_generation_cleanup_runs_when_promotion_fails_after_staging(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    config = _config(tmp_path)
+    monkeypatch.setattr(
+        export_module,
+        "_temporary_link",
+        lambda _destination: (_ for _ in ()).throw(OSError("promotion failed")),
+    )
+
+    with CoreApplication(config) as core:
+        with pytest.raises(OSError, match="promotion failed"):
+            core.export(ExportRequest(facet="tracks"))
+
+    storage = config.exports.parent / ".dj-digger-publications"
+    assert not storage.exists() or not list(storage.glob("generation-*"))
+
+
+def test_first_and_repeated_publications_keep_at_most_one_previous(
+    tmp_path: Path,
+) -> None:
+    destination = tmp_path / "exports"
+    storage = tmp_path / ".dj-digger-publications"
+    storage.mkdir()
+    (storage / "previous-stale").mkdir()
+    (storage / "generation-stale").mkdir()
+
+    def publish(value: str):
+        root = tmp_path / f"stage-{value}" / "publication"
+        root.mkdir(parents=True)
+        path = root / "tracks.tsv"
+        path.write_text(value, encoding="utf-8")
+        return ExportUseCase._publish_group(destination, [PublishedFacet(path, 1)], root)
+
+    first = publish("0")
+    assert first.generation_path.is_dir()
+    results = [first] + [publish(str(index)) for index in range(1, 4)]
+    generations = sorted(storage.glob("generation-*"))
+
+    assert len(generations) == 2
+    assert all(result.generation_path.is_dir() for result in results[-2:])
+    assert not list(storage.glob("previous-*"))
+
+
+def test_regular_existing_export_is_retained_as_one_previous_generation(
+    tmp_path: Path,
+) -> None:
+    destination = tmp_path / "exports"
+    destination.mkdir()
+    (destination / "legacy.txt").write_text("legacy", encoding="utf-8")
+    root = tmp_path / "stage" / "publication"
+    root.mkdir(parents=True)
+    path = root / "tracks.tsv"
+    path.write_text("new", encoding="utf-8")
+
+    result = ExportUseCase._publish_group(destination, [PublishedFacet(path, 1)], root)
+    previous = [
+        candidate
+        for candidate in (tmp_path / ".dj-digger-publications").glob("generation-*")
+        if candidate.resolve() != result.generation_path.resolve()
+    ]
+
+    assert destination.is_symlink()
+    assert len(previous) == 1
+    assert (previous[0] / "legacy.txt").read_text(encoding="utf-8") == "legacy"
+
+
+def test_symlink_unavailable_leaves_existing_export_directory_intact(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    destination = tmp_path / "exports"
+    destination.mkdir()
+    marker = destination / "legacy.txt"
+    marker.write_text("legacy", encoding="utf-8")
+    monkeypatch.setattr(
+        export_module.os,
+        "symlink",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(OSError("unsupported")),
+    )
+    root = tmp_path / "stage" / "publication"
+    root.mkdir(parents=True)
+    path = root / "tracks.tsv"
+    path.write_text("new", encoding="utf-8")
+
+    with pytest.raises(DependencyError, match="POSIX directory symlink"):
+        ExportUseCase._publish_group(destination, [PublishedFacet(path, 1)], root)
+
+    assert destination.is_dir()
+    assert marker.read_text(encoding="utf-8") == "legacy"
+    assert not (tmp_path / ".dj-digger-publications").exists()
+
+
+def test_generation_path_pins_a_complete_immutable_group(tmp_path: Path) -> None:
+    destination = tmp_path / "exports"
+
+    def staged(name: str, value: str) -> tuple[Path, list[PublishedFacet]]:
+        root = tmp_path / f"stage-{name}" / "publication"
+        root.mkdir(parents=True)
+        facets = []
+        for filename in ("tracks.tsv", "library-artifacts.tsv"):
+            path = root / filename
+            path.write_text(f"{filename}:{value}\n", encoding="utf-8")
+            facets.append(PublishedFacet(path, 1))
+        return root, facets
+
+    old_root, old_facets = staged("old", "old")
+    old = ExportUseCase._publish_group(destination, old_facets, old_root)
+    new_root, new_facets = staged("new", "new")
+    ExportUseCase._publish_group(destination, new_facets, new_root)
+
+    assert old.generation_path.is_dir()
+    assert [
+        (old.generation_path / filename).read_text(encoding="utf-8").strip()
+        for filename in ("tracks.tsv", "library-artifacts.tsv")
+    ] == ["tracks.tsv:old", "library-artifacts.tsv:old"]
 
 
 def test_group_switch_is_old_or_new_for_a_concurrent_reader(
