@@ -1,5 +1,7 @@
 """Typed catalog export use case and publication result contracts."""
 
+from __future__ import annotations
+
 import os
 import shutil
 import tempfile
@@ -7,7 +9,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from dj_digger.core.analysis.exporters import AnalysisExporter
-from dj_digger.core.application.errors import InvalidInputError
+from dj_digger.core.application.errors import DependencyError, InvalidInputError
 from dj_digger.core.catalog.database import Database
 from dj_digger.core.config import WorkspaceConfig
 from dj_digger.core.exports.audit import AuditExporter
@@ -26,9 +28,16 @@ class ExportRequest:
 
 @dataclass(frozen=True)
 class ExportResult:
-    """Typed facets published by one export run."""
+    """Typed facets published by one immutable export generation.
+
+    Consumers reading more than one facet must resolve and retain
+    ``generation_path`` for the whole read.  The public facet paths remain
+    stable compatibility paths, but resolving them independently around a
+    publication switch cannot provide a cross-file snapshot.
+    """
 
     facets: tuple[PublishedFacet, ...]
+    generation_path: Path
 
     @property
     def paths(self) -> tuple[Path, ...]:
@@ -37,7 +46,12 @@ class ExportResult:
 
 
 class ExportUseCase:
-    """Validate and atomically publish one consistent catalog export."""
+    """Validate and atomically publish one consistent catalog export.
+
+    Publication uses a POSIX directory symlink switch.  The destination is
+    never silently replaced by a non-atomic fallback when symlinks are not
+    available on the filesystem.
+    """
 
     _FACETS = {"tracks", "artifacts", "analysis"}
     _TYPES = _FACETS | {"all", "sections", "run"}
@@ -57,16 +71,12 @@ class ExportUseCase:
         try:
             with self._database.read_transaction():
                 staged_facets = self._publish_to_staging(staged_destination, request, selected)
-            facets = self._publish_group(destination, staged_facets, staged_destination)
-            return ExportResult(tuple(facets))
+            published = self._publish_group(destination, staged_facets, staged_destination)
+            return ExportResult(published.facets, published.generation_path)
         except ValueError as error:
-            shutil.rmtree(staging, ignore_errors=True)
             message = str(error)
             if message.startswith("--fields") or message.startswith("unknown field"):
                 raise InvalidInputError(message) from error
-            raise
-        except BaseException:
-            shutil.rmtree(staging, ignore_errors=True)
             raise
         finally:
             shutil.rmtree(staging, ignore_errors=True)
@@ -106,28 +116,38 @@ class ExportUseCase:
     @staticmethod
     def _publish_group(
         destination: Path, staged_facets: list[PublishedFacet], staged_destination: Path
-    ) -> list[PublishedFacet]:
+    ) -> _PublishedGroup:
         destination.parent.mkdir(parents=True, exist_ok=True)
         relative_facets = [
             (facet, facet.path.relative_to(staged_destination)) for facet in staged_facets
         ]
         storage = destination.parent / ".dj-digger-publications"
-        storage.mkdir(exist_ok=True)
-        generation = Path(tempfile.mkdtemp(prefix="generation-", dir=storage))
-        generation.rmdir()
-        os.replace(staged_destination, generation)
-        next_link = _temporary_link(destination)
+        _ensure_symlink_support(destination.parent)
+        generation: Path | None = None
+        next_link: Path | None = None
         previous_directory: Path | None = None
+        previous_generation: Path | None = None
         switched = False
         try:
+            storage.mkdir(exist_ok=True)
+            storage_root = storage.resolve()
+            if destination.is_symlink() and destination.exists():
+                current = destination.resolve(strict=True)
+                if current.is_dir() and current.is_relative_to(storage_root):
+                    previous_generation = current
+            generation = Path(tempfile.mkdtemp(prefix="generation-", dir=storage))
+            generation.rmdir()
+            os.replace(staged_destination, generation)
             if destination.exists() and not destination.is_symlink():
                 if not destination.is_dir():
                     raise NotADirectoryError(
                         f"export destination is not a directory: {destination}"
                     )
-                previous_directory = Path(tempfile.mkdtemp(prefix="previous-", dir=storage))
+                previous_directory = Path(tempfile.mkdtemp(prefix="generation-", dir=storage))
                 previous_directory.rmdir()
                 os.replace(destination, previous_directory)
+                previous_generation = previous_directory
+            next_link = _temporary_link(destination)
             os.symlink(
                 Path(storage.name) / generation.name,
                 next_link,
@@ -135,19 +155,29 @@ class ExportUseCase:
             )
             os.replace(next_link, destination)
             switched = True
+            generation_path = generation.resolve(strict=True)
+            _cleanup_generations(storage, {generation_path, previous_generation})
         except BaseException:
-            next_link.unlink(missing_ok=True)
+            if switched:
+                raise
+            if next_link is not None:
+                next_link.unlink(missing_ok=True)
             if previous_directory is not None and previous_directory.exists():
                 os.replace(previous_directory, destination)
-            shutil.rmtree(generation, ignore_errors=True)
             raise
         finally:
-            if not switched:
+            if next_link is not None and not switched:
                 next_link.unlink(missing_ok=True)
-        return [
-            PublishedFacet(destination / relative, facet.row_count)
-            for facet, relative in relative_facets
-        ]
+            if generation is not None and not switched:
+                shutil.rmtree(generation, ignore_errors=True)
+        assert generation is not None
+        return _PublishedGroup(
+            tuple(
+                PublishedFacet(destination / relative, facet.row_count)
+                for facet, relative in relative_facets
+            ),
+            generation_path,
+        )
 
     @classmethod
     def _validate(cls, request: ExportRequest) -> str | None:
@@ -175,6 +205,47 @@ class ExportUseCase:
 
 
 __all__ = ["ExportRequest", "ExportResult", "ExportUseCase"]
+
+
+@dataclass(frozen=True)
+class _PublishedGroup:
+    facets: tuple[PublishedFacet, ...]
+    generation_path: Path
+
+
+def _ensure_symlink_support(parent: Path) -> None:
+    """Fail before moving an existing export if directory symlinks are unavailable."""
+    target: Path | None = None
+    link: Path | None = None
+    try:
+        target = Path(tempfile.mkdtemp(prefix=".dj-digger-symlink-target-", dir=parent))
+        descriptor, name = tempfile.mkstemp(prefix=".dj-digger-symlink-probe-", dir=parent)
+        os.close(descriptor)
+        link = Path(name)
+        link.unlink()
+        os.symlink(target.name, link, target_is_directory=True)
+    except (NotImplementedError, OSError) as error:
+        raise DependencyError(
+            "atomic export publication requires POSIX directory symlink support "
+            "on the export filesystem"
+        ) from error
+    finally:
+        if link is not None:
+            link.unlink(missing_ok=True)
+        if target is not None:
+            shutil.rmtree(target, ignore_errors=True)
+
+
+def _cleanup_generations(storage: Path, keep: set[Path | None]) -> None:
+    """Keep only the active generation and one previous generation."""
+    retained = {path.resolve() for path in keep if path is not None}
+    for child in storage.iterdir():
+        if child.is_symlink() or not child.is_dir():
+            continue
+        if not (child.name.startswith("generation-") or child.name.startswith("previous-")):
+            continue
+        if child.resolve() not in retained:
+            shutil.rmtree(child)
 
 
 def _temporary_link(destination: Path) -> Path:
