@@ -66,7 +66,7 @@ def curation_error(error: Exception) -> str:
     if isinstance(error, CurationTransportError):
         return f"The model request failed: {error}"
     if isinstance(error, CurationMCPError):
-        return "The catalog tool failed; run database quick-check and retry."
+        return f"The catalog tool failed: {error}"
     if isinstance(error, CurationGroundingError):
         return "A selected track reference is stale or unavailable; refresh the catalog and retry."
     if isinstance(error, RuntimeError):

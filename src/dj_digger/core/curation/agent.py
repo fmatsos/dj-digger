@@ -204,6 +204,16 @@ class CurationAgent:
                                     arguments["name"] = request.name.strip()
                             try:
                                 result = await self._server.call_tool(call.function.name, arguments)
+                            except CurationCatalogError as error:
+                                message = str(error).lower()
+                                if call.function.name == WRITE_TOOL and any(
+                                    word in message
+                                    for word in ("unknown", "unavailable", "candidate")
+                                ):
+                                    raise CurationGroundingError(
+                                        "curation result references an unknown or unavailable track"
+                                    ) from None
+                                raise CurationMCPError(str(error)) from None
                             except Exception as error:
                                 message = str(error).lower()
                                 if call.function.name == WRITE_TOOL and any(
