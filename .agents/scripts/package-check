@@ -36,6 +36,8 @@ root=$(git rev-parse --show-toplevel)
   required_files='dj_digger/analysis.toml
 dj_digger/schema-bundle.json
 dj_digger/core/schemas/tracks.schema.json
+dj_digger/core/schemas/curation-result.schema.json
+dj_digger/core/schemas/dj-set.schema.json
 dj_digger/core/schemas/library-artifacts.schema.json
 dj_digger/core/schemas/snapshot-manifest.schema.json
 dj_digger/core/schemas/dj-analysis.schema.json

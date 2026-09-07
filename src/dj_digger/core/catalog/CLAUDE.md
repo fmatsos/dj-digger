@@ -2,7 +2,7 @@
 
 This scope covers the SQLite catalog schema, migrations, and transactional mutations.
 
-## SQLite V7 as the system boundary
+## SQLite V11 as the system boundary
 
 The catalog is the source of truth for all canonical facts: track identity,
 source location, import timestamps, and analysis status. The catalog defines

@@ -116,6 +116,8 @@ test "$(printf 'src/dj_digger/core/catalog/sql/catalog-v7.sql\n' | "$ROOT/.agent
 test "$(printf 'src/dj_digger/core/analysis/worker_client.py\n' | "$ROOT/.agents/scripts/qa-select")" = "analysis"
 test "$(printf 'src/dj_digger/core/exports/tracks.py\n' | "$ROOT/.agents/scripts/qa-select")" = "exports"
 test "$(printf 'src/dj_digger/cli/app.py\n' | "$ROOT/.agents/scripts/qa-select")" = "runtime"
+grep -q "dj_digger/core/schemas/curation-result.schema.json" "$ROOT/.agents/scripts/package-check"
+grep -q "dj_digger/core/schemas/dj-set.schema.json" "$ROOT/.agents/scripts/package-check"
 test "$(printf 'src/dj_digger/cli/app.py\nsrc/dj_digger/core/catalog/migrations.py\n' | "$ROOT/.agents/scripts/qa-select")" = "full"
 test "$(printf 'docker-agent.yaml\n' | "$ROOT/.agents/scripts/qa-select")" = "focused"
 test "$(printf '.docker-agent/scripts/qa-gate\n' | "$ROOT/.agents/scripts/qa-select")" = "focused"
