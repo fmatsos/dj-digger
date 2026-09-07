@@ -110,7 +110,7 @@ class OpenAICompatibleClient:
                 "messages": list(messages),
                 "tools": list(tools),
                 "tool_choice": "auto",
-                "max_tokens": self._config.max_output_tokens,
+                "max_completion_tokens": self._config.max_output_tokens,
             },
             separators=(",", ":"),
         ).encode()
