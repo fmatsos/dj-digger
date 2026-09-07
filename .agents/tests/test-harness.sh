@@ -18,9 +18,9 @@ grep -q '"essentia==2.1b6.dev1389"' "$ROOT/pyproject.toml"
 
 for file in \
   src/dj_digger/AGENTS.md \
-  src/dj_digger/catalog/AGENTS.md \
-  src/dj_digger/analysis/AGENTS.md \
-  src/dj_digger/exports/AGENTS.md \
+  src/dj_digger/core/catalog/AGENTS.md \
+  src/dj_digger/core/analysis/AGENTS.md \
+  src/dj_digger/core/exports/AGENTS.md \
   tests/AGENTS.md scripts/AGENTS.md skills/AGENTS.md docs/AGENTS.md
 do
   test -f "$ROOT/$file"
@@ -28,9 +28,9 @@ do
   test "$lines" -le 100
 done
 
-grep -q "current_track_analysis, BEGIN IMMEDIATE" "$ROOT/src/dj_digger/catalog/AGENTS.md"
-grep -q "parent-only SQLite, protocol_version" "$ROOT/src/dj_digger/analysis/AGENTS.md"
-grep -q "atomic replacement, one SQLite snapshot" "$ROOT/src/dj_digger/exports/AGENTS.md"
+grep -q "current_track_analysis, BEGIN IMMEDIATE" "$ROOT/src/dj_digger/core/catalog/AGENTS.md"
+grep -q "parent-only SQLite, protocol_version" "$ROOT/src/dj_digger/core/analysis/AGENTS.md"
+grep -q "atomic replacement, one SQLite snapshot" "$ROOT/src/dj_digger/core/exports/AGENTS.md"
 grep -q "observable RED, public composition" "$ROOT/tests/AGENTS.md"
 grep -q "read-only source library" "$ROOT/scripts/AGENTS.md"
 grep -q "tracks.tsv, same export run" "$ROOT/skills/AGENTS.md"
@@ -111,12 +111,14 @@ test "$env_output" = "/tmp/dj-digger-uv-cache|/tmp/dj-digger-uv-tools"
 # Test qa-select classification rules
 test "$(printf 'README.md\n' | "$ROOT/.agents/scripts/qa-select")" = "docs"
 test "$(printf 'src/dj_digger/copying/set_copy.py\n' | "$ROOT/.agents/scripts/qa-select")" = "subsystem"
-test "$(printf 'src/dj_digger/catalog/migrations.py\n' | "$ROOT/.agents/scripts/qa-select")" = "catalog"
-test "$(printf 'src/dj_digger/catalog/sql/catalog-v7.sql\n' | "$ROOT/.agents/scripts/qa-select")" = "catalog"
-test "$(printf 'src/dj_digger/analysis/worker_client.py\n' | "$ROOT/.agents/scripts/qa-select")" = "analysis"
-test "$(printf 'src/dj_digger/exports/tracks.py\n' | "$ROOT/.agents/scripts/qa-select")" = "exports"
-test "$(printf 'src/dj_digger/cli.py\n' | "$ROOT/.agents/scripts/qa-select")" = "runtime"
-test "$(printf 'src/dj_digger/cli.py\nsrc/dj_digger/catalog/migrations.py\n' | "$ROOT/.agents/scripts/qa-select")" = "full"
+test "$(printf 'src/dj_digger/core/catalog/migrations.py\n' | "$ROOT/.agents/scripts/qa-select")" = "catalog"
+test "$(printf 'src/dj_digger/core/catalog/sql/catalog-v7.sql\n' | "$ROOT/.agents/scripts/qa-select")" = "catalog"
+test "$(printf 'src/dj_digger/core/analysis/worker_client.py\n' | "$ROOT/.agents/scripts/qa-select")" = "analysis"
+test "$(printf 'src/dj_digger/core/exports/tracks.py\n' | "$ROOT/.agents/scripts/qa-select")" = "exports"
+test "$(printf 'src/dj_digger/cli/app.py\n' | "$ROOT/.agents/scripts/qa-select")" = "runtime"
+grep -q "dj_digger/core/schemas/curation-result.schema.json" "$ROOT/.agents/scripts/package-check"
+grep -q "dj_digger/core/schemas/dj-set.schema.json" "$ROOT/.agents/scripts/package-check"
+test "$(printf 'src/dj_digger/cli/app.py\nsrc/dj_digger/core/catalog/migrations.py\n' | "$ROOT/.agents/scripts/qa-select")" = "full"
 test "$(printf 'docker-agent.yaml\n' | "$ROOT/.agents/scripts/qa-select")" = "focused"
 test "$(printf '.docker-agent/scripts/qa-gate\n' | "$ROOT/.agents/scripts/qa-select")" = "focused"
 test "$(printf '.agents/scripts/qa-run\n' | "$ROOT/.agents/scripts/qa-select")" = "focused"
@@ -125,7 +127,7 @@ test "$(printf '.codex/cloud/check.sh\n' | "$ROOT/.agents/scripts/qa-select")" =
 # Test qa-select does not escalate a docs+single-production-category change to
 # full: docs must be filtered out of the production-category count just like
 # focused is.
-test "$(printf 'README.md\nsrc/dj_digger/catalog/migrations.py\n' | "$ROOT/.agents/scripts/qa-select")" = "catalog"
+test "$(printf 'README.md\nsrc/dj_digger/core/catalog/migrations.py\n' | "$ROOT/.agents/scripts/qa-select")" = "catalog"
 
 # Test qa-run focused profile (run simple test script)
 test "$("$ROOT/.agents/scripts/qa-run" focused -- "$ROOT/.agents/tests/simple-test.sh")" = "PASS focused"

@@ -2,16 +2,18 @@ import json
 import os
 import signal
 import subprocess
+import sys
 from io import BytesIO
 from pathlib import Path
 
 import pytest
 
-from dj_digger.analysis.extractor import AnalysisExtractionError, AnalysisExtractionResult
-from dj_digger.analysis.worker import PROTOCOL_VERSION, execute_request
-from dj_digger.analysis.worker_client import IsolatedAnalysisExtractor
-from dj_digger.catalog.models import Track
-from dj_digger.config import DspConfig
+from dj_digger.core.analysis.extractor import AnalysisExtractionError, AnalysisExtractionResult
+from dj_digger.core.analysis.protocol import MAX_REQUEST_BYTES
+from dj_digger.core.analysis.worker import PROTOCOL_VERSION, execute_request
+from dj_digger.core.analysis.worker_client import IsolatedAnalysisExtractor
+from dj_digger.core.catalog.models import Track
+from dj_digger.core.config import DspConfig
 
 
 def _request(tmp_path: Path) -> dict[str, object]:
@@ -32,6 +34,89 @@ def _request(tmp_path: Path) -> dict[str, object]:
             "semantic_min_confidence": dsp.semantic_min_confidence,
         },
     }
+
+
+@pytest.mark.parametrize("module", ("dj_digger.core.analysis.worker",))
+def test_worker_module_paths_execute_bounded_versioned_json(module: str) -> None:
+    process = subprocess.run(
+        [sys.executable, "-m", module],
+        input='{"protocol_version":0}\n',
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    response = json.loads(process.stdout)
+    assert process.returncode == 0
+    assert len(process.stdout.encode()) < 64 * 1024
+    assert response == {
+        "protocol_version": PROTOCOL_VERSION,
+        "status": "failed",
+        "error": {"stage": "aggregation", "message": "unsupported worker protocol version"},
+    }
+
+
+def test_legacy_worker_forwarder_does_not_eagerly_load_catalog() -> None:
+    script = """
+import contextlib
+import io
+import json
+import runpy
+import sys
+
+class Input:
+    buffer = io.BytesIO(b'{"protocol_version":0}\\n')
+
+sys.stdin = Input()
+with contextlib.redirect_stdout(io.StringIO()):
+    try:
+        runpy.run_module("dj_digger.core.analysis.worker", run_name="__main__")
+    except SystemExit:
+        pass
+print(json.dumps({
+    "sqlite": "sqlite3" in sys.modules,
+    "catalog": any(name.startswith("dj_digger.core.catalog") for name in sys.modules),
+}))
+"""
+    process = subprocess.run(
+        [sys.executable, "-c", script], capture_output=True, text=True, check=False
+    )
+
+    assert process.returncode == 0
+    assert json.loads(process.stdout) == {"sqlite": False, "catalog": False}
+
+
+@pytest.mark.parametrize("module", ("dj_digger.core.analysis.worker",))
+def test_worker_rejects_oversized_input_without_decoding(module: str) -> None:
+    process = subprocess.run(
+        [sys.executable, "-m", module],
+        input=b"{" + b"x" * MAX_REQUEST_BYTES,
+        capture_output=True,
+        check=False,
+    )
+
+    response = json.loads(process.stdout)
+    assert process.returncode == 0
+    assert response == {
+        "protocol_version": PROTOCOL_VERSION,
+        "status": "failed",
+        "error": {"stage": "aggregation", "message": "analysis worker request is too large"},
+    }
+
+
+def test_parent_rejects_oversized_request_before_spawning(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    client = IsolatedAnalysisExtractor({"library": tmp_path}, DspConfig.canonical())
+    monkeypatch.setattr(
+        client,
+        "_request",
+        lambda track: {"protocol_version": PROTOCOL_VERSION, "payload": "x" * MAX_REQUEST_BYTES},
+    )
+    monkeypatch.setattr(subprocess, "Popen", pytest.fail)
+
+    with pytest.raises(AnalysisExtractionError, match="request is too large"):
+        client.extract(_track(), timeout=2)
 
 
 def test_worker_returns_versioned_success_without_changing_payloads(tmp_path: Path) -> None:

@@ -41,25 +41,38 @@ The main implementation layers are:
 
 | Layer | Location | Responsibility |
 | --- | --- | --- |
-| CLI | `src/dj_digger/cli.py` | Typer commands, structured JSON diagnostics, progress, and exit codes. |
-| Application | `src/dj_digger/application.py` | Owns the command-scoped database connection and coordinates workflows. |
-| Configuration | `src/dj_digger/config.py` | Validates workspace, source, and DSP configuration. |
-| Scan and metadata | `src/dj_digger/scanning/`, `src/dj_digger/metadata/` | Observes files, reconciles presence, and normalizes ExifTool metadata. |
-| Catalog | `src/dj_digger/catalog/` | SQLite lifecycle, migrations, repositories, history, and read projections. |
-| Analysis | `src/dj_digger/analysis/` | Eligibility, isolated extraction, append-only persistence, and analysis exports. |
-| Publication | `src/dj_digger/exports/` | Schema validation, atomic export replacement, and snapshots. |
-| Curation read model | `src/dj_digger/curation/` | Exposes bounded, globally deduplicated current-catalog candidates. |
-| MCP | `src/dj_digger/mcp_server.py` | Publishes the curation read model in-process and over local stdio. |
-| Native curation agent | `src/dj_digger/curation/agent.py` | Runs the bounded model/tool loop and accepts only a grounded persisted draft. |
-| OpenAI-compatible client | `src/dj_digger/curation/client.py` | Calls the configured `/chat/completions` endpoint with bounded requests and sanitized failures. |
-| Curation repository | `src/dj_digger/curation/repository.py` | Persists ordered drafts and the one-way human-validation transition. |
-| Curation exporter | `src/dj_digger/exports/curation.py` | Atomically publishes reports, playlists, and optional portable track copies. |
+| CLI | `src/dj_digger/cli/` | Typer commands, structured JSON diagnostics, progress, and exit codes. |
+| Application | `src/dj_digger/core/application/` | Owns the command-scoped database connection and coordinates workflows. |
+| Configuration | `src/dj_digger/core/config.py` | Validates workspace, source, and DSP configuration. |
+| Scan and metadata | `src/dj_digger/core/scanning/`, `src/dj_digger/core/metadata/` | Observes files, reconciles presence, and normalizes ExifTool metadata. |
+| Catalog | `src/dj_digger/core/catalog/` | SQLite lifecycle, migrations, repositories, history, and read projections. |
+| Analysis | `src/dj_digger/core/analysis/` | Eligibility, isolated extraction, append-only persistence, and analysis exports. |
+| Publication | `src/dj_digger/core/exports/` | Schema validation, atomic export replacement, and snapshots. |
+| Curation read model | `src/dj_digger/core/curation/` | Exposes bounded, globally deduplicated current-catalog candidates. |
+| MCP | `src/dj_digger/core/mcp_server.py` | Publishes the curation read model in-process and over local stdio. |
+| Native curation agent | `src/dj_digger/core/curation/agent.py` | Runs the bounded model/tool loop and accepts only a grounded persisted draft. |
+| OpenAI-compatible client | `src/dj_digger/core/curation/client.py` | Calls the configured `/chat/completions` endpoint with bounded requests and sanitized failures. |
+| Curation repository | `src/dj_digger/core/curation/repository.py` | Persists ordered drafts and the one-way human-validation transition. |
+| Curation exporter | `src/dj_digger/core/exports/curation.py` | Atomically publishes reports, playlists, and optional portable track copies. |
 | Curation skill | `skills/electronic-dj-set-curator/` | Consumes published evidence without accessing SQLite or source files. |
 
-`WorkspaceApplication` is the orchestration boundary used by catalog commands. It
-opens and migrates the database, registers configured sources in one transaction,
-dispatches the requested service, and closes the connection even when the command
-fails.
+`CoreApplication` is the sole framework-independent orchestration boundary used by
+catalog commands. It opens and migrates the database, registers configured sources
+in one transaction, dispatches typed use cases, and closes the connection even when
+the command fails.
+
+The package dependency direction is one-way: `dj_digger.core` contains configuration,
+catalog, workers, use cases, and persistence contracts; `dj_digger.cli` contains
+Typer commands, Rich rendering, terminal diagnostics, completion installation, and
+detached-process launching. Core modules never import Typer, Rich, or CLI modules.
+CLI adapters translate command arguments and typed core results into JSON, exit
+codes, and terminal output. The installed `dj-digger` command and
+`python -m dj_digger.cli` both enter this same CLI package.
+
+Core use cases are synchronous except for the bounded curation use case, whose
+`async` boundary is bridged once by the CLI curation command. Durable background
+job state (`JobRepository`) is presentation-neutral core data; only
+`dj_digger.cli.background` owns subprocess creation, cleanup, and log redirection.
 
 The standalone `copy` command is intentionally outside that boundary. It receives a
 library root, playlist or explicit tracks, and output directory directly; it neither
@@ -124,7 +137,7 @@ are read from one SQLite snapshot and validated before any of them is replaced.
 
 ## Catalog migration lifecycle
 
-`src/dj_digger/catalog/migrations.py` registers every catalog transition with
+`src/dj_digger/core/catalog/migrations.py` registers every catalog transition with
 `sqlite_utils.Migrations`. It supports exactly these paths:
 
 - an empty, unversioned database is initialized from the current packaged schema;
@@ -216,7 +229,7 @@ it excludes tracks with a reusable successful attempt for the same input facts a
 analysis identity. A bounded parent-side thread pool schedules at most `--workers`
 tracks concurrently.
 
-Each scheduled track runs in a fresh `python -m dj_digger.analysis.worker` child
+Each scheduled track runs in a fresh `python -m dj_digger.core.analysis.worker` child
 process. The child receives a versioned JSON request, reads and analyzes one audio
 file, and returns bounded versioned JSON. It never opens the catalog. Timeouts kill
 the worker process group, including its decoder subprocesses.

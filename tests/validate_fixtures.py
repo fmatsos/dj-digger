@@ -72,7 +72,7 @@ def main() -> None:
         tracks_rows = list(tracks_reader)
     assert tracks_rows, "tracks.tsv must contain a deterministic first row"
     tracks_schema = json.loads(
-        (ROOT / "schemas" / "tracks.schema.json").read_text(encoding="utf-8")
+        (ROOT / "src/dj_digger/core/schemas" / "tracks.schema.json").read_text(encoding="utf-8")
     )
     assert tracks_columns == tracks_schema["x-tabular"]["columns"]
     tracks_validator = Draft202012Validator(tracks_schema)
@@ -90,7 +90,9 @@ def main() -> None:
     assert int(first["track_id"]) > 0
 
     analysis_schema = json.loads(
-        (ROOT / "schemas" / "dj-analysis.schema.json").read_text(encoding="utf-8")
+        (ROOT / "src/dj_digger/core/schemas" / "dj-analysis.schema.json").read_text(
+            encoding="utf-8"
+        )
     )
     assert columns == analysis_schema["x-tabular"]["columns"]
     validator = Draft202012Validator(analysis_schema)
@@ -135,7 +137,9 @@ def main() -> None:
         ("dj-sections.schema.json", sections[0]),
         ("dj-analysis-run.schema.json", run),
     ):
-        schema = json.loads((ROOT / "schemas" / filename).read_text(encoding="utf-8"))
+        schema = json.loads(
+            (ROOT / "src/dj_digger/core/schemas" / filename).read_text(encoding="utf-8")
+        )
         Draft202012Validator(schema, format_checker=FormatChecker()).validate(value)
 
 

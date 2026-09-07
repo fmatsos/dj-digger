@@ -2,9 +2,9 @@ from pathlib import Path
 
 import anyio
 
-from dj_digger.catalog.database import Database
-from dj_digger.config import WorkspaceConfig
-from dj_digger.mcp_server import create_curation_mcp_server
+from dj_digger.core.catalog.database import Database
+from dj_digger.core.config import WorkspaceConfig
+from dj_digger.core.mcp_server import create_curation_mcp_server
 
 
 def _config(path: Path) -> WorkspaceConfig:

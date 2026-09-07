@@ -82,7 +82,7 @@ The native agent uses the same factory in memory:
 
 ```python
 from mcp import Client
-from dj_digger.mcp_server import create_curation_mcp_server
+from dj_digger.core.mcp_server import create_curation_mcp_server
 
 server = create_curation_mcp_server(workspace_config)
 async with Client(server) as client:

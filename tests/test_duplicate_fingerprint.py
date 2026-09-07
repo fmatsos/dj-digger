@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from dj_digger.duplicates.fingerprint import (
+from dj_digger.core.duplicates.fingerprint import (
     FINGERPRINT_VERSION,
     ChromaprintExtractor,
     FingerprintExtractionError,
@@ -23,7 +23,7 @@ def test_extract_invokes_ffmpeg_without_a_shell(monkeypatch) -> None:
         calls.append((argv, kwargs))
         return _fake_result(stdout=b"AQAAAA")
 
-    monkeypatch.setattr("dj_digger.duplicates.fingerprint.subprocess.run", run)
+    monkeypatch.setattr("dj_digger.core.duplicates.fingerprint.subprocess.run", run)
     path = Path("odd;name\\n.flac")
 
     result = ChromaprintExtractor().extract(path, timeout=30)
@@ -54,7 +54,7 @@ def test_extract_invokes_ffmpeg_without_a_shell(monkeypatch) -> None:
 
 def test_extract_returns_a_stable_sha256_group_hash(monkeypatch) -> None:
     monkeypatch.setattr(
-        "dj_digger.duplicates.fingerprint.subprocess.run",
+        "dj_digger.core.duplicates.fingerprint.subprocess.run",
         lambda argv, **kwargs: _fake_result(stdout=b"AQAAG0okqkkq"),
     )
 
@@ -67,7 +67,7 @@ def test_extract_raises_on_timeout(monkeypatch) -> None:
     def run(argv: list[str], **kwargs: object) -> object:
         raise subprocess.TimeoutExpired(cmd=argv, timeout=kwargs["timeout"])
 
-    monkeypatch.setattr("dj_digger.duplicates.fingerprint.subprocess.run", run)
+    monkeypatch.setattr("dj_digger.core.duplicates.fingerprint.subprocess.run", run)
 
     with pytest.raises(FingerprintExtractionError, match="timed out"):
         ChromaprintExtractor().extract(Path("track.wav"), timeout=5)
@@ -75,7 +75,7 @@ def test_extract_raises_on_timeout(monkeypatch) -> None:
 
 def test_extract_raises_on_empty_fingerprint(monkeypatch) -> None:
     monkeypatch.setattr(
-        "dj_digger.duplicates.fingerprint.subprocess.run",
+        "dj_digger.core.duplicates.fingerprint.subprocess.run",
         lambda argv, **kwargs: _fake_result(stdout=b"   \n"),
     )
 
@@ -85,7 +85,7 @@ def test_extract_raises_on_empty_fingerprint(monkeypatch) -> None:
 
 def test_extract_raises_on_process_failure(monkeypatch) -> None:
     monkeypatch.setattr(
-        "dj_digger.duplicates.fingerprint.subprocess.run",
+        "dj_digger.core.duplicates.fingerprint.subprocess.run",
         lambda argv, **kwargs: _fake_result(
             returncode=1, stderr=b"Invalid data found when processing input"
         ),

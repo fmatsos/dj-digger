@@ -60,9 +60,11 @@ def test_copy_command_accepts_repeated_tracks_owner_and_local_verbose(
     (library / "two.flac").write_bytes(b"two")
     output = tmp_path / "output"
     ownership: list[tuple[Path, int, int]] = []
-    monkeypatch.setattr("dj_digger.set_copy._resolve_owner", lambda _owner: (123, 456))
     monkeypatch.setattr(
-        "dj_digger.set_copy._set_recursive_ownership",
+        "dj_digger.core.application.copy_set._resolve_owner", lambda _owner: (123, 456)
+    )
+    monkeypatch.setattr(
+        "dj_digger.core.application.copy_set._set_recursive_ownership",
         lambda path, uid, gid: ownership.append((path, uid, gid)),
     )
 
@@ -94,8 +96,12 @@ def test_copy_accepts_file_uri_track(tmp_path: Path, monkeypatch) -> None:
     track = library / "track.flac"
     track.write_bytes(b"audio")
     output = tmp_path / "output"
-    monkeypatch.setattr("dj_digger.set_copy._resolve_owner", lambda _owner: (123, 456))
-    monkeypatch.setattr("dj_digger.set_copy._set_recursive_ownership", lambda *_args: None)
+    monkeypatch.setattr(
+        "dj_digger.core.application.copy_set._resolve_owner", lambda _owner: (123, 456)
+    )
+    monkeypatch.setattr(
+        "dj_digger.core.application.copy_set._set_recursive_ownership", lambda *_args: None
+    )
 
     result = CliRunner().invoke(
         app,
@@ -143,9 +149,11 @@ def test_copy_defaults_owner_to_share_share(tmp_path: Path, monkeypatch) -> None
     playlist = tmp_path / "selection.m3u8"
     playlist.write_text("track.flac\n", encoding="utf-8")
     ownership: list[str] = []
-    monkeypatch.setattr("dj_digger.set_copy._resolve_owner", lambda _owner: (123, 456))
     monkeypatch.setattr(
-        "dj_digger.set_copy._set_recursive_ownership",
+        "dj_digger.core.application.copy_set._resolve_owner", lambda _owner: (123, 456)
+    )
+    monkeypatch.setattr(
+        "dj_digger.core.application.copy_set._set_recursive_ownership",
         lambda _path, _uid, _gid: ownership.append("share:share"),
     )
 
@@ -170,9 +178,9 @@ def test_copy_progress_only_advances_after_success(tmp_path: Path, monkeypatch) 
     library = tmp_path / "library"
     library.mkdir()
     (library / "track.flac").write_bytes(b"audio")
-    monkeypatch.setattr("dj_digger.set_copy._resolve_owner", lambda _owner: (1, 2))
+    monkeypatch.setattr("dj_digger.core.application.copy_set._resolve_owner", lambda _owner: (1, 2))
     monkeypatch.setattr(
-        "dj_digger.set_copy._copy_track_atomic",
+        "dj_digger.core.application.copy_set._copy_track_atomic",
         lambda *args: (_ for _ in ()).throw(OSError("boom")),
     )
 

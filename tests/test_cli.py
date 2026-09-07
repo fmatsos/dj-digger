@@ -1,4 +1,5 @@
 import json
+from importlib import import_module
 from pathlib import Path
 
 import pytest
@@ -6,6 +7,9 @@ import typer
 from typer.testing import CliRunner
 
 from dj_digger.cli import _run, app
+from dj_digger.cli.presenters.metadata import metadata_payload
+from dj_digger.cli.presenters.scan import scan_payload
+from dj_digger.core.application import MetadataRunResult, ScanRunResult, ScanSourceResult
 
 
 def _write_config(path: Path, filename: str = "config.toml", *, source_id: str = "library") -> Path:
@@ -43,6 +47,80 @@ def test_no_command_displays_help_and_available_commands() -> None:
     result = CliRunner().invoke(app)
 
     assert result.exit_code == 0
+
+
+def test_scan_presenter_preserves_compact_success_and_failure_keys() -> None:
+    success = scan_payload(ScanRunResult((ScanSourceResult("source", True, 4),)))
+    failure = scan_payload(ScanRunResult((ScanSourceResult("source", False, 5, "unavailable"),)))
+
+    assert success == {
+        "event": "scan",
+        "status": "succeeded",
+        "scans": [{"source_id": "source", "succeeded": True, "run_id": 4, "error": None}],
+    }
+    assert failure["status"] == "failed"
+    assert failure["scans"][0]["error"] == "unavailable"
+
+
+def test_metadata_presenter_preserves_compact_result_keys() -> None:
+    assert metadata_payload(MetadataRunResult(2, 1, 3)) == {
+        "event": "metadata",
+        "status": "partial",
+        "extracted": 2,
+        "failed": 1,
+        "skipped": 3,
+    }
+
+
+def test_metadata_command_uses_failure_exit_code(monkeypatch, tmp_path: Path) -> None:
+    config = tmp_path / "config.toml"
+    config.write_text("", encoding="utf-8")
+    cli_module = import_module("dj_digger.cli.app")
+    monkeypatch.setattr(
+        cli_module,
+        "execute_metadata",
+        lambda _config, _source, _path, _force: {
+            "event": "metadata",
+            "status": "failed",
+            "error": "dependency unavailable",
+        },
+    )
+
+    result = CliRunner().invoke(app, ["metadata", "--config", str(config), "--json"])
+
+    assert result.exit_code == 1
+    assert json.loads(result.stdout)["status"] == "failed"
+
+
+def test_scan_command_uses_failure_exit_code(monkeypatch, tmp_path: Path) -> None:
+    config = tmp_path / "config.toml"
+    config.write_text("", encoding="utf-8")
+    cli_module = import_module("dj_digger.cli.app")
+    monkeypatch.setattr(
+        cli_module,
+        "execute_scan",
+        lambda _config, _source: {"event": "scan", "status": "failed", "scans": []},
+    )
+
+    result = CliRunner().invoke(app, ["scan", "--config", str(config), "--json"])
+
+    assert result.exit_code == 1
+    assert json.loads(result.stdout)["status"] == "failed"
+
+
+@pytest.mark.parametrize("command", ["scan", "metadata", "refresh"])
+def test_malformed_config_returns_typed_json_failure(tmp_path: Path, command: str) -> None:
+    config = tmp_path / "malformed.toml"
+    config.write_text("[workspace\n", encoding="utf-8")
+
+    result = CliRunner().invoke(app, [command, "--config", str(config), "--json"])
+
+    assert result.exit_code == 1
+    payload = json.loads(result.stdout)
+    assert payload["event"] == command
+    assert payload["status"] == "failed"
+    assert payload["code"] == "invalid_config"
+    assert "invalid configuration" in payload["error"]
 
 
 @pytest.mark.parametrize("relative_path", ["config.toml", "config/config.toml"])
@@ -142,7 +220,7 @@ def test_run_closes_its_application_when_the_action_fails(monkeypatch) -> None:
 
     config = type("Config", (), {"database": Path("catalog.sqlite")})()
     monkeypatch.setattr("dj_digger.cli.WorkspaceConfig.load", lambda _path: config)
-    monkeypatch.setattr("dj_digger.cli.WorkspaceApplication", FakeApplication)
+    monkeypatch.setattr("dj_digger.cli.CoreApplication", FakeApplication)
     monkeypatch.setattr("dj_digger.cli.RunLogger", FakeLogger)
 
     with pytest.raises(typer.Exit):

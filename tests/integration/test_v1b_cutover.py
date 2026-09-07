@@ -6,9 +6,9 @@ from pathlib import Path
 
 from analysis_fixture import analysis_fixture
 
-from dj_digger.application import WorkspaceApplication
-from dj_digger.config import WorkspaceConfig
-from dj_digger.metadata.exiftool import MetadataRunResult, MetadataService
+from dj_digger.core.application.app import CoreApplication
+from dj_digger.core.config import WorkspaceConfig
+from dj_digger.core.metadata.exiftool import MetadataRunResult, MetadataService
 
 
 @dataclass(frozen=True)
@@ -79,7 +79,7 @@ def test_v1b_refresh_resolves_known_curator_set_from_canonical_inventory(
         MetadataService, "refresh", lambda *_args, **_kwargs: MetadataRunResult(0, 0, 2)
     )
 
-    refresh = WorkspaceApplication(config, analysis_extractor=_analysis).refresh()
+    refresh = CoreApplication(config, analysis_extractor=_analysis).refresh()
 
     assert refresh["status"] == "succeeded"
     assert all(

@@ -2,8 +2,8 @@ from pathlib import Path
 
 import pytest
 
-from dj_digger.config import LibrarySourceConfig
-from dj_digger.scanning.scanner import SourceScanner
+from dj_digger.core.config import LibrarySourceConfig
+from dj_digger.core.scanning.scanner import SourceScanner
 
 
 @pytest.fixture

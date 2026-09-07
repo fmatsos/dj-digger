@@ -10,8 +10,8 @@ from typing import Any
 import pytest
 from typer.testing import CliRunner
 
-from dj_digger.catalog.database import Database
 from dj_digger.cli import app
+from dj_digger.core.catalog.database import Database
 
 
 class _Endpoint(BaseHTTPRequestHandler):

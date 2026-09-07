@@ -1,7 +1,7 @@
-from dj_digger.analysis.rhythm import RhythmFacts
-from dj_digger.analysis.segmentation import AnalysisFrame, Segmenter
-from dj_digger.analysis.semantics import SemanticClassifier, SemanticLabel
-from dj_digger.analysis.spectrum import SpectrumFacts
+from dj_digger.core.analysis.rhythm import RhythmFacts
+from dj_digger.core.analysis.segmentation import AnalysisFrame, Segmenter
+from dj_digger.core.analysis.semantics import SemanticClassifier, SemanticLabel
+from dj_digger.core.analysis.spectrum import SpectrumFacts
 
 
 def structural_sections():

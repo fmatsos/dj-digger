@@ -3,10 +3,10 @@ from pathlib import Path
 
 import pytest
 
-from dj_digger.catalog.database import Database
-from dj_digger.catalog.repositories import SourceRepository
-from dj_digger.scanning.lifecycle import ScanLifecycle
-from dj_digger.scanning.scanner import ArtifactObservation, AudioObservation, ScanObservation
+from dj_digger.core.catalog.database import Database
+from dj_digger.core.catalog.repositories import SourceRepository
+from dj_digger.core.scanning.lifecycle import ScanLifecycle
+from dj_digger.core.scanning.scanner import ArtifactObservation, AudioObservation, ScanObservation
 
 
 def observation(

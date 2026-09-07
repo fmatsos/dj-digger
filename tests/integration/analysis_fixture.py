@@ -1,7 +1,7 @@
 """Deterministic, schema-complete analysis extraction fixtures."""
 
-from dj_digger.analysis.extractor import AnalysisExtractionResult
-from dj_digger.catalog.models import Track
+from dj_digger.core.analysis.extractor import AnalysisExtractionResult
+from dj_digger.core.catalog.models import Track
 
 
 def analysis_fixture(track: Track) -> AnalysisExtractionResult:

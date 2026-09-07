@@ -6,9 +6,9 @@ from pathlib import Path
 
 from jsonschema import Draft202012Validator
 
-from dj_digger.catalog.database import Database
-from dj_digger.catalog.repositories import SourceRepository
-from dj_digger.exports.snapshot import SnapshotExporter
+from dj_digger.core.catalog.database import Database
+from dj_digger.core.catalog.repositories import SourceRepository
+from dj_digger.core.exports.snapshot import SnapshotExporter
 
 
 def test_snapshot_contains_hashed_canonical_facets_and_archive(tmp_path: Path) -> None:
@@ -40,7 +40,7 @@ def test_snapshot_contains_hashed_canonical_facets_and_archive(tmp_path: Path) -
     manifest_path = result.directory / "snapshot-manifest.json"
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     Draft202012Validator(
-        json.loads(Path("schemas/snapshot-manifest.schema.json").read_text())
+        json.loads(Path("src/dj_digger/core/schemas/snapshot-manifest.schema.json").read_text())
     ).validate(manifest)
     facets = {facet["name"]: facet for facet in manifest["facets"]}
     assert set(facets) == {"tracks.tsv", "library-artifacts.tsv"}

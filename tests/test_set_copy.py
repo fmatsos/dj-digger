@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import errno
 import os
 import shutil
 import stat
@@ -7,7 +8,8 @@ from pathlib import Path
 
 import pytest
 
-from dj_digger.set_copy import _resolve_owner, _set_recursive_ownership, copy_set
+from dj_digger.core.application.copy_set import copy_set
+from dj_digger.core.set_copy import _resolve_owner, _set_recursive_ownership
 
 
 def _track(library: Path, relative: str, contents: bytes) -> Path:
@@ -365,7 +367,6 @@ def test_crlf_file_uri_remote_scheme_and_group_transitions(tmp_path: Path) -> No
 def test_recursive_ownership_never_follows_symlinks(tmp_path: Path, monkeypatch) -> None:
     output = tmp_path / "output"
     output.mkdir()
-    (output / "file").write_text("data")
     external = tmp_path / "external"
     external.write_text("external")
     (output / "link").symlink_to(external)
@@ -379,6 +380,36 @@ def test_recursive_ownership_never_follows_symlinks(tmp_path: Path, monkeypatch)
 
     assert calls
     assert all(follow is False for _path, follow in calls)
+
+
+def test_recursive_ownership_fails_closed_when_descriptor_lchown_is_unavailable(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    output = tmp_path / "output"
+    output.mkdir()
+    external = tmp_path / "external"
+    external.write_text("external")
+    (output / "link").symlink_to(external)
+    external_owner = (external.stat().st_uid, external.stat().st_gid)
+    attempted: list[str] = []
+
+    def fail_chown(path, uid, gid, *, dir_fd=None, follow_symlinks=True):
+        if dir_fd is not None:
+            raise OSError(errno.EINVAL, "unsupported chown flags")
+
+    def fail_lchown(path, uid, gid):
+        attempted.append(os.fspath(path))
+        raise OSError(errno.EPERM, "descriptor lchown unavailable")
+
+    monkeypatch.setattr(os, "chown", fail_chown)
+    monkeypatch.setattr(os, "lchown", fail_lchown)
+
+    with pytest.raises(ValueError, match="descriptor-anchored"):
+        _set_recursive_ownership(output, 12, 34)
+
+    assert attempted
+    assert all(path.startswith("/proc/self/fd/") for path in attempted)
+    assert (external.stat().st_uid, external.stat().st_gid) == external_owner
 
 
 def test_group_directory_symlink_cannot_escape_output(tmp_path: Path) -> None:

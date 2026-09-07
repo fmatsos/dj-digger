@@ -1,4 +1,4 @@
-from dj_digger.analysis.windows import WINDOW_BARS, DjWindowPlanner
+from dj_digger.core.analysis.windows import WINDOW_BARS, DjWindowPlanner
 
 
 def beats(count: int) -> tuple[float, ...]:

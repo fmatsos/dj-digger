@@ -5,14 +5,16 @@ from pathlib import Path
 
 import pytest
 
-from dj_digger.catalog.database import Database
-from dj_digger.catalog.repositories import ScanRunRepository, SourceRepository, TrackRepository
+from dj_digger.core.catalog.database import Database
+from dj_digger.core.catalog.repositories import ScanRunRepository, SourceRepository, TrackRepository
 
 HASH = "a" * 64
 
 
 def _payload() -> dict[str, object]:
-    schema = json.loads(Path("schemas/dj-analysis.schema.json").read_text(encoding="utf-8"))
+    schema = json.loads(
+        Path("src/dj_digger/core/schemas/dj-analysis.schema.json").read_text(encoding="utf-8")
+    )
     projection_fields = {"source_id", "track_id", "path", "size_bytes", "mtime"}
     payload: dict[str, object] = {}
     for name in schema["required"]:
@@ -43,7 +45,7 @@ def _payload() -> dict[str, object]:
 
 
 def test_export_publishes_source_aware_validated_analysis_facets(tmp_path: Path) -> None:
-    from dj_digger.analysis.exporters import AnalysisExporter
+    from dj_digger.core.analysis.exporters import AnalysisExporter
 
     database = Database.open(tmp_path / "catalog.sqlite")
     database.migrate()
@@ -105,7 +107,7 @@ def test_export_publishes_source_aware_validated_analysis_facets(tmp_path: Path)
 def test_export_rolls_back_all_previous_facets_when_second_publish_replace_fails(
     tmp_path: Path, monkeypatch
 ) -> None:
-    from dj_digger.analysis.exporters import AnalysisExporter
+    from dj_digger.core.analysis.exporters import AnalysisExporter
 
     database = Database.open(tmp_path / "catalog.sqlite")
     database.migrate()

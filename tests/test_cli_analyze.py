@@ -4,6 +4,9 @@ import pytest
 from typer.testing import CliRunner
 
 from dj_digger.cli import app
+from dj_digger.cli.commands.analyze import execute
+from dj_digger.core.analysis.pipeline import AnalysisRunResult
+from dj_digger.core.application import AnalyzeRequest, ProgressEvent
 
 
 def _config(tmp_path: Path) -> Path:
@@ -30,27 +33,54 @@ def _config(tmp_path: Path) -> Path:
     return config
 
 
+def test_analyze_adapter_transmits_typed_request_to_core_boundary() -> None:
+    received: list[AnalyzeRequest] = []
+    events: list[ProgressEvent] = []
+
+    class Boundary:
+        def analyze(self, request: AnalyzeRequest, *, progress=None) -> AnalysisRunResult:
+            received.append(request)
+            if progress is not None:
+                progress(ProgressEvent("analysis_started", 0, 0, None))
+            return AnalysisRunResult(7, 2, 1, 1, 0)
+
+    payload = execute(
+        Boundary(),
+        AnalyzeRequest(source_id="library", path_prefix="House", limit=2, workers=3),
+        progress=events.append,
+    )
+
+    assert received == [
+        AnalyzeRequest(source_id="library", path_prefix="House", limit=2, workers=3)
+    ]
+    assert events == [ProgressEvent("analysis_started", 0, 0, None)]
+    assert payload == {
+        "event": "analyze",
+        "status": "succeeded",
+        "run_id": 7,
+        "eligible": 2,
+        "analyzed": 1,
+        "reused": 1,
+        "failed": 0,
+    }
+
+
 def test_analyze_propagates_selection_and_execution_options(monkeypatch, tmp_path: Path) -> None:
     received: dict[str, object] = {}
 
     def analyze(
         self,
-        source_id=None,
+        request: AnalyzeRequest,
         *,
-        path_prefix=None,
-        limit=None,
-        force=False,
-        workers=1,
-        track_timeout=1800.0,
         progress=None,
     ):
         received.update(
-            source_id=source_id,
-            path_prefix=path_prefix,
-            limit=limit,
-            force=force,
-            workers=workers,
-            track_timeout=track_timeout,
+            source_id=request.source_id,
+            path_prefix=request.path_prefix,
+            limit=request.limit,
+            force=request.force,
+            workers=request.workers,
+            track_timeout=request.track_timeout,
         )
         return type(
             "Result",
@@ -58,7 +88,7 @@ def test_analyze_propagates_selection_and_execution_options(monkeypatch, tmp_pat
             {"__dict__": {"eligible": 0, "analyzed": 0, "reused": 0, "failed": 0}},
         )()
 
-    monkeypatch.setattr("dj_digger.cli.WorkspaceApplication.analyze", analyze)
+    monkeypatch.setattr("dj_digger.cli.CoreApplication.analyze", analyze)
 
     result = CliRunner().invoke(
         app,
@@ -95,15 +125,18 @@ def test_analyze_propagates_selection_and_execution_options(monkeypatch, tmp_pat
 def test_analyze_uses_safe_execution_defaults(monkeypatch, tmp_path: Path) -> None:
     received: dict[str, object] = {}
 
-    def analyze(self, source_id=None, **options):
-        received.update(options)
+    def analyze(self, request: AnalyzeRequest, *, progress=None):
+        received.update(
+            workers=request.workers,
+            track_timeout=request.track_timeout,
+        )
         return type(
             "Result",
             (),
             {"__dict__": {"eligible": 0, "analyzed": 0, "reused": 0, "failed": 0}},
         )()
 
-    monkeypatch.setattr("dj_digger.cli.WorkspaceApplication.analyze", analyze)
+    monkeypatch.setattr("dj_digger.cli.CoreApplication.analyze", analyze)
 
     result = CliRunner().invoke(app, ["analyze", "--config", str(_config(tmp_path))])
 
@@ -126,12 +159,12 @@ def test_analyze_installs_rich_progress_reporter(monkeypatch, tmp_path: Path) ->
         def __exit__(self, *args):
             events.append("exited")
 
-    def analyze(self, source_id=None, *, progress=None, **options):
+    def analyze(self, request: AnalyzeRequest, *, progress=None):
         events.append(("analyze", progress))
         return type("Result", (), {"__dict__": {"failed": 0, "analyzed": 0}})()
 
     monkeypatch.setattr("dj_digger.cli.RichProgressReporter", Progress)
-    monkeypatch.setattr("dj_digger.cli.WorkspaceApplication.analyze", analyze)
+    monkeypatch.setattr("dj_digger.cli.CoreApplication.analyze", analyze)
 
     result = CliRunner().invoke(app, ["-v", "analyze", "--config", str(_config(tmp_path))])
 

@@ -2,9 +2,9 @@ from pathlib import Path
 
 import pytest
 
-from dj_digger.catalog.database import Database
-from dj_digger.catalog.models import Track
-from dj_digger.catalog.repositories import ScanRunRepository, SourceRepository, TrackRepository
+from dj_digger.core.catalog.database import Database
+from dj_digger.core.catalog.models import Track
+from dj_digger.core.catalog.repositories import ScanRunRepository, SourceRepository, TrackRepository
 
 HASH = "a" * 64
 
@@ -23,14 +23,14 @@ def catalog(database: Database) -> TrackRepository:
 
 @pytest.fixture
 def identity():
-    from dj_digger.analysis.config import AnalysisIdentity
+    from dj_digger.core.analysis.config import AnalysisIdentity
 
     return AnalysisIdentity(schema_version=2, analyzer_version="1.0.0", config_hash=HASH)
 
 
 @pytest.fixture
 def eligibility(catalog: TrackRepository):
-    from dj_digger.analysis.eligibility import AnalysisEligibility
+    from dj_digger.core.analysis.eligibility import AnalysisEligibility
 
     return AnalysisEligibility(catalog)
 

@@ -8,9 +8,10 @@ from pathlib import Path
 from analysis_fixture import analysis_fixture
 from jsonschema import Draft202012Validator, FormatChecker
 
-from dj_digger.application import WorkspaceApplication
-from dj_digger.config import LibrarySourceConfig, WorkspaceConfig
-from dj_digger.exports.snapshot import SnapshotResult
+from dj_digger.core.application import AnalyzeRequest, SnapshotRequest
+from dj_digger.core.application.app import CoreApplication
+from dj_digger.core.config import LibrarySourceConfig, WorkspaceConfig
+from dj_digger.core.exports.snapshot import SnapshotResult
 
 _analysis = analysis_fixture
 
@@ -51,11 +52,11 @@ def test_v1a_refresh_reuses_analysis_and_publishes_an_archived_snapshot(tmp_path
     source = tmp_path / "library"
     source.mkdir()
     (source / "subset.flac").write_bytes(b"representative audio bytes")
-    application = WorkspaceApplication(_workspace(tmp_path, source), analysis_extractor=_analysis)
+    application = CoreApplication(_workspace(tmp_path, source), analysis_extractor=_analysis)
 
     first = application.refresh()
-    second = application.analyze("subset", force=True)
-    snapshot = application.snapshot(tmp_path / "snapshot", archive=True)
+    second = application.analyze(AnalyzeRequest(source_id="subset", force=True))
+    snapshot = application.snapshot(SnapshotRequest(tmp_path / "snapshot", archive=True))
 
     assert first["status"] == "succeeded"
     assert first["analysis"]["analyzed"] == 1
