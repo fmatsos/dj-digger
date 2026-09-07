@@ -13,7 +13,8 @@ from pathlib import Path
 import pytest
 from jsonschema import Draft202012Validator
 
-from dj_digger.core.application.app import WorkspaceApplication
+from dj_digger.core.application import AnalyzeRequest, ExportRequest, SnapshotRequest
+from dj_digger.core.application.app import CoreApplication
 from dj_digger.core.config import LibrarySourceConfig, WorkspaceConfig
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -71,22 +72,22 @@ def test_real_v1a_composition_metadata_analysis_reuse_export_snapshot(tmp_path: 
         ["ffmpeg", "-v", "error", "-f", "lavfi", "-i", "sine=frequency=440:duration=2", str(audio)],
         check=True,
     )
-    application = WorkspaceApplication(_real_workspace(tmp_path, source))
-    assert application.scan()[0].succeeded
+    application = CoreApplication(_real_workspace(tmp_path, source))
+    assert application.scan().sources[0].succeeded
     metadata = application.metadata()
     assert metadata.extracted == 1
-    first = application.analyze()
-    second = application.analyze(force=True)
+    first = application.analyze(AnalyzeRequest())
+    second = application.analyze(AnalyzeRequest(force=True))
     assert first.analyzed == 1 and first.failed == 0
     assert second.analyzed == 0 and second.reused == 1
-    published = application.export("all")
-    assert {Path(path).name for path in published} >= {
+    published = application.export(ExportRequest(facet="all"))
+    assert {Path(path).name for path in published.paths} >= {
         "tracks.tsv",
         "dj-analysis.tsv",
         "dj-sections.jsonl",
         "dj-analysis-run.json",
     }
-    snapshot = application.snapshot(tmp_path / "snapshot", archive=True)
+    snapshot = application.snapshot(SnapshotRequest(tmp_path / "snapshot", archive=True))
     manifest = json.loads((snapshot.directory / "snapshot-manifest.json").read_text())
     Draft202012Validator(
         json.loads((ROOT / "src/dj_digger/core/schemas/snapshot-manifest.schema.json").read_text())
@@ -225,7 +226,7 @@ def test_v1b_refresh_emits_schema_valid_facts_only_set(tmp_path: Path) -> None:
         check=True,
     )
     config = _real_workspace(tmp_path, source)
-    refresh = WorkspaceApplication(config).refresh()
+    refresh = CoreApplication(config).refresh()
     assert refresh["published"] is True
     assert all(
         (config.exports / name).is_file()

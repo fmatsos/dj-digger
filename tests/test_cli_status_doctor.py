@@ -5,7 +5,7 @@ import pytest
 from typer.testing import CliRunner
 
 from dj_digger.cli import app
-from dj_digger.core.application.app import WorkspaceApplication
+from dj_digger.core.application.app import CoreApplication
 from dj_digger.core.config import WorkspaceConfig
 
 
@@ -100,9 +100,9 @@ def test_doctor_marks_unhealthy_sqlite_settings_as_issues(
     source.mkdir()
     config_path = write_config(tmp_path, source=source, exports=tmp_path / "exports")
 
-    with WorkspaceApplication(WorkspaceConfig.load(config_path)) as application:
+    with CoreApplication(WorkspaceConfig.load(config_path)) as application:
         application.database.execute(f"PRAGMA {setting} = {value}")
-        diagnostic = application.doctor()
+        diagnostic = application.doctor().as_dict()
 
     assert diagnostic["status"] == "failed"
     assert expected_issue in diagnostic["issues"]
@@ -115,9 +115,9 @@ def test_doctor_marks_failed_quick_check_as_an_issue(
     source.mkdir()
     config_path = write_config(tmp_path, source=source, exports=tmp_path / "exports")
 
-    with WorkspaceApplication(WorkspaceConfig.load(config_path)) as application:
+    with CoreApplication(WorkspaceConfig.load(config_path)) as application:
         monkeypatch.setattr(application.database, "quick_check", lambda: "corrupt page")
-        diagnostic = application.doctor()
+        diagnostic = application.doctor().as_dict()
 
     assert diagnostic["status"] == "failed"
     assert "SQLite quick check failed: corrupt page" in diagnostic["issues"]
@@ -130,9 +130,9 @@ def test_doctor_flags_ffmpeg_missing_the_chromaprint_muxer(
     source.mkdir()
     config_path = write_config(tmp_path, source=source, exports=tmp_path / "exports")
 
-    with WorkspaceApplication(WorkspaceConfig.load(config_path)) as application:
+    with CoreApplication(WorkspaceConfig.load(config_path)) as application:
         monkeypatch.setattr("dj_digger.core.application.app._has_chromaprint_muxer", lambda: False)
-        diagnostic = application.doctor()
+        diagnostic = application.doctor().as_dict()
 
     assert diagnostic["status"] == "failed"
     assert "ffmpeg is missing the chromaprint muxer required for duplicates" in diagnostic["issues"]
@@ -163,9 +163,9 @@ def test_doctor_skips_chromaprint_check_when_no_source_is_enabled(
         encoding="utf-8",
     )
 
-    with WorkspaceApplication(WorkspaceConfig.load(config_path)) as application:
+    with CoreApplication(WorkspaceConfig.load(config_path)) as application:
         monkeypatch.setattr("dj_digger.core.application.app._has_chromaprint_muxer", lambda: False)
-        diagnostic = application.doctor()
+        diagnostic = application.doctor().as_dict()
 
     assert not any("chromaprint" in issue for issue in diagnostic["issues"])
 
@@ -177,12 +177,12 @@ def test_doctor_treats_absent_wal_and_shm_files_as_information(
     source.mkdir()
     config_path = write_config(tmp_path, source=source, exports=tmp_path / "exports")
 
-    with WorkspaceApplication(WorkspaceConfig.load(config_path)) as application:
+    with CoreApplication(WorkspaceConfig.load(config_path)) as application:
         diagnostics = application.database.diagnostics()
         diagnostics["wal_size_bytes"] = 0
         diagnostics["shm_present"] = False
         monkeypatch.setattr(application.database, "diagnostics", lambda: diagnostics)
-        diagnostic = application.doctor()
+        diagnostic = application.doctor().as_dict()
 
     assert diagnostic["status"] == "succeeded"
     assert diagnostic["issues"] == []

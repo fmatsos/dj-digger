@@ -88,6 +88,26 @@ def test_list_jobs_returns_empty_when_no_jobs_ran(tmp_path: Path) -> None:
     assert background.list_jobs(tmp_path / "catalog.sqlite") == []
 
 
+@pytest.mark.parametrize("payload", [[], "not-a-job", 42, None])
+def test_list_jobs_skips_json_values_that_are_not_objects(tmp_path: Path, payload: object) -> None:
+    database = tmp_path / "catalog.sqlite"
+    status_file = background.jobs_dir(database) / "malformed.json"
+    status_file.parent.mkdir(parents=True)
+    status_file.write_text(json.dumps(payload), encoding="utf-8")
+
+    assert background.list_jobs(database) == []
+
+
+def test_get_malformed_job_reports_a_typed_unknown_job_error(tmp_path: Path) -> None:
+    database = tmp_path / "catalog.sqlite"
+    status_file = background.jobs_dir(database) / "malformed.json"
+    status_file.parent.mkdir(parents=True)
+    status_file.write_text(json.dumps([]), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="unknown background job: malformed"):
+        JobRepository(database).get("malformed")
+
+
 def test_launcher_failure_records_safe_terminal_job(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -114,7 +134,7 @@ def test_launcher_spawn_failure_records_safe_terminal_job(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr(
-        "dj_digger.cli.commands.jobs.subprocess.Popen",
+        "dj_digger.cli.background.subprocess.Popen",
         lambda *_args, **_kwargs: (_ for _ in ()).throw(
             OSError("/private/library/root/local-secret")
         ),
@@ -147,7 +167,7 @@ def test_launcher_start_failure_reaps_child_and_records_failure(
             return self.returncode
 
     monkeypatch.setattr(
-        "dj_digger.cli.commands.jobs.subprocess.Popen", lambda *_args, **_kwargs: Child()
+        "dj_digger.cli.background.subprocess.Popen", lambda *_args, **_kwargs: Child()
     )
     monkeypatch.setattr(
         JobRepository,
@@ -155,7 +175,7 @@ def test_launcher_start_failure_reaps_child_and_records_failure(
         lambda *_args, **_kwargs: (_ for _ in ()).throw(JobStateError("race")),
     )
     monkeypatch.setattr(
-        "dj_digger.cli.commands.jobs.os.killpg",
+        "dj_digger.cli.background.os.killpg",
         lambda *_args: (_ for _ in ()).throw(OSError()),
     )
 
@@ -181,7 +201,7 @@ def test_launcher_does_not_overwrite_child_result_when_start_races(
         return original_start(repository, job_id, pid)
 
     monkeypatch.setattr(
-        "dj_digger.cli.commands.jobs.subprocess.Popen", lambda *_args, **_kwargs: Child()
+        "dj_digger.cli.background.subprocess.Popen", lambda *_args, **_kwargs: Child()
     )
     monkeypatch.setattr(JobRepository, "start", race_start)
 
@@ -213,7 +233,7 @@ def test_stubborn_process_cleanup_is_not_claimed_as_success(
 
     child = StubbornChild()
     monkeypatch.setattr(
-        "dj_digger.cli.commands.jobs.subprocess.Popen", lambda *_args, **_kwargs: child
+        "dj_digger.cli.background.subprocess.Popen", lambda *_args, **_kwargs: child
     )
     monkeypatch.setattr(
         JobRepository,
@@ -221,7 +241,7 @@ def test_stubborn_process_cleanup_is_not_claimed_as_success(
         lambda *_args, **_kwargs: (_ for _ in ()).throw(JobStateError("race")),
     )
     monkeypatch.setattr(
-        "dj_digger.cli.commands.jobs.os.killpg",
+        "dj_digger.cli.background.os.killpg",
         lambda *_args: (_ for _ in ()).throw(OSError()),
     )
 
@@ -237,7 +257,7 @@ def test_launcher_reports_failure_persistence_error_without_raw_detail(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr(
-        "dj_digger.cli.commands.jobs.subprocess.Popen",
+        "dj_digger.cli.background.subprocess.Popen",
         lambda *_args, **_kwargs: (_ for _ in ()).throw(OSError("secret-sentinel")),
     )
     monkeypatch.setattr(

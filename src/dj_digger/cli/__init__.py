@@ -7,13 +7,10 @@ from dj_digger.core.application import CoreApplication
 from dj_digger.core.config import WorkspaceConfig
 from dj_digger.core.run_log import RunLogger
 
-WorkspaceApplication = CoreApplication
-
 __all__ = [
     "CoreApplication",
     "RunLogger",
     "RichProgressReporter",
-    "WorkspaceApplication",
     "WorkspaceConfig",
     "_run",
     "app",

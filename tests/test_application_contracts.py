@@ -3,15 +3,20 @@
 import json
 import sqlite3
 from pathlib import Path
-from types import SimpleNamespace
 
 import pytest
 
 from dj_digger.core.analysis.config import AnalysisIdentity
 from dj_digger.core.analysis.persistence import AnalysisOutcome, AnalysisPersistence
 from dj_digger.core.analysis.pipeline import AnalysisRunResult
-from dj_digger.core.application import CoreApplication, ScanRunResult, ScanSourceResult
-from dj_digger.core.application.app import WorkspaceApplication
+from dj_digger.core.application import (
+    CoreApplication,
+    ExportRequest,
+    InvalidInputError,
+    MetadataRunResult,
+    ScanRunResult,
+    ScanSourceResult,
+)
 from dj_digger.core.catalog.database import Database
 from dj_digger.core.catalog.repositories import ScanRunRepository, SourceRepository, TrackRepository
 from dj_digger.core.config import LibrarySourceConfig, WorkspaceConfig
@@ -78,7 +83,7 @@ def test_configured_sources_are_synchronized_atomically(monkeypatch, tmp_path: P
     monkeypatch.setattr(SourceRepository, "upsert", fail_on_second)
 
     with pytest.raises(RuntimeError, match="second source rejected"):
-        WorkspaceApplication(config)
+        CoreApplication(config)
 
     assert len(opened_databases) == 1
     with pytest.raises(sqlite3.ProgrammingError, match="closed database"):
@@ -88,7 +93,7 @@ def test_configured_sources_are_synchronized_atomically(monkeypatch, tmp_path: P
 
 
 def test_track_insert_rolls_back_with_its_caller_transaction(tmp_path: Path) -> None:
-    application = WorkspaceApplication(_workspace(tmp_path))
+    application = CoreApplication(_workspace(tmp_path))
     scan_id = ScanRunRepository(application.database).start("source", scanner_version="test")
 
     with pytest.raises(RuntimeError, match="abort track insert"):
@@ -108,14 +113,14 @@ def test_track_insert_rolls_back_with_its_caller_transaction(tmp_path: Path) -> 
 
 
 def test_workspace_application_context_closes_its_database(tmp_path: Path) -> None:
-    with WorkspaceApplication(_workspace(tmp_path)) as application:
+    with CoreApplication(_workspace(tmp_path)) as application:
         database = application.database
 
     with pytest.raises(sqlite3.ProgrammingError, match="closed database"):
         database.scalar("SELECT 1")
 
 
-def _seed_failed_run(application: WorkspaceApplication) -> AnalysisRunResult:
+def _seed_failed_run(application: CoreApplication) -> AnalysisRunResult:
     scan_id = ScanRunRepository(application.database).start("source", scanner_version="test")
     with application.database.transaction():
         track = TrackRepository(application.database).insert(
@@ -150,7 +155,7 @@ def test_default_adapter_wires_isolated_source_root_and_identity(monkeypatch, tm
             calls.update(source_roots=source_roots, dsp=dsp)
 
     monkeypatch.setattr("dj_digger.core.application.app.IsolatedAnalysisExtractor", StubIsolated)
-    application = WorkspaceApplication(_workspace(tmp_path))
+    application = CoreApplication(_workspace(tmp_path))
     assert calls["source_roots"] == {"source": (tmp_path / "library").resolve()}
     assert calls["dsp"] == application.config.dsp
     assert application._analysis_identity == AnalysisIdentity(
@@ -159,24 +164,30 @@ def test_default_adapter_wires_isolated_source_root_and_identity(monkeypatch, tm
 
 
 def test_refresh_metadata_partial_still_publishes(monkeypatch, tmp_path):
-    application = WorkspaceApplication(_workspace(tmp_path))
-    scans = [SimpleNamespace(succeeded=True, source_id="source")]
-    monkeypatch.setattr(application, "scan", lambda **_: scans)
-    monkeypatch.setattr(application, "metadata", lambda: SimpleNamespace(status="partial"))
-    monkeypatch.setattr(application, "analyze", lambda **_: SimpleNamespace(status="succeeded"))
-    published = []
-    monkeypatch.setattr(application, "export", lambda: published.append(True) or ["tracks.tsv"])
+    application = CoreApplication(_workspace(tmp_path))
+    scans = ScanRunResult((ScanSourceResult("source", True, 1),))
+    monkeypatch.setattr(application, "scan", lambda _request: scans)
+    monkeypatch.setattr(application, "metadata", lambda _request: MetadataRunResult(1, 1, 0))
+    monkeypatch.setattr(
+        application,
+        "analyze",
+        lambda _request, _progress: AnalysisRunResult(1, 0, 0, 0, 0, "succeeded"),
+    )
+    published: list[bool] = []
+    monkeypatch.setattr(
+        application, "export", lambda _request: published.append(True) or ["tracks.tsv"]
+    )
     result = application.refresh()
     assert result["status"] == "partial" and result["published"] is True and published
 
 
 def test_refresh_failed_analysis_still_publishes_failure_audit(monkeypatch, tmp_path):
-    application = WorkspaceApplication(_workspace(tmp_path))
+    application = CoreApplication(_workspace(tmp_path))
     failed = _seed_failed_run(application)
-    scans = [SimpleNamespace(succeeded=True, source_id="source")]
-    monkeypatch.setattr(application, "scan", lambda **_: scans)
-    monkeypatch.setattr(application, "metadata", lambda: SimpleNamespace(status="succeeded"))
-    monkeypatch.setattr(application, "analyze", lambda **_: failed)
+    scans = ScanRunResult((ScanSourceResult("source", True, 1),))
+    monkeypatch.setattr(application, "scan", lambda _request: scans)
+    monkeypatch.setattr(application, "metadata", lambda _request: MetadataRunResult(0, 0, 0))
+    monkeypatch.setattr(application, "analyze", lambda _request, _progress: failed)
 
     result = application.refresh()
 
@@ -189,7 +200,7 @@ def test_refresh_failed_analysis_still_publishes_failure_audit(monkeypatch, tmp_
 
 
 def test_refresh_export_exception_preserves_existing_analysis_bytes(monkeypatch, tmp_path):
-    application = WorkspaceApplication(_workspace(tmp_path))
+    application = CoreApplication(_workspace(tmp_path))
     _seed_failed_run(application)
     application.config.exports.mkdir(parents=True)
     paths = [
@@ -201,10 +212,14 @@ def test_refresh_export_exception_preserves_existing_analysis_bytes(monkeypatch,
         content = f"old-{index}".encode()
         path.write_bytes(content)
         before[path] = content
-    scans = [SimpleNamespace(succeeded=True, source_id="source")]
-    monkeypatch.setattr(application, "scan", lambda **_: scans)
-    monkeypatch.setattr(application, "metadata", lambda: SimpleNamespace(status="succeeded"))
-    monkeypatch.setattr(application, "analyze", lambda **_: SimpleNamespace(status="succeeded"))
+    scans = ScanRunResult((ScanSourceResult("source", True, 1),))
+    monkeypatch.setattr(application, "scan", lambda _request: scans)
+    monkeypatch.setattr(application, "metadata", lambda _request: MetadataRunResult(0, 0, 0))
+    monkeypatch.setattr(
+        application,
+        "analyze",
+        lambda _request, _progress: AnalysisRunResult(1, 0, 0, 0, 0, "succeeded"),
+    )
 
     def fail_export(*_args, **_kwargs):
         raise RuntimeError("publish failed")
@@ -219,17 +234,17 @@ def test_refresh_export_exception_preserves_existing_analysis_bytes(monkeypatch,
 
 
 def test_refresh_reports_the_four_phases_in_order(monkeypatch, tmp_path: Path) -> None:
-    application = WorkspaceApplication(_workspace(tmp_path))
+    application = CoreApplication(_workspace(tmp_path))
     progress = RecordingProgress()
-    scans = [SimpleNamespace(succeeded=True, source_id="source")]
-    monkeypatch.setattr(application, "scan", lambda **_: scans)
-    monkeypatch.setattr(application, "metadata", lambda: SimpleNamespace(status="succeeded"))
+    scans = ScanRunResult((ScanSourceResult("source", True, 1),))
+    monkeypatch.setattr(application, "scan", lambda _request: scans)
+    monkeypatch.setattr(application, "metadata", lambda _request: MetadataRunResult(0, 0, 0))
     monkeypatch.setattr(
         application,
         "analyze",
-        lambda **_: SimpleNamespace(status="succeeded"),
+        lambda _request, _progress: AnalysisRunResult(1, 0, 0, 0, 0, "succeeded"),
     )
-    monkeypatch.setattr(application, "export", lambda: ["tracks.tsv"])
+    monkeypatch.setattr(application, "export", lambda _request: ["tracks.tsv"])
 
     application.refresh(progress=progress)
 
@@ -252,9 +267,13 @@ def test_core_application_refresh_adapts_typed_scan_results(monkeypatch, tmp_pat
         "scan",
         lambda _request: ScanRunResult((ScanSourceResult("source", True, 1),)),
     )
-    monkeypatch.setattr(application, "metadata", lambda: SimpleNamespace(status="succeeded"))
-    monkeypatch.setattr(application, "analyze", lambda **_: SimpleNamespace(status="succeeded"))
-    monkeypatch.setattr(application, "export", lambda: ["tracks.tsv"])
+    monkeypatch.setattr(application, "metadata", lambda _request: MetadataRunResult(0, 0, 0))
+    monkeypatch.setattr(
+        application,
+        "analyze",
+        lambda _request, _progress: AnalysisRunResult(1, 0, 0, 0, 0, "succeeded"),
+    )
+    monkeypatch.setattr(application, "export", lambda _request: ["tracks.tsv"])
 
     result = application.refresh()
 
@@ -263,12 +282,12 @@ def test_core_application_refresh_adapts_typed_scan_results(monkeypatch, tmp_pat
 
 
 def test_refresh_stops_progress_after_a_required_scan_failure(monkeypatch, tmp_path: Path) -> None:
-    application = WorkspaceApplication(_workspace(tmp_path))
+    application = CoreApplication(_workspace(tmp_path))
     progress = RecordingProgress()
     monkeypatch.setattr(
         application,
         "scan",
-        lambda **_: [SimpleNamespace(succeeded=False, source_id="source")],
+        lambda _request: ScanRunResult((ScanSourceResult("source", False, 1),)),
     )
 
     result = application.refresh(progress=progress)
@@ -281,10 +300,10 @@ def test_refresh_stops_progress_after_a_required_scan_failure(monkeypatch, tmp_p
 
 
 def test_export_analysis_publishes_only_analysis_facets(tmp_path):
-    application = WorkspaceApplication(_workspace(tmp_path))
+    application = CoreApplication(_workspace(tmp_path))
     _seed_failed_run(application)
 
-    published = application.export("analysis")
+    published = application.export(ExportRequest(facet="analysis")).paths
 
     assert {Path(path).name for path in published} == {
         "dj-analysis.tsv",
@@ -297,10 +316,10 @@ def test_export_analysis_publishes_only_analysis_facets(tmp_path):
 
 def test_export_all_has_only_canonical_facets(tmp_path):
     config = _workspace(tmp_path)
-    application = WorkspaceApplication(config)
+    application = CoreApplication(config)
     _seed_failed_run(application)
 
-    application.export("all")
+    application.export(ExportRequest(facet="all"))
 
     assert (config.exports / "tracks.tsv").is_file()
     assert all(
@@ -317,19 +336,21 @@ def test_export_all_has_only_canonical_facets(tmp_path):
 
 
 def test_export_tracks_json_projects_requested_fields_in_order(tmp_path):
-    application = WorkspaceApplication(_workspace(tmp_path))
+    application = CoreApplication(_workspace(tmp_path))
 
-    published = application.export(type="tracks", format="json", fields="title,filename")
+    published = application.export(
+        ExportRequest(type="tracks", format="json", fields="title,filename")
+    ).paths
 
     assert [Path(path).name for path in published] == ["tracks.json"]
     assert json.loads(Path(published[0]).read_text(encoding="utf-8")) == []
 
 
 def test_export_all_csv_applies_the_format_to_every_leaf(tmp_path):
-    application = WorkspaceApplication(_workspace(tmp_path))
+    application = CoreApplication(_workspace(tmp_path))
     _seed_failed_run(application)
 
-    published = application.export(type="all", format="csv")
+    published = application.export(ExportRequest(type="all", format="csv")).paths
 
     assert {Path(path).name for path in published} == {
         "tracks.csv",
@@ -352,22 +373,22 @@ def test_export_all_csv_applies_the_format_to_every_leaf(tmp_path):
 def test_export_rejects_invalid_field_selection_before_publication(
     tmp_path, type_, fields, message
 ):
-    application = WorkspaceApplication(_workspace(tmp_path))
+    application = CoreApplication(_workspace(tmp_path))
 
-    with pytest.raises(ValueError, match=message):
-        application.export(type=type_, fields=fields)
+    with pytest.raises(InvalidInputError, match=message):
+        application.export(ExportRequest(type=type_, fields=fields))
 
     assert not application.config.exports.exists() or not any(application.config.exports.iterdir())
 
 
 def test_status_reports_analysis_facet_booleans_and_latest_identity(tmp_path):
-    application = WorkspaceApplication(_workspace(tmp_path))
+    application = CoreApplication(_workspace(tmp_path))
     _seed_failed_run(application)
     application.config.exports.mkdir(parents=True, exist_ok=True)
     (application.config.exports / "dj-analysis.tsv").write_text("header\n")
     (application.config.exports / "dj-analysis-run.json").write_text("{}\n")
 
-    result = application.status()
+    result = application.status().as_dict()
 
     assert set(result["exports"]["analysis"]) == {
         "dj-analysis.tsv",

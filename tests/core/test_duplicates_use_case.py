@@ -14,7 +14,7 @@ from dj_digger.core.application import (
     QualityMarkResult,
     ResourceNotFoundError,
 )
-from dj_digger.core.application.app import WorkspaceApplication
+from dj_digger.core.application.app import CoreApplication
 from dj_digger.core.config import LibrarySourceConfig, WorkspaceConfig
 
 
@@ -40,14 +40,15 @@ def test_duplicate_workflows_return_typed_core_results(tmp_path: Path) -> None:
     assert isinstance(marked, QualityMarkResult)
 
 
-@pytest.mark.parametrize("application_type", (CoreApplication, WorkspaceApplication))
-def test_duplicate_workflows_preserve_legacy_source_id_keyword(
-    application_type: type[WorkspaceApplication], tmp_path: Path
+def test_duplicate_workflows_accept_typed_requests(
+    tmp_path: Path,
 ) -> None:
-    with application_type(_config(tmp_path)) as application:
-        analyzed = application.duplicates_analyze(source_id="source")
-        listed = application.duplicates_list(source_id="source")
-        marked = application.duplicates_mark_best_quality(source_id="source")
+    with CoreApplication(_config(tmp_path)) as application:
+        analyzed = application.duplicates_analyze(DuplicateAnalyzeRequest(source_id="source"))
+        listed = application.duplicates_list(DuplicateListRequest(source_id="source"))
+        marked = application.duplicates_mark_best_quality(
+            DuplicateMarkBestRequest(source_id="source")
+        )
 
     assert isinstance(analyzed, DuplicateAnalysisResult)
     assert listed == []
