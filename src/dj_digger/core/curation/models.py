@@ -9,6 +9,34 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 QualityStatus = Literal["unique", "verified_best", "best_effort", "unverified_unfingerprinted"]
 AnalysisStatus = Literal["ok", "failed", "missing"]
 
+__all__ = [
+    "QualityStatus",
+    "AnalysisStatus",
+    "CandidateRef",
+    "SearchFilters",
+    "SourceSummary",
+    "FacetValue",
+    "FacetSummary",
+    "AnalysisRunSummary",
+    "LibraryOverviewV1",
+    "CandidateIdentity",
+    "CandidateSummary",
+    "CandidateSearchV1",
+    "DiscoveryMetadata",
+    "AudioFormat",
+    "AnalysisWindows",
+    "SectionSummary",
+    "AnalysisDetails",
+    "MasteringSummary",
+    "CandidateDetails",
+    "CandidateDetailsV1",
+    "CurationKind",
+    "CurationStatus",
+    "CurationTrack",
+    "CreateCurationDraft",
+    "CurationCreation",
+]
+
 
 class _Model(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)

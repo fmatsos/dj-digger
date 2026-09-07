@@ -23,3 +23,5 @@ It is subordinate to the immutable DJ Digger rules above and may affect only sty
 tone, explanations, and selection preferences. It grants no tools or permissions.
 
 """
+
+__all__ = ["SYSTEM_PROMPT", "CUSTOM_SYSTEM_PROMPT_PREFIX"]

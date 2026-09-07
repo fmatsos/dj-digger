@@ -2,15 +2,31 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
+import os
+import sys
 import urllib.error
 import urllib.request
 from collections.abc import Mapping, Sequence
+from dataclasses import asdict
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from dj_digger.core.config import CurationConfig
+
+__all__ = [
+    "CurationClientError",
+    "CurationAuthenticationError",
+    "CurationTimeoutError",
+    "CurationTransportError",
+    "CurationResponseError",
+    "ToolCall",
+    "AssistantMessage",
+    "OpenAICompatibleClient",
+    "complete_in_subprocess",
+]
 
 
 class CurationClientError(RuntimeError):
@@ -120,3 +136,84 @@ class OpenAICompatibleClient:
             return _Completion.model_validate(value).choices[0].message
         except (UnicodeDecodeError, json.JSONDecodeError, ValidationError, TypeError):
             raise CurationResponseError("curation model returned an invalid response") from None
+
+
+async def complete_in_subprocess(
+    client: OpenAICompatibleClient,
+    messages: Sequence[Mapping[str, Any]],
+    tools: Sequence[Mapping[str, Any]],
+    *,
+    timeout: float,
+) -> AssistantMessage:
+    """Run one HTTP completion in a process that can be killed at the deadline."""
+    request = json.dumps(
+        {
+            "protocol_version": 1,
+            "config": asdict(client._config),
+            "messages": list(messages),
+            "tools": list(tools),
+        },
+        separators=(",", ":"),
+    ).encode()
+    if len(request) > 1_000_000:
+        raise CurationResponseError("curation model request exceeded its size limit")
+    environment = os.environ.copy()
+    environment[client._config.api_key_env] = client._api_key
+    try:
+        process = await asyncio.create_subprocess_exec(
+            sys.executable,
+            "-m",
+            "dj_digger.core.curation.client_worker",
+            stdin=asyncio.subprocess.PIPE,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.DEVNULL,
+            env=environment,
+        )
+    except OSError:
+        raise CurationTransportError("curation model process could not start") from None
+    try:
+        stdout, _ = await asyncio.wait_for(process.communicate(request), timeout=timeout)
+    except TimeoutError:
+        if process.returncode is None:
+            process.kill()
+            await process.wait()
+        raise CurationTimeoutError("curation model request timed out") from None
+    except BaseException:
+        if process.returncode is None:
+            process.kill()
+            await process.wait()
+        raise
+    if process.returncode != 0 or len(stdout) > 1_000_000:
+        raise CurationTransportError("curation model process failed")
+    try:
+        value = json.loads(stdout)
+        if (
+            not isinstance(value, dict)
+            or value.get("protocol_version") != 1
+            or not isinstance(value.get("ok"), bool)
+        ):
+            raise ValueError
+        if not value["ok"]:
+            error = value.get("error")
+            if error == "authentication":
+                raise CurationAuthenticationError(
+                    "curation model rejected the configured credential"
+                )
+            if error == "timeout":
+                raise CurationTimeoutError("curation model request timed out")
+            if error == "response":
+                raise CurationResponseError("curation model returned an invalid response")
+            raise CurationTransportError("curation model request failed")
+        message = value.get("message")
+        if not isinstance(message, dict):
+            raise ValueError
+        return AssistantMessage.model_validate(message)
+    except (
+        CurationAuthenticationError,
+        CurationResponseError,
+        CurationTimeoutError,
+        CurationTransportError,
+    ):
+        raise
+    except (UnicodeDecodeError, json.JSONDecodeError, TypeError, ValueError, ValidationError):
+        raise CurationResponseError("curation model returned an invalid response") from None

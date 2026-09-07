@@ -1,6 +1,5 @@
-"""Compatibility forwarding module for canonical curation prompts."""
+"""Compatibility re-exports for canonical curation prompts."""
 
-import sys
-from importlib import import_module
+from dj_digger.core.curation.prompts import CUSTOM_SYSTEM_PROMPT_PREFIX, SYSTEM_PROMPT
 
-sys.modules[__name__] = import_module("dj_digger.core.curation.prompts")
+__all__ = ["SYSTEM_PROMPT", "CUSTOM_SYSTEM_PROMPT_PREFIX"]

@@ -1,6 +1,57 @@
-"""Compatibility forwarding module for canonical curation models."""
+"""Compatibility re-exports for canonical curation models."""
 
-import sys
-from importlib import import_module
+from dj_digger.core.curation.models import (
+    AnalysisDetails,
+    AnalysisRunSummary,
+    AnalysisStatus,
+    AnalysisWindows,
+    AudioFormat,
+    CandidateDetails,
+    CandidateDetailsV1,
+    CandidateIdentity,
+    CandidateRef,
+    CandidateSearchV1,
+    CandidateSummary,
+    CreateCurationDraft,
+    CurationCreation,
+    CurationKind,
+    CurationStatus,
+    CurationTrack,
+    DiscoveryMetadata,
+    FacetSummary,
+    FacetValue,
+    LibraryOverviewV1,
+    MasteringSummary,
+    QualityStatus,
+    SearchFilters,
+    SectionSummary,
+    SourceSummary,
+)
 
-sys.modules[__name__] = import_module("dj_digger.core.curation.models")
+__all__ = [
+    "QualityStatus",
+    "AnalysisStatus",
+    "CandidateRef",
+    "SearchFilters",
+    "SourceSummary",
+    "FacetValue",
+    "FacetSummary",
+    "AnalysisRunSummary",
+    "LibraryOverviewV1",
+    "CandidateIdentity",
+    "CandidateSummary",
+    "CandidateSearchV1",
+    "DiscoveryMetadata",
+    "AudioFormat",
+    "AnalysisWindows",
+    "SectionSummary",
+    "AnalysisDetails",
+    "MasteringSummary",
+    "CandidateDetails",
+    "CandidateDetailsV1",
+    "CurationKind",
+    "CurationStatus",
+    "CurationTrack",
+    "CreateCurationDraft",
+    "CurationCreation",
+]

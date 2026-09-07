@@ -15,6 +15,8 @@ from dj_digger.core.resources import read_text
 
 _CURRENT_SCHEMA_ID = "https://dj-digger.local/schemas/v1/curation-result.schema.json"
 
+__all__ = ["validate_curation_result"]
+
 
 def _load_schema(name: str) -> dict[str, Any]:
     value: object = json.loads(read_text(f"core/schemas/{name}"))

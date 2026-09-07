@@ -1,6 +1,5 @@
-"""Compatibility forwarding module for the canonical curation repository."""
+"""Compatibility re-exports for the canonical curation repository."""
 
-import sys
-from importlib import import_module
+from dj_digger.core.curation.repository import CurationRepository
 
-sys.modules[__name__] = import_module("dj_digger.core.curation.repository")
+__all__ = ["CurationRepository"]
