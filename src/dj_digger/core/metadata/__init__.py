@@ -1,4 +1,4 @@
-"""Compatibility imports for the migrated metadata services."""
+"""Canonical embedded audio metadata services."""
 
 from dj_digger.core.metadata.exiftool import (
     EMBEDDED_FIELDS,

@@ -7,8 +7,9 @@ import typer
 from typer.testing import CliRunner
 
 from dj_digger.cli import _run, app
+from dj_digger.cli.presenters.metadata import metadata_payload
 from dj_digger.cli.presenters.scan import scan_payload
-from dj_digger.core.application import ScanRunResult, ScanSourceResult
+from dj_digger.core.application import MetadataRunResult, ScanRunResult, ScanSourceResult
 
 
 def _write_config(path: Path, filename: str = "config.toml", *, source_id: str = "library") -> Path:
@@ -59,6 +60,36 @@ def test_scan_presenter_preserves_compact_success_and_failure_keys() -> None:
     }
     assert failure["status"] == "failed"
     assert failure["scans"][0]["error"] == "unavailable"
+
+
+def test_metadata_presenter_preserves_compact_result_keys() -> None:
+    assert metadata_payload(MetadataRunResult(2, 1, 3)) == {
+        "event": "metadata",
+        "status": "partial",
+        "extracted": 2,
+        "failed": 1,
+        "skipped": 3,
+    }
+
+
+def test_metadata_command_uses_failure_exit_code(monkeypatch, tmp_path: Path) -> None:
+    config = tmp_path / "config.toml"
+    config.write_text("", encoding="utf-8")
+    cli_module = import_module("dj_digger.cli.app")
+    monkeypatch.setattr(
+        cli_module,
+        "execute_metadata",
+        lambda _config, _source, _path, _force: {
+            "event": "metadata",
+            "status": "failed",
+            "error": "dependency unavailable",
+        },
+    )
+
+    result = CliRunner().invoke(app, ["metadata", "--config", str(config), "--json"])
+
+    assert result.exit_code == 1
+    assert json.loads(result.stdout)["status"] == "failed"
 
 
 def test_scan_command_uses_failure_exit_code(monkeypatch, tmp_path: Path) -> None:

@@ -5,15 +5,15 @@ from pathlib import Path
 
 import pytest
 
-from dj_digger.catalog.database import Database
-from dj_digger.catalog.models import Track
-from dj_digger.catalog.repositories import (
+from dj_digger.core.catalog.database import Database
+from dj_digger.core.catalog.models import Track
+from dj_digger.core.catalog.repositories import (
     EmbeddedMetadataRepository,
     ScanRunRepository,
     SourceRepository,
     TrackRepository,
 )
-from dj_digger.metadata.exiftool import (
+from dj_digger.core.metadata.exiftool import (
     EMBEDDED_FIELDS,
     EmbeddedMetadata,
     ExifToolExtractor,
@@ -115,7 +115,7 @@ def test_exiftool_uses_argv_and_preserves_newline_paths(monkeypatch) -> None:
         calls.append(argv)
         return type("Result", (), {"stdout": '[{"SourceFile":"odd\\nname.flac","Title":"Acid"}]'})()
 
-    monkeypatch.setattr("dj_digger.metadata.exiftool.subprocess.run", run)
+    monkeypatch.setattr("dj_digger.core.metadata.exiftool.subprocess.run", run)
     metadata = ExifToolExtractor().extract(track("odd\nname.flac"))
 
     assert metadata.title == "Acid"
@@ -154,7 +154,7 @@ def test_exiftool_batches_large_track_lists(monkeypatch) -> None:
         payload = [{"SourceFile": path, "Title": path} for path in files]
         return type("Result", (), {"stdout": json.dumps(payload)})()
 
-    monkeypatch.setattr("dj_digger.metadata.exiftool.subprocess.run", run)
+    monkeypatch.setattr("dj_digger.core.metadata.exiftool.subprocess.run", run)
     result = ExifToolExtractor(version="test", batch_size=2).extract_many(tracks)
 
     assert len(calls) == 2
@@ -177,7 +177,7 @@ def test_exiftool_matches_duplicate_paths_in_source_order(monkeypatch) -> None:
             },
         )()
 
-    monkeypatch.setattr("dj_digger.metadata.exiftool.subprocess.run", run)
+    monkeypatch.setattr("dj_digger.core.metadata.exiftool.subprocess.run", run)
     result = ExifToolExtractor(version="test", batch_size=2).extract_many([first, second])
 
     assert result.metadata[first.id].title == "first"
@@ -207,7 +207,7 @@ def test_nonzero_exiftool_batch_keeps_success_and_reports_only_bad_track(
             },
         )()
 
-    monkeypatch.setattr("dj_digger.metadata.exiftool.subprocess.run", run)
+    monkeypatch.setattr("dj_digger.core.metadata.exiftool.subprocess.run", run)
     result = MetadataService(database, ExifToolExtractor()).refresh("source")
 
     assert result.extracted == 1
@@ -244,7 +244,7 @@ def test_exiftool_reported_version_changes_refresh_eligibility(tmp_path: Path, m
             },
         )()
 
-    monkeypatch.setattr("dj_digger.metadata.exiftool.subprocess.run", run)
+    monkeypatch.setattr("dj_digger.core.metadata.exiftool.subprocess.run", run)
     assert MetadataService(database, ExifToolExtractor()).refresh("source").extracted == 1
     assert MetadataService(database, ExifToolExtractor()).refresh("source").extracted == 1
     assert (

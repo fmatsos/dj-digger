@@ -12,6 +12,7 @@ import typer
 
 from dj_digger import background
 from dj_digger.application import WorkspaceApplication
+from dj_digger.cli.commands.metadata import execute as execute_metadata
 from dj_digger.cli.commands.scan import execute as execute_scan
 from dj_digger.completion import install_patches
 from dj_digger.core.config import WorkspaceConfig
@@ -418,12 +419,17 @@ def metadata(
     json_output: JsonOption = False,
 ) -> None:
     """Refresh embedded metadata for current tracks."""
-
-    def action(service: WorkspaceApplication) -> dict[str, Any]:
-        result = service.metadata(source, path_prefix=path, force=force)
-        return {"event": "metadata", "status": _result_status(result), **result.__dict__}
-
-    _run(config, action, json_output=json_output)
+    diagnostic = execute_metadata(config, source, path, force)
+    if json_output:
+        typer.echo(
+            json.dumps(diagnostic, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+        )
+    else:
+        render(diagnostic)
+    if diagnostic.get("status") == "failed":
+        raise typer.Exit(1)
+    if diagnostic.get("status") == "partial":
+        raise typer.Exit(2)
 
 
 @app.command()
