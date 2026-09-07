@@ -4,7 +4,17 @@ from __future__ import annotations
 
 from typing import Any
 
-from dj_digger.core.jobs import JOB_ID_ENV, JobRecord, JobRepository, current_job_id, jobs_dir
+from dj_digger.core.jobs import (
+    JOB_ID_ENV,
+    JobRecord,
+    JobRepository,
+    JobStateError,
+    JobStatus,
+    current_job_id,
+    jobs_dir,
+    list_jobs,
+    record_result,
+)
 
 
 class JobsUseCase:
@@ -18,6 +28,9 @@ class JobsUseCase:
 
     def start(self, job_id: str, pid: int) -> JobRecord:
         return self._repository.start(job_id, pid)
+
+    def get(self, job_id: str) -> JobRecord:
+        return self._repository.get(job_id)
 
     def record_result(self, job_id: str, diagnostic: dict[str, Any]) -> JobRecord:
         return self._repository.record_result(job_id, diagnostic)
@@ -33,7 +46,11 @@ __all__ = [
     "JOB_ID_ENV",
     "JobRecord",
     "JobRepository",
+    "JobStateError",
+    "JobStatus",
     "JobsUseCase",
     "current_job_id",
     "jobs_dir",
+    "list_jobs",
+    "record_result",
 ]
