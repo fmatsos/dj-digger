@@ -128,7 +128,13 @@ def _reply(
         "choices": [
             {
                 "index": 0,
-                "message": {"role": "assistant", "content": content, "tool_calls": calls or []},
+                "message": {
+                    "role": "assistant",
+                    "content": content,
+                    "tool_calls": calls or [],
+                    "refusal": None,
+                    "annotations": [],
+                },
                 "finish_reason": "tool_calls" if calls else "stop",
             }
         ]

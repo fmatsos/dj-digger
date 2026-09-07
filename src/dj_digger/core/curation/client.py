@@ -68,6 +68,8 @@ class AssistantMessage(BaseModel):
     role: str
     content: str | None
     tool_calls: list[ToolCall] = Field(default_factory=list)
+    refusal: str | None = None
+    annotations: list[dict[str, Any]] = Field(default_factory=list)
 
 
 class CompletionClient(Protocol):
