@@ -1,5 +1,5 @@
-"""Read-only source-library scanning."""
+"""Compatibility imports for source scanning."""
 
-from dj_digger.scanning.scanner import ScanObservation, SourceScanner
+from dj_digger.core.scanning import ScanObservation, SourceScanner
 
 __all__ = ["ScanObservation", "SourceScanner"]

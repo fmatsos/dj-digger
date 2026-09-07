@@ -3,6 +3,7 @@
 import json
 import math
 import os
+import sys
 from collections.abc import Callable
 from pathlib import Path
 from typing import Annotated, Any, Literal
@@ -11,8 +12,9 @@ import typer
 
 from dj_digger import background
 from dj_digger.application import WorkspaceApplication
+from dj_digger.cli.commands.scan import execute as execute_scan
 from dj_digger.completion import install_patches
-from dj_digger.config import WorkspaceConfig
+from dj_digger.core.config import WorkspaceConfig
 from dj_digger.curation import CurationCatalog, CurationCreation, CurationStatus
 from dj_digger.curation.agent import (
     CurationGroundingError,
@@ -335,10 +337,20 @@ BackgroundOption = Annotated[
 
 
 def _run(config_path: Path, action: Any, *, json_output: bool = False) -> None:
-    config = WorkspaceConfig.load(config_path)
-    logger = RunLogger(config.database)
+    package = sys.modules.get("dj_digger.cli")
+    config_type = (
+        WorkspaceConfig if package is None else getattr(package, "WorkspaceConfig", WorkspaceConfig)
+    )
+    application_type = (
+        WorkspaceApplication
+        if package is None
+        else getattr(package, "WorkspaceApplication", WorkspaceApplication)
+    )
+    logger_type = RunLogger if package is None else getattr(package, "RunLogger", RunLogger)
+    config = config_type.load(config_path)
+    logger = logger_type(config.database)
     try:
-        with WorkspaceApplication(config) as service:
+        with application_type(config) as service:
             diagnostic = action(service)
     except Exception as error:
         diagnostic = {"event": "command", "status": "failed", "error": str(error)}
@@ -372,6 +384,13 @@ def _run_in_background(
         render(diagnostic)
 
 
+def _progress_reporter() -> type[RichProgressReporter]:
+    package = sys.modules.get("dj_digger.cli")
+    if package is None:
+        return RichProgressReporter
+    return getattr(package, "RichProgressReporter", RichProgressReporter)
+
+
 @app.command()
 def scan(
     config: ConfigOption,
@@ -379,16 +398,15 @@ def scan(
     json_output: JsonOption = False,
 ) -> None:
     """Scan configured source roots and reconcile successful observations."""
-
-    def action(service: WorkspaceApplication) -> dict[str, Any]:
-        results = service.scan(source)
-        return {
-            "event": "scan",
-            "status": "succeeded" if all(result.succeeded for result in results) else "failed",
-            "scans": [result.__dict__ for result in results],
-        }
-
-    _run(config, action, json_output=json_output)
+    diagnostic = execute_scan(config, source)
+    if json_output:
+        typer.echo(
+            json.dumps(diagnostic, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+        )
+    else:
+        render(diagnostic)
+    if diagnostic.get("status") == "failed":
+        raise typer.Exit(1)
 
 
 @app.command()
@@ -439,7 +457,7 @@ def analyze(
         return
 
     def action(service: WorkspaceApplication) -> dict[str, Any]:
-        with RichProgressReporter(verbosity=ctx.obj.get("verbosity", 0)) as progress:
+        with _progress_reporter()(verbosity=ctx.obj.get("verbosity", 0)) as progress:
             result = service.analyze(
                 source,
                 path_prefix=path,
@@ -518,7 +536,7 @@ def duplicates(
                 "groups": [_group_json(group) for group in groups],
             }
         if analyze:
-            with RichProgressReporter(verbosity=ctx.obj.get("verbosity", 0)) as progress:
+            with _progress_reporter()(verbosity=ctx.obj.get("verbosity", 0)) as progress:
                 result = service.duplicates_analyze(
                     source,
                     workers=workers,
@@ -752,7 +770,7 @@ def refresh(
         return
 
     def action(service: WorkspaceApplication) -> dict[str, Any]:
-        with RichProgressReporter(verbosity=ctx.obj.get("verbosity", 0)) as progress:
+        with _progress_reporter()(verbosity=ctx.obj.get("verbosity", 0)) as progress:
             return service.refresh(
                 progress=progress,
                 workers=workers,

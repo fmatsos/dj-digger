@@ -1,1 +1,1 @@
-"""Persistent SQLite catalog primitives."""
+"""Compatibility package for the migrated catalog primitives."""

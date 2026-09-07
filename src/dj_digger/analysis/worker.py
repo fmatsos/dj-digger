@@ -13,7 +13,7 @@ from dj_digger.analysis.extractor import (
     AnalysisExtractionResult,
     CompositeAudioExtractor,
 )
-from dj_digger.config import DspConfig
+from dj_digger.core.config import DspConfig
 
 PROTOCOL_VERSION = 1
 MAX_ERROR_LENGTH = 4_000

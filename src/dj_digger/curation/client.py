@@ -10,7 +10,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
-from dj_digger.config import CurationConfig
+from dj_digger.core.config import CurationConfig
 
 
 class CurationClientError(RuntimeError):

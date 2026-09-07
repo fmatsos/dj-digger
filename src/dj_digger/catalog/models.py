@@ -1,17 +1,5 @@
-"""Catalog value objects."""
+"""Compatibility imports for catalog models."""
 
-from dataclasses import dataclass
+from dj_digger.core.catalog.models import Track
 
-
-@dataclass(frozen=True)
-class Track:
-    """A source-scoped track stored in the catalog."""
-
-    id: int
-    source_id: str
-    relative_path: str
-    filename: str
-    extension: str
-    size_bytes: int
-    mtime_ns: int
-    presence_status: str
+__all__ = ["Track"]

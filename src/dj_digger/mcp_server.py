@@ -8,8 +8,8 @@ from uuid import uuid4
 from mcp.server.mcpserver import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 
-from dj_digger.catalog.database import Database
-from dj_digger.config import WorkspaceConfig
+from dj_digger.core.catalog.database import Database
+from dj_digger.core.config import WorkspaceConfig
 from dj_digger.curation import (
     CandidateDetailsV1,
     CandidateRef,

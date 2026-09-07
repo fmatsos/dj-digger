@@ -11,7 +11,8 @@ from typing import Any, cast
 
 from jsonschema import Draft202012Validator, FormatChecker  # type: ignore[import-untyped]
 
-from dj_digger.catalog.database import Database
+from dj_digger.core.catalog.database import Database
+from dj_digger.core.resources import read_text
 from dj_digger.exports.formats import (
     fields_for_schema,
     output_path,
@@ -21,7 +22,6 @@ from dj_digger.exports.formats import (
     write_rows,
 )
 from dj_digger.exports.tracks import PublishedFacet
-from dj_digger.resources import read_text
 
 
 @dataclass(frozen=True)

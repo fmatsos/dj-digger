@@ -1,15 +1,5 @@
-"""Factory for independently configured catalog connections."""
+"""Compatibility imports for catalog factories."""
 
-from pathlib import Path
+from dj_digger.core.catalog.factory import DatabaseFactory
 
-from dj_digger.catalog.database import Database
-
-
-class DatabaseFactory:
-    """Open catalog database connections bound to one path."""
-
-    def __init__(self, path: Path) -> None:
-        self._path = path
-
-    def open(self) -> Database:
-        return Database.open(self._path)
+__all__ = ["DatabaseFactory"]

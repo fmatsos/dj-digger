@@ -24,7 +24,7 @@ from dj_digger.analysis.spectrum import (
     SpectrumFacts,
 )
 from dj_digger.analysis.windows import DjWindowPlanner, IntroOutroWindows
-from dj_digger.config import DspConfig
+from dj_digger.core.config import DspConfig
 
 Stage = Literal[
     "decode",

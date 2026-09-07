@@ -11,8 +11,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, cast
 
-from dj_digger.catalog.database import Database
-from dj_digger.catalog.migrations import CURRENT_VERSION
+from dj_digger.core.catalog.database import Database
+from dj_digger.core.catalog.migrations import CURRENT_VERSION
 from dj_digger.curation.models import (
     AnalysisDetails,
     AnalysisRunSummary,

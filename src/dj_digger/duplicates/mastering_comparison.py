@@ -3,7 +3,7 @@
 from dataclasses import dataclass
 from typing import Any
 
-from dj_digger.config import ComparisonThresholds, MasteringConfig
+from dj_digger.core.config import ComparisonThresholds, MasteringConfig
 
 
 @dataclass(frozen=True)

@@ -148,7 +148,7 @@ def test_default_adapter_wires_isolated_source_root_and_identity(monkeypatch, tm
         def __init__(self, source_roots, dsp):
             calls.update(source_roots=source_roots, dsp=dsp)
 
-    monkeypatch.setattr("dj_digger.application.IsolatedAnalysisExtractor", StubIsolated)
+    monkeypatch.setattr("dj_digger.core.application.app.IsolatedAnalysisExtractor", StubIsolated)
     application = WorkspaceApplication(_workspace(tmp_path))
     assert calls["source_roots"] == {"source": (tmp_path / "library").resolve()}
     assert calls["dsp"] == application.config.dsp

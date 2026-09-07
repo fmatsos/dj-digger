@@ -9,9 +9,10 @@ from typing import Any
 
 from jsonschema import Draft202012Validator  # type: ignore[import-untyped]
 
-from dj_digger.catalog.database import Database
-from dj_digger.catalog.read_repositories import LibraryReadRepository
-from dj_digger.catalog.repositories import SourceRepository
+from dj_digger.core.catalog.database import Database
+from dj_digger.core.catalog.read_repositories import LibraryReadRepository
+from dj_digger.core.catalog.repositories import SourceRepository
+from dj_digger.core.resources import read_text
 from dj_digger.exports.atomic import publish_atomic
 from dj_digger.exports.formats import (
     fields_for_schema,
@@ -20,7 +21,6 @@ from dj_digger.exports.formats import (
     select_fields,
     write_rows,
 )
-from dj_digger.resources import read_text
 
 ROW_FIELDS = (
     "source_id",

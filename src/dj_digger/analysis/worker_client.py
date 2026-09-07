@@ -20,8 +20,8 @@ from dj_digger.analysis.extractor import (
 )
 from dj_digger.analysis.pipeline import TimedAnalysisExtractor
 from dj_digger.analysis.worker import MAX_ERROR_LENGTH, PROTOCOL_VERSION
-from dj_digger.catalog.models import Track
-from dj_digger.config import DspConfig
+from dj_digger.core.catalog.models import Track
+from dj_digger.core.config import DspConfig
 
 MAX_RESPONSE_BYTES = 64 * 1024 * 1024
 MAX_STDERR_BYTES = 1024 * 1024

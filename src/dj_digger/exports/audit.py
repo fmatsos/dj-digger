@@ -8,8 +8,9 @@ from typing import Any, cast
 
 from jsonschema import Draft202012Validator  # type: ignore[import-untyped]
 
-from dj_digger.catalog.database import Database
-from dj_digger.catalog.repositories import ArtifactRepository, SourceRepository
+from dj_digger.core.catalog.database import Database
+from dj_digger.core.catalog.repositories import ArtifactRepository, SourceRepository
+from dj_digger.core.resources import read_text
 from dj_digger.exports.atomic import publish_atomic
 from dj_digger.exports.formats import (
     fields_for_schema,
@@ -19,7 +20,6 @@ from dj_digger.exports.formats import (
     write_rows,
 )
 from dj_digger.exports.tracks import PublishedFacet
-from dj_digger.resources import read_text
 
 
 class AuditExporter:

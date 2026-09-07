@@ -10,10 +10,10 @@ from pathlib import Path
 from dj_digger.analysis.audio import TechnicalAudioMetadata
 from dj_digger.analysis.ebur128 import EbuR128Analyzer
 from dj_digger.analysis.ffmpeg import FFmpegProbe
-from dj_digger.catalog.database import Database
-from dj_digger.catalog.models import Track
-from dj_digger.catalog.repositories import TechnicalAudioMetadataRepository
-from dj_digger.config import MasteringConfig
+from dj_digger.core.catalog.database import Database
+from dj_digger.core.catalog.models import Track
+from dj_digger.core.catalog.repositories import TechnicalAudioMetadataRepository
+from dj_digger.core.config import MasteringConfig
 from dj_digger.duplicates.fingerprint import (
     FINGERPRINT_VERSION,
     ChromaprintExtractor,

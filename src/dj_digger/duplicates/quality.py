@@ -2,8 +2,8 @@
 
 from dataclasses import dataclass
 
-from dj_digger.catalog.database import Database
-from dj_digger.catalog.models import Track
+from dj_digger.core.catalog.database import Database
+from dj_digger.core.catalog.models import Track
 from dj_digger.duplicates.fingerprint import FINGERPRINT_VERSION
 from dj_digger.duplicates.repository import DuplicateRepository
 
