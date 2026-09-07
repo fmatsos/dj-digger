@@ -14,6 +14,7 @@ from dj_digger.application import WorkspaceApplication
 from dj_digger.catalog.database import Database
 from dj_digger.catalog.repositories import ScanRunRepository, SourceRepository, TrackRepository
 from dj_digger.config import LibrarySourceConfig, WorkspaceConfig
+from dj_digger.core.application import CoreApplication, ScanRunResult, ScanSourceResult
 
 
 class RecordingProgress:
@@ -242,6 +243,23 @@ def test_refresh_reports_the_four_phases_in_order(monkeypatch, tmp_path: Path) -
         ("started", "exports", 3, 4),
         ("finished", "exports", 4, 4),
     ]
+
+
+def test_core_application_refresh_adapts_typed_scan_results(monkeypatch, tmp_path: Path) -> None:
+    application = CoreApplication(_workspace(tmp_path))
+    monkeypatch.setattr(
+        application,
+        "scan",
+        lambda _request: ScanRunResult((ScanSourceResult("source", True, 1),)),
+    )
+    monkeypatch.setattr(application, "metadata", lambda: SimpleNamespace(status="succeeded"))
+    monkeypatch.setattr(application, "analyze", lambda **_: SimpleNamespace(status="succeeded"))
+    monkeypatch.setattr(application, "export", lambda: ["tracks.tsv"])
+
+    result = application.refresh()
+
+    assert result["status"] == "succeeded"
+    assert result["published"] is True
 
 
 def test_refresh_stops_progress_after_a_required_scan_failure(monkeypatch, tmp_path: Path) -> None:

@@ -1,16 +1,13 @@
 """Strict initialization and ordered upgrades of the SQLite catalog schema."""
 
 import sqlite3
-import sys
 from importlib.resources import files
-from typing import cast
 
 from sqlite_utils import Database, Migrations
 
 CURRENT_VERSION = 11
 CURRENT_SCHEMA = "catalog.sql"
 MIGRATIONS = Migrations("dj-digger")
-_USING_LEGACY_LOADER = False
 
 
 @MIGRATIONS(name="dj_digger_20260824134417", transactional=False)
@@ -135,19 +132,7 @@ def _execute_script(connection: sqlite3.Connection, script: str) -> None:
 
 
 def _load_sql(filename: str) -> str:
-    global _USING_LEGACY_LOADER
-    legacy = sys.modules.get("dj_digger.catalog.migrations")
-    legacy_loader = None if legacy is None else getattr(legacy, "_load_sql", None)
-    if not _USING_LEGACY_LOADER and legacy_loader is not None and legacy_loader is not _load_sql:
-        _USING_LEGACY_LOADER = True
-        try:
-            return cast(str, legacy_loader(filename))
-        finally:
-            _USING_LEGACY_LOADER = False
-    resource_files = files
-    if legacy is not None:
-        resource_files = getattr(legacy, "files", files)
-    resource = resource_files("dj_digger.core.catalog").joinpath("sql", filename)
+    resource = files("dj_digger.core.catalog").joinpath("sql", filename)
     if not resource.is_file():
         raise FileNotFoundError(
             f"required packaged resource missing: dj_digger.core.catalog/sql/{filename}"
