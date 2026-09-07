@@ -7,8 +7,10 @@ from typing import Any
 import typer
 
 from dj_digger.cli.presenters.metadata import metadata_payload
+from dj_digger.cli.presenters.refresh import refresh_payload
 from dj_digger.cli.presenters.scan import scan_payload
-from dj_digger.core.application import CoreApplication, MetadataRequest, ScanRequest
+from dj_digger.core.application import CoreApplication, MetadataRequest, RefreshRequest, ScanRequest
+from dj_digger.core.application.progress import ProgressSink
 from dj_digger.core.config import WorkspaceConfig
 from dj_digger.logging import RunLogger
 
@@ -44,6 +46,25 @@ def run_metadata(
             )
     except Exception as error:
         diagnostic = {"event": "metadata", "status": "failed", "error": str(error)}
+    logger.write(diagnostic)
+    return diagnostic
+
+
+def run_refresh(
+    config_path: Path,
+    request: RefreshRequest | None = None,
+    *,
+    progress: ProgressSink | None = None,
+) -> dict[str, Any]:
+    """Run the typed refresh use case and return its compact payload."""
+
+    config = WorkspaceConfig.load(config_path)
+    logger = RunLogger(config.database)
+    try:
+        with CoreApplication(config) as service:
+            diagnostic = refresh_payload(service.refresh(request, progress=progress))
+    except Exception as error:
+        diagnostic = {"event": "refresh", "status": "failed", "error": str(error)}
     logger.write(diagnostic)
     return diagnostic
 
