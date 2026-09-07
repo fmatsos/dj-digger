@@ -17,7 +17,7 @@ from typing import Literal
 
 from dj_digger.core.catalog.database import Database
 from dj_digger.core.config import WorkspaceConfig
-from dj_digger.set_copy import copy_track_atomic
+from dj_digger.core.set_copy import copy_track_atomic
 
 CurationExportContent = Literal["playlist", "report", "both"]
 

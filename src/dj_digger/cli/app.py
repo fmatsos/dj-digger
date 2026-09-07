@@ -13,15 +13,18 @@ import typer
 from dj_digger import background
 from dj_digger.application import WorkspaceApplication
 from dj_digger.cli.commands.analyze import execute as execute_analyze
+from dj_digger.cli.commands.copy import execute as execute_copy
 from dj_digger.cli.commands.duplicates import execute as execute_duplicates
 from dj_digger.cli.commands.export import execute as execute_export
 from dj_digger.cli.commands.metadata import execute as execute_metadata
 from dj_digger.cli.commands.scan import execute as execute_scan
 from dj_digger.cli.commands.snapshot import execute as execute_snapshot
+from dj_digger.cli.presenters.copy import copy_payload, copy_progress_lines
 from dj_digger.cli.progress import RichProgressReporter
 from dj_digger.completion import install_patches
 from dj_digger.core.application import (
     AnalyzeRequest,
+    CopySetRequest,
     DuplicateAnalyzeRequest,
     DuplicateListRequest,
     DuplicateMarkBestRequest,
@@ -45,7 +48,6 @@ from dj_digger.curation.client import (
 )
 from dj_digger.logging import RunLogger
 from dj_digger.mcp_server import create_curation_mcp_server
-from dj_digger.set_copy import copy_set
 from dj_digger.terminal import render
 
 install_patches()
@@ -603,6 +605,7 @@ def copy(
         "share:share"
     ),
     verbose: Annotated[bool, typer.Option("-v", "--verbose")] = False,
+    json_output: JsonOption = False,
 ) -> None:
     """Copy an ordered set from a read-only music library."""
     tracks = track or []
@@ -613,33 +616,27 @@ def copy(
     if playlist_path is None and not tracks:
         raise typer.BadParameter("At least one --playlist or --track is required")
 
-    def started(total: int) -> None:
-        typer.echo(f"[  0%] (0/{total})")
-
-    def report(event: str, index: int, total: int, group: str, source: str, target: str) -> None:
-        if event == "before" and verbose:
-            width = max(2, len(str(total)))
-            typer.echo(
-                f"COPY {index:0{width}d}/{total}\n"
-                f"  group: {group or '(root)'}\n  from:  {source}\n  to:    {target}"
-            )
-        if event == "after":
-            typer.echo(f"[{index * 100 // total:3d}%] ({index}/{total})")
+    def report(event: Any) -> None:
+        for line in copy_progress_lines(event, verbose=verbose):
+            typer.echo(line)
 
     try:
-        result = copy_set(
-            library=library,
-            output=output,
-            playlist=playlist_path,
-            tracks=tracks,
-            owner=owner,
-            started=started,
-            progress=report,
+        result = execute_copy(
+            CopySetRequest(
+                library=library,
+                output=output,
+                playlist=playlist_path,
+                tracks=tuple(tracks),
+                owner=owner,
+            ),
+            progress=None if json_output else report,
         )
     except (OSError, ValueError) as error:
         typer.echo(f"Error: {error}", err=True)
         raise typer.Exit(1) from None
-    if verbose:
+    if json_output:
+        typer.echo(json.dumps(copy_payload(result), separators=(",", ":")))
+    elif verbose:
         typer.echo(f"\nOWNERSHIP {owner} -> {output.resolve()}")
         typer.echo(f"\nPlaylist: {result.playlist}\nText list: {result.text_list}")
 
