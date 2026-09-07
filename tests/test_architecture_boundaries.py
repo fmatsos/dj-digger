@@ -44,7 +44,14 @@ def imported_modules(tree: ast.AST, module_name: str | None = None) -> set[str]:
                 package = package[: len(package) - node.level + 1]
                 if node.module:
                     package.append(node.module)
-                modules.add(".".join(package))
+                if node.module:
+                    modules.add(".".join(package))
+                else:
+                    modules.update(
+                        ".".join([*package, alias.name])
+                        for alias in node.names
+                        if alias.name != "*"
+                    )
         elif isinstance(node, ast.Call):
             dynamic_name: str | None = None
             if isinstance(node.func, ast.Name):
@@ -80,6 +87,19 @@ def test_imported_modules_resolves_relative_and_dynamic_imports() -> None:
         "dj_digger.catalog.database",
         "dj_digger.config",
     }
+
+
+def test_imported_modules_resolves_relative_from_aliases_for_legacy_guard() -> None:
+    tree = ast.parse("from . import catalog\nfrom .. import analysis, application\n")
+
+    imports = imported_modules(tree, "dj_digger.cli.app")
+    assert imports >= {
+        "dj_digger.cli.catalog",
+        "dj_digger.analysis",
+        "dj_digger.application",
+    }
+    legacy = {"dj_digger.analysis", "dj_digger.application"}
+    assert any(module in legacy for module in imports)
 
 
 def test_core_never_imports_cli_or_presentation_libraries() -> None:

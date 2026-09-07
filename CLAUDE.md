@@ -3,7 +3,7 @@
 ## Mission and architecture
 
 DJ Digger is a music library analysis system that ingests track metadata, runs
-analysis workers, maintains a SQLite V7 catalog, and exports structured data.
+analysis workers, maintains a SQLite V11 catalog, and exports structured data.
 The public entry point is the CLI application. Claude Code orchestrates bounded,
 vertically scoped changes: from CLI flags through catalog mutations to worker
 concurrency and export publication. The system spans application code, catalog
@@ -22,9 +22,9 @@ This file applies to all work on the repository. Scoped `CLAUDE.md` files below
 each major directory define rules specific to their scope. Source code changes
 require consultation of the closest scoped file before editing: check
 `src/dj_digger/CLAUDE.md` before editing application code,
-`src/dj_digger/catalog/CLAUDE.md` for schema or migrations,
-`src/dj_digger/analysis/CLAUDE.md` for analysis worker changes,
-`src/dj_digger/exports/CLAUDE.md` for export or schema changes,
+`src/dj_digger/core/catalog/CLAUDE.md` for schema or migrations,
+`src/dj_digger/core/analysis/CLAUDE.md` for analysis worker changes,
+`src/dj_digger/core/exports/CLAUDE.md` for export or schema changes,
 `tests/CLAUDE.md` for test changes, `docs/CLAUDE.md` for documentation changes,
 `scripts/CLAUDE.md` for acceptance and automation scripts, and `skills/CLAUDE.md`
 for curator workflow and set management skills. No edit to code below a scoped
@@ -40,7 +40,7 @@ directory may proceed without reading that directory's closest `CLAUDE.md` first
    clear.
 4. Stop exploring when ownership and file boundaries are defined. Avoid repeated
    re-reads of the same areas or exploration after the path is clear.
-5. The `pyright-lsp` plugin (enabled via `.claude/settings.json`) provides live
+5. The repository's configured analysis tools provide live
    Python type/definition/reference queries through the `LSP` tool — check it
    before falling back to CodeGraph or grep for symbol-level Python questions.
 
@@ -105,23 +105,23 @@ must be requested separately.
 
 ## Skill routing
 
-Skills route lightweight workflows: `task` (`.claude/skills/task/SKILL.md`)
-scopes and prevents re-exploration; `implement` (`.claude/skills/implement/SKILL.md`)
-runs RED/GREEN loops; `qa` (`.claude/skills/qa/SKILL.md`) executes
-selection-based validation; `runtime-proof` (`.claude/skills/runtime-proof/SKILL.md`)
-validates public entry points; `sqlite-change` (`.claude/skills/sqlite-change/SKILL.md`)
-handles migrations; `native-analysis` (`.claude/skills/native-analysis/SKILL.md`)
-provides analysis evidence; `ship` (`.claude/skills/ship/SKILL.md`) handles staged
+Skills route lightweight workflows: `task` (`.agents/skills/task/SKILL.md`)
+scopes and prevents re-exploration; `implement` (`.agents/skills/implement/SKILL.md`)
+runs RED/GREEN loops; `qa` (`.agents/skills/qa/SKILL.md`) executes
+selection-based validation; `runtime-proof` (`.agents/skills/runtime-proof/SKILL.md`)
+validates public entry points; `sqlite-change` (`.agents/skills/sqlite-change/SKILL.md`)
+handles migrations; `native-analysis` (`.agents/skills/native-analysis/SKILL.md`)
+provides analysis evidence; `ship` (`.agents/skills/ship/SKILL.md`) handles staged
 diffs and commits. These skills are invoked as Claude Code slash commands
 (`/task`, `/implement`, `/qa`, `/runtime-proof`, `/sqlite-change`,
-`/native-analysis`, `/ship`). Deterministic scripts under `.claude/scripts/`
+`/native-analysis`, `/ship`). Deterministic scripts under `.agents/scripts/`
 provide environment setup, file discovery, local data protection, QA selection,
 and compact handoffs. All scripts remain silent on success and report only
 errors or status changes.
 
 ## Completion report
 
-Every workflow ends with a structured report using `.claude/scripts/handoff`'s
+Every workflow ends with a structured report using `.agents/scripts/handoff`'s
 six fields:
 
 ```
