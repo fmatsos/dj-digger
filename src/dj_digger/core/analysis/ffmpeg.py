@@ -6,7 +6,7 @@ import re
 import subprocess
 from pathlib import Path
 
-from dj_digger.analysis.audio import TechnicalAudioMetadata
+from dj_digger.core.analysis.audio import TechnicalAudioMetadata
 
 _LOSSLESS_CODECS = {"alac", "ape", "flac", "pcm_s16le", "pcm_s24le", "pcm_s32le", "wavpack"}
 

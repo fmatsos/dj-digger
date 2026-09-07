@@ -1,41 +1,15 @@
-"""Semantic progress reporting contracts for long-running commands."""
+"""Compatibility imports for the core analysis progress contracts."""
 
-from typing import Protocol
+from dj_digger.core.application.analysis_progress import (
+    AnalysisProgressReporter,
+    NullProgressReporter,
+    ProgressEventReporter,
+    ProgressReporter,
+)
 
-
-class ProgressReporter(Protocol):
-    """Receive progress events without depending on a presentation library."""
-
-    def phase_started(self, name: str, completed: int, total: int) -> None: ...
-
-    def phase_finished(self, name: str, completed: int, total: int) -> None: ...
-
-    def analysis_started(self, *, total: int, completed: int) -> None: ...
-
-    def analysis_advanced(self) -> None: ...
-
-    def analysis_finished(self) -> None: ...
-
-    def diagnostic(self, level: str, message: str) -> None: ...
-
-
-class NullProgressReporter:
-    """Discard progress events for programmatic and non-instrumented callers."""
-
-    def phase_started(self, name: str, completed: int, total: int) -> None:
-        pass
-
-    def phase_finished(self, name: str, completed: int, total: int) -> None:
-        pass
-
-    def analysis_started(self, *, total: int, completed: int) -> None:
-        pass
-
-    def analysis_advanced(self) -> None:
-        pass
-
-    def analysis_finished(self) -> None:
-        pass
-
-    def diagnostic(self, level: str, message: str) -> None:
-        pass
+__all__ = [
+    "AnalysisProgressReporter",
+    "NullProgressReporter",
+    "ProgressEventReporter",
+    "ProgressReporter",
+]

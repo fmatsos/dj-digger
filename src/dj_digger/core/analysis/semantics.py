@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from math import isfinite
 
-from dj_digger.analysis.segmentation import TrackSection
+from dj_digger.core.analysis.segmentation import TrackSection
 
 
 @dataclass(frozen=True)

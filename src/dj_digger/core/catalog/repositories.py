@@ -5,7 +5,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, cast
 
-from dj_digger.analysis.audio import TechnicalAudioMetadata
+from dj_digger.core.analysis.audio import TechnicalAudioMetadata
 from dj_digger.core.catalog.database import Database
 from dj_digger.core.catalog.models import Track
 

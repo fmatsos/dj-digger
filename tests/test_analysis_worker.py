@@ -2,16 +2,17 @@ import json
 import os
 import signal
 import subprocess
+import sys
 from io import BytesIO
 from pathlib import Path
 
 import pytest
 
-from dj_digger.analysis.extractor import AnalysisExtractionError, AnalysisExtractionResult
-from dj_digger.analysis.worker import PROTOCOL_VERSION, execute_request
-from dj_digger.analysis.worker_client import IsolatedAnalysisExtractor
 from dj_digger.catalog.models import Track
 from dj_digger.config import DspConfig
+from dj_digger.core.analysis.extractor import AnalysisExtractionError, AnalysisExtractionResult
+from dj_digger.core.analysis.worker import PROTOCOL_VERSION, execute_request
+from dj_digger.core.analysis.worker_client import IsolatedAnalysisExtractor
 
 
 def _request(tmp_path: Path) -> dict[str, object]:
@@ -31,6 +32,26 @@ def _request(tmp_path: Path) -> dict[str, object]:
             "segmentation_max_seconds": dsp.segmentation_max_seconds,
             "semantic_min_confidence": dsp.semantic_min_confidence,
         },
+    }
+
+
+@pytest.mark.parametrize("module", ("dj_digger.core.analysis.worker", "dj_digger.analysis.worker"))
+def test_worker_module_paths_execute_bounded_versioned_json(module: str) -> None:
+    process = subprocess.run(
+        [sys.executable, "-m", module],
+        input='{"protocol_version":0}\n',
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    response = json.loads(process.stdout)
+    assert process.returncode == 0
+    assert len(process.stdout.encode()) < 64 * 1024
+    assert response == {
+        "protocol_version": PROTOCOL_VERSION,
+        "status": "failed",
+        "error": {"stage": "aggregation", "message": "unsupported worker protocol version"},
     }
 
 

@@ -7,9 +7,10 @@ from dataclasses import dataclass
 from math import isfinite
 from pathlib import Path
 
-from dj_digger.analysis.audio import TechnicalAudioMetadata
-from dj_digger.analysis.ebur128 import EbuR128Analyzer
-from dj_digger.analysis.ffmpeg import FFmpegProbe
+from dj_digger.core.analysis.audio import TechnicalAudioMetadata
+from dj_digger.core.analysis.ebur128 import EbuR128Analyzer
+from dj_digger.core.analysis.ffmpeg import FFmpegProbe
+from dj_digger.core.application.analysis_progress import NullProgressReporter, ProgressReporter
 from dj_digger.core.catalog.database import Database
 from dj_digger.core.catalog.models import Track
 from dj_digger.core.catalog.repositories import TechnicalAudioMetadataRepository
@@ -25,7 +26,6 @@ from dj_digger.duplicates.mastering_comparison import MasteringComparison, compa
 from dj_digger.duplicates.mastering_repository import MasteringRepository
 from dj_digger.duplicates.quality import QualityMarkResult, QualitySelector
 from dj_digger.duplicates.repository import DuplicateGroup, DuplicateRepository
-from dj_digger.progress import NullProgressReporter, ProgressReporter
 
 TECHNICAL_PROBE_VERSION = "ffmpeg-facts/1"
 
