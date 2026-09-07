@@ -4,7 +4,7 @@ import asyncio
 import importlib.util
 import shutil
 import subprocess
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from types import TracebackType
 from typing import Any, Self, cast
@@ -191,6 +191,7 @@ class WorkspaceApplication:
         self,
         request: DuplicateAnalyzeRequest | str | None = None,
         *,
+        source_id: str | None = None,
         workers: int = 1,
         track_timeout: float = 1800.0,
         mark_best_quality: bool = False,
@@ -198,17 +199,16 @@ class WorkspaceApplication:
         progress: ProgressReporter | None = None,
     ) -> DuplicateAnalysisResult:
         """Run duplicate analysis through the typed core request contract."""
-        effective = (
-            request
-            if isinstance(request, DuplicateAnalyzeRequest)
-            else DuplicateAnalyzeRequest(
-                source_id=request if isinstance(request, str) else None,
+        if isinstance(request, DuplicateAnalyzeRequest):
+            effective = replace(request, source_id=_legacy_source(request.source_id, source_id))
+        else:
+            effective = DuplicateAnalyzeRequest(
+                source_id=_legacy_source(request, source_id),
                 workers=workers,
                 track_timeout=track_timeout,
                 mark_best_quality=mark_best_quality,
                 mastering=mastering,
             )
-        )
         return self._duplicate_analyze_request(effective, progress=progress)
 
     def _duplicate_analyze_request(
@@ -225,13 +225,16 @@ class WorkspaceApplication:
         ).execute(request, progress=progress)
 
     def duplicates_list(
-        self, request: DuplicateListRequest | str | None = None
+        self,
+        request: DuplicateListRequest | str | None = None,
+        *,
+        source_id: str | None = None,
     ) -> list[DuplicateGroupDescription]:
         """List duplicate groups through the typed core request contract."""
         effective = (
-            request
+            replace(request, source_id=_legacy_source(request.source_id, source_id))
             if isinstance(request, DuplicateListRequest)
-            else DuplicateListRequest(source_id=request if isinstance(request, str) else None)
+            else DuplicateListRequest(source_id=_legacy_source(request, source_id))
         )
         return self._duplicate_list_request(effective)
 
@@ -246,13 +249,16 @@ class WorkspaceApplication:
         ).execute(request)
 
     def duplicates_mark_best_quality(
-        self, request: DuplicateMarkBestRequest | str | None = None
+        self,
+        request: DuplicateMarkBestRequest | str | None = None,
+        *,
+        source_id: str | None = None,
     ) -> QualityMarkResult:
         """Mark the best-quality copy through the typed core request contract."""
         effective = (
-            request
+            replace(request, source_id=_legacy_source(request.source_id, source_id))
             if isinstance(request, DuplicateMarkBestRequest)
-            else DuplicateMarkBestRequest(source_id=request if isinstance(request, str) else None)
+            else DuplicateMarkBestRequest(source_id=_legacy_source(request, source_id))
         )
         return self._duplicate_mark_best_request(effective)
 
@@ -658,6 +664,13 @@ class CoreApplication(WorkspaceApplication):
     def _scan_for_refresh(self, *, enabled_only: bool) -> list[ScanResult]:
         """Keep inherited refresh compatible with the typed scan contract."""
         return _legacy_scan_results(self.scan(ScanRequest(enabled_only=enabled_only)))
+
+
+def _legacy_source(request: str | None, source_id: str | None) -> str | None:
+    """Normalize the historical positional and keyword source arguments."""
+    if request is not None and source_id is not None and request != source_id:
+        raise ValueError("conflicting duplicate source identifiers")
+    return request if request is not None else source_id
 
 
 def _legacy_scan_results(result: ScanRunResult) -> list[ScanResult]:
