@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 from dj_digger.core.application.jobs import JobRepository
-from dj_digger.core.jobs import JobStateError
+from dj_digger.core.jobs import JobStateError, current_job_id
 
 
 def test_job_repository_persists_lifecycle_without_launching_processes(tmp_path: Path) -> None:
@@ -29,6 +29,7 @@ def test_job_repository_records_sanitized_failure_and_unknown_dead_process(tmp_p
     assert failed.status == "failed"
     assert failed.result == {
         "code": "job_failed",
+        "error": "unavailable",
         "event": "job",
         "status": "failed",
     }
@@ -64,6 +65,31 @@ def test_job_result_status_is_allowlisted(tmp_path: Path) -> None:
         repository.record_result(created.job_id, {"status": "background"})
 
 
+@pytest.mark.parametrize("job_id", ("../escape", "/tmp/absolute", ".", "a/b"))
+def test_invalid_job_ids_are_rejected_without_touching_the_filesystem(
+    tmp_path: Path, job_id: str
+) -> None:
+    repository = JobRepository(tmp_path / "catalog.sqlite")
+
+    with pytest.raises(ValueError, match="invalid background job ID"):
+        repository.get(job_id)
+
+    assert not (tmp_path / "jobs").exists()
+
+
+def test_invalid_job_id_from_environment_is_ignored(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("DJ_DIGGER_JOB_ID", "../escape")
+
+    assert current_job_id() is None
+
+
+def test_list_without_jobs_does_not_create_storage(tmp_path: Path) -> None:
+    repository = JobRepository(tmp_path / "catalog.sqlite")
+
+    assert repository.list() == []
+    assert not (tmp_path / "jobs").exists()
+
+
 def test_concurrent_terminal_writes_are_serialized_and_atomic(tmp_path: Path) -> None:
     repository = JobRepository(tmp_path / "catalog.sqlite")
     created = repository.create("status")
@@ -96,3 +122,16 @@ def test_job_persistence_sanitizes_path_and_secret_error_details(tmp_path: Path)
     assert result.result == {"error": "operation failed", "status": "failed"}
     assert secret not in serialized
     assert "/private/library/root" not in serialized
+
+
+def test_fail_keeps_safe_error_classification_without_private_detail(tmp_path: Path) -> None:
+    repository = JobRepository(tmp_path / "catalog.sqlite")
+    created = repository.create("status")
+    secret = "secret-sentinel /private/library/root/track.flac"
+
+    result = repository.fail(created.job_id, secret)
+    serialized = (tmp_path / "jobs" / f"{created.job_id}.json").read_text(encoding="utf-8")
+
+    assert result.result["error"] == "operation failed"
+    assert result.result["code"] == "job_failed"
+    assert secret not in serialized

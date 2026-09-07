@@ -12,6 +12,10 @@ from typing import Any
 from dj_digger.core.jobs import JOB_ID_ENV, JobRepository
 
 
+class JobCleanupError(RuntimeError):
+    """The launcher could not prove a failed child was reaped."""
+
+
 def launch(database_path: Path, command: str, argv: list[str]) -> dict[str, Any]:
     """Launch one detached CLI command and persist its lifecycle facts."""
     repository = JobRepository(database_path)
@@ -34,54 +38,69 @@ def launch(database_path: Path, command: str, argv: list[str]) -> dict[str, Any]
                 current = repository.get(created.job_id)
                 if current.status in {"succeeded", "partial", "failed", "unknown"}:
                     return {"job_id": created.job_id, "pid": process.pid, "log": str(log_file)}
-                _terminate_bounded(process)
                 raise
     except BaseException:
         code = "launch_start_failed" if process is not None else "launch_failed"
-        _record_failure(repository, created.job_id, code)
+        cleanup_error: JobCleanupError | None = None
+        if process is not None:
+            try:
+                _terminate_bounded(process)
+            except JobCleanupError as error:
+                cleanup_error = error
+        persistence_failed = False
+        try:
+            if cleanup_error is not None:
+                repository.mark_unknown(created.job_id, code="cleanup_failed")
+            else:
+                repository.fail(created.job_id, "", code=code)
+        except Exception:
+            persistence_failed = True
+        if cleanup_error is not None and persistence_failed:
+            raise RuntimeError(
+                "background launch failed: cleanup and failure persistence failed"
+            ) from None
+        if cleanup_error is not None:
+            raise RuntimeError("background launch failed: cleanup could not be verified") from None
+        if persistence_failed:
+            raise RuntimeError("background launch failed: failure persistence failed") from None
         raise RuntimeError(f"background launch failed: {code}") from None
     return {"job_id": created.job_id, "pid": process.pid, "log": str(log_file)}
 
 
-def _record_failure(repository: JobRepository, job_id: str, code: str) -> None:
-    try:
-        repository.fail(job_id, "", code=code)
-    except Exception:
-        # A child may have committed its terminal result before the parent
-        # observed the failed start. Never overwrite that result.
-        pass
-
-
 def _terminate_bounded(process: Any) -> None:
     """Terminate and reap a detached process without leaving an orphan."""
-    try:
-        if process.poll() is not None:
-            return
-    except AttributeError:
-        pass
+    if _reaped(process):
+        return
     try:
         os.killpg(process.pid, signal.SIGTERM)
     except (AttributeError, OSError):
         try:
             process.terminate()
-        except (AttributeError, OSError):
-            return
+        except (AttributeError, OSError) as error:
+            raise JobCleanupError("unable to terminate background process") from error
     try:
         process.wait(timeout=1.0)
-        return
     except (subprocess.TimeoutExpired, AttributeError, OSError):
-        pass
-    try:
-        os.killpg(process.pid, signal.SIGKILL)
-    except (AttributeError, OSError):
         try:
-            process.kill()
+            os.killpg(process.pid, signal.SIGKILL)
         except (AttributeError, OSError):
-            return
+            try:
+                process.kill()
+            except (AttributeError, OSError) as error:
+                raise JobCleanupError("unable to kill background process") from error
+        try:
+            process.wait(timeout=1.0)
+        except (subprocess.TimeoutExpired, AttributeError, OSError) as error:
+            raise JobCleanupError("background process did not exit after kill") from error
+    if not _reaped(process):
+        raise JobCleanupError("background process reap could not be verified")
+
+
+def _reaped(process: Any) -> bool:
     try:
-        process.wait(timeout=1.0)
-    except (subprocess.TimeoutExpired, AttributeError, OSError):
-        pass
+        return process.poll() is not None
+    except AttributeError:
+        return getattr(process, "returncode", None) is not None
 
 
 def jobs_payload(database_path: Path) -> dict[str, Any]:
@@ -92,4 +111,4 @@ def jobs_payload(database_path: Path) -> dict[str, Any]:
     }
 
 
-__all__ = ["jobs_payload", "launch"]
+__all__ = ["JobCleanupError", "jobs_payload", "launch"]

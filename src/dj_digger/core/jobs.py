@@ -9,6 +9,7 @@ from __future__ import annotations
 import fcntl
 import json
 import os
+import re
 import tempfile
 import threading
 from collections.abc import Iterator
@@ -25,6 +26,16 @@ JOB_ID_ENV = "DJ_DIGGER_JOB_ID"
 JobStatus = Literal["starting", "running", "succeeded", "partial", "failed", "unknown"]
 _TERMINAL_STATUSES: frozenset[JobStatus] = frozenset({"succeeded", "partial", "failed", "unknown"})
 _RESULT_STATUSES: frozenset[str] = frozenset({"succeeded", "partial", "failed"})
+_FAILURE_CODES: frozenset[str] = frozenset(
+    {
+        "cleanup_failed",
+        "job_failed",
+        "launch_failed",
+        "launch_start_failed",
+        "process_missing",
+    }
+)
+_JOB_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$")
 _THREAD_LOCKS: dict[Path, threading.RLock] = {}
 _THREAD_LOCKS_GUARD = threading.Lock()
 
@@ -91,6 +102,7 @@ class JobRepository:
         raise RuntimeError("could not allocate a durable background job ID")
 
     def start(self, job_id: str, pid: int) -> JobRecord:
+        _validate_job_id(job_id)
         if pid <= 0:
             raise ValueError("job process ID must be positive")
         with self._locked():
@@ -112,10 +124,12 @@ class JobRepository:
 
     def get(self, job_id: str) -> JobRecord:
         """Read one job under the same lock used for lifecycle transitions."""
+        _validate_job_id(job_id)
         with self._locked():
             return self._read_locked(job_id)
 
     def record_result(self, job_id: str, diagnostic: dict[str, Any]) -> JobRecord:
+        _validate_job_id(job_id)
         result_status = diagnostic.get("status")
         if not isinstance(result_status, str) or result_status not in _RESULT_STATUSES:
             raise ValueError("job result status must be succeeded, partial, or failed")
@@ -140,16 +154,49 @@ class JobRepository:
             return updated
 
     def fail(self, job_id: str, error: str, *, code: str = "job_failed") -> JobRecord:
-        del error
+        safe_code = code if code in _FAILURE_CODES else "job_failed"
         return self.record_result(
             job_id,
-            {"event": "job", "status": "failed", "code": code},
+            {
+                "event": "job",
+                "status": "failed",
+                "code": safe_code,
+                "error": error,
+            },
         )
 
-    def list(self) -> list[JobRecord]:
+    def mark_unknown(self, job_id: str, *, code: str = "cleanup_failed") -> JobRecord:
+        """Record that a process outcome cannot be trusted after cleanup failure."""
+        _validate_job_id(job_id)
+        safe_code = code if code in _FAILURE_CODES else "job_failed"
         with self._locked():
-            if not self._directory.exists():
-                return []
+            record = self._read_locked(job_id)
+            if record.status in _TERMINAL_STATUSES:
+                raise JobStateError(
+                    f"cannot mark job {job_id} unknown: current status is {record.status}"
+                )
+            updated = JobRecord(
+                record.job_id,
+                record.command,
+                "unknown",
+                record.pid,
+                record.started_at,
+                datetime.now(UTC).isoformat(),
+                record.log,
+                {
+                    "event": "job",
+                    "status": "unknown",
+                    "code": safe_code,
+                    "error": "operation outcome is unknown",
+                },
+            )
+            self._write_locked(updated)
+            return updated
+
+    def list(self) -> list[JobRecord]:
+        if not self._directory.is_dir():
+            return []
+        with self._locked():
             records: list[JobRecord] = []
             for path in sorted(self._directory.glob("*.json")):
                 try:
@@ -172,6 +219,7 @@ class JobRepository:
             return records
 
     def _status_path(self, job_id: str) -> Path:
+        _validate_job_id(job_id)
         return self._directory / f"{job_id}.json"
 
     def _read_locked(self, job_id: str) -> JobRecord:
@@ -213,7 +261,8 @@ class JobRepository:
 
 
 def current_job_id() -> str | None:
-    return os.environ.get(JOB_ID_ENV)
+    job_id = os.environ.get(JOB_ID_ENV)
+    return job_id if job_id is not None and _is_valid_job_id(job_id) else None
 
 
 def record_result(database_path: Path, job_id: str, diagnostic: dict[str, Any]) -> None:
@@ -228,8 +277,10 @@ def _from_dict(payload: dict[str, Any]) -> JobRecord:
     status = payload.get("status", "unknown")
     if status not in {"starting", "running", "succeeded", "partial", "failed", "unknown"}:
         raise ValueError("invalid durable job status")
+    job_id = str(payload["job_id"])
+    _validate_job_id(job_id)
     return JobRecord(
-        str(payload["job_id"]),
+        job_id,
         None if payload.get("command") is None else _safe_command(str(payload["command"])),
         status,
         None if payload.get("pid") is None else int(payload["pid"]),
@@ -244,6 +295,15 @@ def _safe_command(command: str | None) -> str | None:
     if command is None:
         return None
     return command if command.isidentifier() and len(command) <= 64 else "unknown"
+
+
+def _is_valid_job_id(job_id: str) -> bool:
+    return _JOB_ID.fullmatch(job_id) is not None
+
+
+def _validate_job_id(job_id: str) -> None:
+    if not _is_valid_job_id(job_id):
+        raise ValueError("invalid background job ID")
 
 
 def _pid_alive(pid: int | None) -> bool:
