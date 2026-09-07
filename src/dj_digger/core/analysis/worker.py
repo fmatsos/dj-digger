@@ -13,11 +13,16 @@ from dj_digger.core.analysis.extractor import (
     AnalysisExtractionResult,
     CompositeAudioExtractor,
 )
+from dj_digger.core.analysis.protocol import (
+    PROTOCOL_VERSION,
+    read_request,
+)
 from dj_digger.core.config import DspConfig
 
-PROTOCOL_VERSION = 1
 MAX_ERROR_LENGTH = 4_000
 ExtractorFactory = Callable[[DspConfig], Any]
+
+__all__ = ["MAX_ERROR_LENGTH", "PROTOCOL_VERSION", "execute_request", "main"]
 
 
 def execute_request(
@@ -132,7 +137,7 @@ def _number(value: object) -> float:
 
 def main() -> int:
     try:
-        raw = json.load(sys.stdin)
+        raw = read_request(sys.stdin.buffer)
         if not isinstance(raw, Mapping):
             raise ValueError("worker request must be a JSON object")
         response = execute_request(raw)

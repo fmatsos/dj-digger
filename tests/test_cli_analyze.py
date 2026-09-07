@@ -4,6 +4,9 @@ import pytest
 from typer.testing import CliRunner
 
 from dj_digger.cli import app
+from dj_digger.cli.commands.analyze import execute
+from dj_digger.core.analysis.pipeline import AnalysisRunResult
+from dj_digger.core.application import AnalyzeRequest, ProgressEvent
 
 
 def _config(tmp_path: Path) -> Path:
@@ -28,6 +31,38 @@ def _config(tmp_path: Path) -> Path:
         encoding="utf-8",
     )
     return config
+
+
+def test_analyze_adapter_transmits_typed_request_to_core_boundary() -> None:
+    received: list[AnalyzeRequest] = []
+    events: list[ProgressEvent] = []
+
+    class Boundary:
+        def analyze(self, request: AnalyzeRequest, *, progress=None) -> AnalysisRunResult:
+            received.append(request)
+            if progress is not None:
+                progress(ProgressEvent("analysis_started", 0, 0, None))
+            return AnalysisRunResult(7, 2, 1, 1, 0)
+
+    payload = execute(
+        Boundary(),
+        AnalyzeRequest(source_id="library", path_prefix="House", limit=2, workers=3),
+        progress=events.append,
+    )
+
+    assert received == [
+        AnalyzeRequest(source_id="library", path_prefix="House", limit=2, workers=3)
+    ]
+    assert events == [ProgressEvent("analysis_started", 0, 0, None)]
+    assert payload == {
+        "event": "analyze",
+        "status": "succeeded",
+        "run_id": 7,
+        "eligible": 2,
+        "analyzed": 1,
+        "reused": 1,
+        "failed": 0,
+    }
 
 
 def test_analyze_propagates_selection_and_execution_options(monkeypatch, tmp_path: Path) -> None:

@@ -141,8 +141,9 @@ class WorkspaceApplication:
 
     def analyze(
         self,
-        source_id: str | None = None,
+        request: AnalyzeRequest | str | None = None,
         *,
+        source_id: str | None = None,
         path_prefix: str | None = None,
         limit: int | None = None,
         force: bool = False,
@@ -151,15 +152,19 @@ class WorkspaceApplication:
         progress: ProgressReporter | None = None,
     ) -> AnalysisRunResult:
         """Run the configured injectable audio analysis extractor."""
-        request = AnalyzeRequest(
-            source_id=source_id,
-            path_prefix=path_prefix,
-            limit=limit,
-            force=force,
-            workers=workers,
-            track_timeout=track_timeout,
+        effective = (
+            request
+            if isinstance(request, AnalyzeRequest)
+            else AnalyzeRequest(
+                source_id=request if isinstance(request, str) else source_id,
+                path_prefix=path_prefix,
+                limit=limit,
+                force=force,
+                workers=workers,
+                track_timeout=track_timeout,
+            )
         )
-        return self._analyze_request(request, progress=progress)
+        return self._analyze_request(effective, progress=progress)
 
     def _analyze_request(
         self,
@@ -562,7 +567,7 @@ class CoreApplication(WorkspaceApplication):
         """Refresh metadata through the typed core contract."""
         return super().metadata(request or MetadataRequest())
 
-    def analyze(  # type: ignore[override]
+    def analyze(
         self,
         request: AnalyzeRequest | str | None = None,
         progress: ProgressSink | ProgressReporter | None = None,

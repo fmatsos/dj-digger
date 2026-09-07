@@ -19,7 +19,8 @@ from dj_digger.core.analysis.extractor import (
     Stage,
 )
 from dj_digger.core.analysis.pipeline import TimedAnalysisExtractor
-from dj_digger.core.analysis.worker import MAX_ERROR_LENGTH, PROTOCOL_VERSION
+from dj_digger.core.analysis.protocol import PROTOCOL_VERSION, encode_request
+from dj_digger.core.analysis.worker import MAX_ERROR_LENGTH
 from dj_digger.core.catalog.models import Track
 from dj_digger.core.config import DspConfig
 
@@ -61,6 +62,10 @@ class IsolatedAnalysisExtractor(TimedAnalysisExtractor):
 
     def extract(self, track: Track, *, timeout: float) -> AnalysisExtractionResult:
         request = self._request(track)
+        try:
+            encoded = encode_request(request)
+        except ValueError as error:
+            raise AnalysisExtractionError("aggregation", str(error)) from None
         kwargs: dict[str, Any] = {
             "stdin": subprocess.PIPE,
             "stdout": subprocess.PIPE,
@@ -74,7 +79,6 @@ class IsolatedAnalysisExtractor(TimedAnalysisExtractor):
             [self._executable, "-m", self._worker_module],
             **kwargs,
         )
-        encoded = json.dumps(request, separators=(",", ":")).encode()
         stdout, stderr = self._communicate_bounded(process, encoded, timeout)
         if process.returncode != 0:
             message = self._exit_message(process.returncode, stderr)
