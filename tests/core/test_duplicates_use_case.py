@@ -14,7 +14,6 @@ from dj_digger.core.application import (
     QualityMarkResult,
     ResourceNotFoundError,
 )
-from dj_digger.core.application.app import CoreApplication
 from dj_digger.core.config import LibrarySourceConfig, WorkspaceConfig
 
 

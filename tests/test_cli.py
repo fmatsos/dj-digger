@@ -109,9 +109,7 @@ def test_scan_command_uses_failure_exit_code(monkeypatch, tmp_path: Path) -> Non
 
 
 @pytest.mark.parametrize("command", ["scan", "metadata", "refresh"])
-def test_malformed_config_returns_typed_json_failure(
-    tmp_path: Path, command: str
-) -> None:
+def test_malformed_config_returns_typed_json_failure(tmp_path: Path, command: str) -> None:
     config = tmp_path / "malformed.toml"
     config.write_text("[workspace\n", encoding="utf-8")
 
