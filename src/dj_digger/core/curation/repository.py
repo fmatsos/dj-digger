@@ -14,6 +14,8 @@ from dj_digger.core.curation.models import (
     CurationTrack,
 )
 
+__all__ = ["CurationRepository"]
+
 
 class CurationRepository:
     """Create and validate normalized curation records."""

@@ -36,6 +36,8 @@ from dj_digger.core.curation.models import (
     SourceSummary,
 )
 
+__all__ = ["CurationCatalogError", "CurationCatalog"]
+
 
 class CurationCatalogError(RuntimeError):
     """Sanitized public error raised by the curation read model."""

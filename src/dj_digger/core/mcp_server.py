@@ -25,6 +25,8 @@ from dj_digger.core.curation import (
     SearchFilters,
 )
 
+__all__ = ["create_curation_mcp_server"]
+
 
 def create_curation_mcp_server(config: WorkspaceConfig) -> MCPServer:
     """Create the catalog server with a single normalized curation write tool."""

@@ -1,6 +1,5 @@
-"""Compatibility forwarding module for canonical curation validation."""
+"""Compatibility re-exports for canonical curation validation."""
 
-import sys
-from importlib import import_module
+from dj_digger.core.curation.validation import validate_curation_result
 
-sys.modules[__name__] = import_module("dj_digger.core.curation.validation")
+__all__ = ["validate_curation_result"]

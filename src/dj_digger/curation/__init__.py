@@ -1,6 +1,35 @@
-"""Compatibility forwarding package for :mod:`dj_digger.core.curation`."""
+"""Compatibility re-exports for :mod:`dj_digger.core.curation`."""
 
-import sys
-from importlib import import_module
+from dj_digger.core.curation import (
+    CandidateDetails,
+    CandidateDetailsV1,
+    CandidateRef,
+    CandidateSearchV1,
+    CreateCurationDraft,
+    CurationCatalog,
+    CurationCatalogError,
+    CurationCreation,
+    CurationKind,
+    CurationRepository,
+    CurationStatus,
+    CurationTrack,
+    LibraryOverviewV1,
+    SearchFilters,
+)
 
-sys.modules[__name__] = import_module("dj_digger.core.curation")
+__all__ = [
+    "CandidateDetailsV1",
+    "CandidateDetails",
+    "CandidateRef",
+    "CandidateSearchV1",
+    "CurationCatalog",
+    "CurationCatalogError",
+    "LibraryOverviewV1",
+    "SearchFilters",
+    "CreateCurationDraft",
+    "CurationCreation",
+    "CurationKind",
+    "CurationRepository",
+    "CurationStatus",
+    "CurationTrack",
+]

@@ -17,6 +17,7 @@ from dj_digger.core.curation.client import (
     CurationClientError,
     CurationResponseError,
     OpenAICompatibleClient,
+    complete_in_subprocess,
 )
 from dj_digger.core.curation.models import CandidateDetails, CandidateRef, CurationCreation
 from dj_digger.core.curation.prompts import CUSTOM_SYSTEM_PROMPT_PREFIX, SYSTEM_PROMPT
@@ -29,6 +30,19 @@ ALLOWED_TOOLS = (
     "create_curation",
 )
 WRITE_TOOL = "create_curation"
+
+__all__ = [
+    "ALLOWED_TOOLS",
+    "WRITE_TOOL",
+    "CurationAgentError",
+    "CurationTurnLimitError",
+    "CurationMCPError",
+    "CurationGroundingError",
+    "CurationRequest",
+    "CuratedTrack",
+    "CurationResult",
+    "CurationAgent",
+]
 
 
 class CurationAgentError(RuntimeError):
@@ -126,10 +140,19 @@ class CurationAgent:
                 "content": f"Select at most {request.max_tracks} tracks. {request.prompt.strip()}",
             }
         )
+        deadline = asyncio.get_running_loop().time() + self._config.curation.total_timeout_seconds
         try:
             async with asyncio.timeout(self._config.curation.total_timeout_seconds):
                 for _turn in range(self._config.curation.max_turns):
-                    response = await asyncio.to_thread(self._client.complete, messages, tool_defs)
+                    remaining = deadline - asyncio.get_running_loop().time()
+                    if remaining <= 0:
+                        raise CurationTurnLimitError("curation agent exceeded its total timeout")
+                    response = await complete_in_subprocess(
+                        self._client,
+                        messages,
+                        tool_defs,
+                        timeout=remaining,
+                    )
                     assistant = response.model_dump(mode="json", exclude_defaults=True)
                     messages.append(assistant)
                     if response.tool_calls:
