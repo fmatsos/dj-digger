@@ -69,7 +69,7 @@ def test_version_gate_and_missing_catalog_are_sanitized(tmp_path: Path) -> None:
 
     path = tmp_path / "catalog.sqlite"
     sqlite3.connect(path).close()
-    with pytest.raises(CurationCatalogError, match="unsupported"):
+    with pytest.raises(CurationCatalogError, match="not current"):
         CurationCatalog(path).overview()
 
 

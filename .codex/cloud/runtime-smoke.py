@@ -104,7 +104,6 @@ def run() -> dict[str, Any]:
         database = workspace / "catalog.sqlite"
         exports = workspace / "exports"
         with sqlite3.connect(database) as connection:
-            schema_version = int(connection.execute("PRAGMA user_version").fetchone()[0])
             track_count = int(connection.execute("SELECT COUNT(*) FROM tracks").fetchone()[0])
             fingerprint_count = int(
                 connection.execute("SELECT COUNT(*) FROM audio_fingerprints").fetchone()[0]
@@ -120,7 +119,7 @@ def run() -> dict[str, Any]:
             name for name in expected_exports if not (exports / name).is_file()
         )
         groups = duplicate_groups.get("groups", [])
-        if schema_version != 11 or track_count != 2 or fingerprint_count < 2:
+        if track_count != 2 or fingerprint_count < 2:
             raise RuntimeError("catalog smoke assertions failed")
         if quick_check != "ok" or missing_exports or not groups:
             raise RuntimeError("publication smoke assertions failed")
@@ -129,7 +128,6 @@ def run() -> dict[str, Any]:
             "doctor": doctor.get("status"),
             "refresh": refresh.get("status"),
             "duplicates": duplicates.get("status"),
-            "schema_version": schema_version,
             "tracks": track_count,
             "fingerprints": fingerprint_count,
             "duplicate_groups": len(groups),

@@ -6,12 +6,12 @@ from importlib.resources import files
 from sqlite_utils import Database, Migrations
 
 CURRENT_VERSION = 11
-CURRENT_SCHEMA = "catalog-v11.sql"
+CURRENT_SCHEMA = "catalog.sql"
 MIGRATIONS = Migrations("dj-digger")
 
 
-@MIGRATIONS(transactional=False)
-def dj_digger_000_initialize_v11(database: Database) -> None:
+@MIGRATIONS(name="dj_digger_20260824134417", transactional=False)
+def initialize_catalog(database: Database) -> None:
     """Initialize an empty catalog directly at the current schema."""
     connection = database.conn
     if _version(connection) == 0:
@@ -24,34 +24,34 @@ def dj_digger_000_initialize_v11(database: Database) -> None:
         )
 
 
-@MIGRATIONS(transactional=False)
-def dj_digger_006_to_007(database: Database) -> None:
-    """Upgrade a V6 catalog to V7."""
-    _upgrade_if_current(database.conn, 6, "migrate-v6-to-v7.sql")
+@MIGRATIONS(name="dj_digger_20260827105404", transactional=False)
+def upgrade_catalog_20260827105404(database: Database) -> None:
+    """Apply the first ordered catalog upgrade."""
+    _upgrade_if_current(database.conn, 6, "migrate-20260827105404.sql")
 
 
-@MIGRATIONS(transactional=False)
-def dj_digger_007_to_008(database: Database) -> None:
-    """Upgrade a V7 catalog to V8."""
-    _upgrade_if_current(database.conn, 7, "migrate-v7-to-v8.sql")
+@MIGRATIONS(name="dj_digger_20260827225144", transactional=False)
+def upgrade_catalog_20260827225144(database: Database) -> None:
+    """Apply the second ordered catalog upgrade."""
+    _upgrade_if_current(database.conn, 7, "migrate-20260827225144.sql")
 
 
-@MIGRATIONS(transactional=False)
-def dj_digger_008_to_009(database: Database) -> None:
-    """Upgrade a V8 catalog to V9."""
-    _upgrade_if_current(database.conn, 8, "migrate-v8-to-v9.sql")
+@MIGRATIONS(name="dj_digger_20260828150213", transactional=False)
+def upgrade_catalog_20260828150213(database: Database) -> None:
+    """Apply the third ordered catalog upgrade."""
+    _upgrade_if_current(database.conn, 8, "migrate-20260828150213.sql")
 
 
-@MIGRATIONS(transactional=False)
-def dj_digger_009_to_010(database: Database) -> None:
-    """Upgrade a V9 catalog to V10."""
-    _upgrade_if_current(database.conn, 9, "migrate-v9-to-v10.sql")
+@MIGRATIONS(name="dj_digger_20260905221652", transactional=False)
+def upgrade_catalog_20260905221652(database: Database) -> None:
+    """Apply the fourth ordered catalog upgrade."""
+    _upgrade_if_current(database.conn, 9, "migrate-20260905221652.sql")
 
 
-@MIGRATIONS(transactional=False)
-def dj_digger_010_to_011(database: Database) -> None:
-    """Upgrade a V10 catalog to V11."""
-    _upgrade_if_current(database.conn, 10, "migrate-v10-to-v11.sql")
+@MIGRATIONS(name="dj_digger_20260907063758", transactional=False)
+def upgrade_catalog_20260907063758(database: Database) -> None:
+    """Apply the latest ordered catalog upgrade."""
+    _upgrade_if_current(database.conn, 10, "migrate-20260907063758.sql")
 
 
 def migrate(connection: sqlite3.Connection) -> None:

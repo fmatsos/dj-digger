@@ -13,7 +13,7 @@ from their authoritative inputs.
 ```mermaid
 flowchart LR
     Sources[Configured music sources] --> Scan[Scan and metadata]
-    Scan --> Catalog[(SQLite Catalog V11)]
+    Scan --> Catalog[(SQLite Catalog)]
     Sources --> Workers[Per-track analysis workers]
     Workers --> Parent[Parent analysis pipeline]
     Parent --> Catalog
@@ -48,7 +48,7 @@ The main implementation layers are:
 | Catalog | `src/dj_digger/catalog/` | SQLite lifecycle, migrations, repositories, history, and read projections. |
 | Analysis | `src/dj_digger/analysis/` | Eligibility, isolated extraction, append-only persistence, and analysis exports. |
 | Publication | `src/dj_digger/exports/` | Schema validation, atomic export replacement, and snapshots. |
-| Curation read model | `src/dj_digger/curation/` | Exposes bounded, globally deduplicated Catalog V11 candidates. |
+| Curation read model | `src/dj_digger/curation/` | Exposes bounded, globally deduplicated current-catalog candidates. |
 | MCP | `src/dj_digger/mcp_server.py` | Publishes the curation read model in-process and over local stdio. |
 | Native curation agent | `src/dj_digger/curation/agent.py` | Runs the bounded model/tool loop and accepts only a grounded persisted draft. |
 | OpenAI-compatible client | `src/dj_digger/curation/client.py` | Calls the configured `/chat/completions` endpoint with bounded requests and sanitized failures. |
@@ -66,10 +66,10 @@ library root, playlist or explicit tracks, and output directory directly; it nei
 loads workspace configuration nor opens SQLite. It publishes a safely renumbered
 playlist, copied tracks, and manifest without modifying the source library.
 
-## Catalog V11 data model
+## Catalog data model
 
-Catalog V11 retains the V9 separation of canonical facts and history from optimized
-read projections, and adds normalized curation creations, ordered track membership,
+The current catalog separates canonical facts and history from optimized read
+projections, and includes normalized curation creations, ordered track membership,
 and lifecycle constraints.
 
 ### Canonical state and history
@@ -127,14 +127,11 @@ are read from one SQLite snapshot and validated before any of them is replaced.
 `src/dj_digger/catalog/migrations.py` registers every catalog transition with
 `sqlite_utils.Migrations`. It supports exactly these paths:
 
-- an empty, unversioned database (`user_version = 0`) is initialized directly from
-  `catalog-v11.sql`;
-- a V6 catalog is upgraded in place with `migrate-v6-to-v7.sql`;
-- V7, V8, and V9 catalogs continue through their ordered packaged migrations;
-- an existing V10 catalog is adopted into the sqlite-utils migration ledger and
-  upgraded through `migrate-v10-to-v11.sql`;
-- V1 through V5, unversioned non-empty databases, and versions newer than V11 are
-  rejected rather than guessed at or partially upgraded.
+- an empty, unversioned database is initialized from the current packaged schema;
+- supported existing catalogs are adopted into the migration ledger and upgraded
+  through their ordered packaged migrations;
+- unsupported legacy catalogs, unversioned non-empty databases, and catalogs newer
+  than the application are rejected rather than guessed at or partially upgraded.
 
 The migration registry records applied steps in `_sqlite_migrations`; migration
 functions remain ordered, deterministic adapters around packaged SQL resources. This
@@ -142,10 +139,14 @@ ledger is the sole mechanism for all future catalog migrations. `user_version` r
 the application compatibility boundary so older catalogs can be adopted safely and
 unsupported catalogs can be rejected before sqlite-utils mutates them.
 
+Migration identifiers are monotonic UTC timestamps such as
+`dj_digger_20260827105404`; the packaged SQL resource uses the same timestamp. The
+identifier describes when the migration was introduced, not a catalog release number.
+
 Each schema-changing step runs under `BEGIN IMMEDIATE`, verifies its expected starting
 version, runs `foreign_key_check`, sets `user_version` only after validation, and rolls
-back the complete schema change on error. The V6-to-V7 migration preserves the V6
-tables and history, adds targeted indexes, creates and backfills
+back the complete schema change on error. Legacy migrations preserve existing tables
+and history, add targeted indexes, create and backfill
 `current_track_analysis`, and creates `library_tracks`.
 
 The packaged SQL files are runtime resources. A wheel does not depend on the source
@@ -227,7 +228,7 @@ therefore leaves completed tracks reusable. Before a later run starts, abandoned
 `running` analysis runs are finalized from their already committed attempts.
 
 The DSP implementation keeps decoded samples in `float32` and accumulates spectral
-facts per FFT frame. These memory controls are separate from the SQLite V7 read
+facts per FFT frame. These memory controls are separate from the SQLite read
 optimizations.
 
 ### Refresh, exports, and snapshots
@@ -273,7 +274,7 @@ multi-source playlists require portable copied files. See
 
 ## Diagnostics and maintenance
 
-`doctor` validates source roots and required binaries, then reports schema version,
+`doctor` validates source roots and required binaries, then reports migration state,
 SQLite version, WAL mode, foreign-key status, synchronization and timeout settings,
 database/WAL sizes, page statistics, and `quick_check`.
 
@@ -308,20 +309,15 @@ Changes must preserve these boundaries:
 7. Every SQLite connection enables the required pragmas, and write transactions stay
    bounded enough for WAL readers and serialized writers.
 
-Catalog V9 extended the V8 append-only catalog with mastering attempts and the
-rebuildable current mastering and DJ projections. The `8 -> 9` packaged migration
-is transactional, version-checked, foreign-key-clean, and wheel-installable. Catalog
-V10 added normalized curation drafts, ordered track references, and their validation
-lifecycle through the packaged `9 -> 10` migration. V11 requires non-blank prompts
-and Markdown reports through the packaged `10 -> 11` migration and fresh V11 schema. Any new
-materialized projection needs an atomic write path, a
+Schema evolution is handled by ordered, transactional migrations and fresh-schema
+initialization. Any new materialized projection needs an atomic write path, a
 deterministic rebuild command or routine, query-plan coverage, and preservation tests.
 Public view or export changes also require explicit schema/consumer compatibility
 decisions rather than silent column or semantic changes.
 
-# Mastering and DJ review (V9)
+# Mastering and DJ review
 
-The V9 catalog stores append-only FFmpeg EBU R128 attempts and rebuildable
+The catalog stores append-only FFmpeg EBU R128 attempts and rebuildable
 current mastering and target-dependent DJ projections. `duplicates
 --analyze --mastering` measures only present members of exact Chromaprint
 groups; compatible successes are reused. `--list --dj-review` computes signed

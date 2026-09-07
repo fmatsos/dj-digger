@@ -1,4 +1,4 @@
--- DJ Digger catalog migration V7 to V8
+-- DJ Digger catalog migration 20260827225144
 
 ALTER TABLE technical_audio_metadata ADD COLUMN bit_depth INTEGER NULL;
 ALTER TABLE technical_audio_metadata ADD COLUMN input_size_bytes INTEGER NULL;

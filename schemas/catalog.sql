@@ -1,4 +1,4 @@
--- DJ Digger catalog schema V11
+-- DJ Digger catalog schema
 PRAGMA foreign_keys = ON;
 
 CREATE TABLE library_sources (

@@ -32,7 +32,7 @@ def create_curation_mcp_server(config: WorkspaceConfig) -> MCPServer:
     server = MCPServer(
         "DJ Digger Curation",
         instructions=(
-            "Catalog V11 curation. create_curation is the only write tool and the required "
+            "Current catalog curation. create_curation is the only write tool and the required "
             "path for creating sets or playlists."
         ),
     )
