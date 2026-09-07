@@ -7,7 +7,7 @@ import subprocess
 from dataclasses import dataclass, replace
 from pathlib import Path
 from types import TracebackType
-from typing import Any, Self, cast
+from typing import Any, Self, cast, overload
 
 from dj_digger.core.analysis.config import CURRENT_ANALYZER_VERSION, AnalysisIdentity
 from dj_digger.core.analysis.pipeline import (
@@ -327,6 +327,26 @@ class WorkspaceApplication:
             mastering_config=self.config.mastering,
         )
 
+    @overload
+    def export(
+        self,
+        facet: ExportRequest,
+        *,
+        type: str | None = None,
+        format: str | None = None,
+        fields: str | None = None,
+    ) -> ExportResult: ...
+
+    @overload
+    def export(
+        self,
+        facet: str | None = None,
+        *,
+        type: str | None = None,
+        format: str | None = None,
+        fields: str | None = None,
+    ) -> list[str]: ...
+
     def export(
         self,
         facet: str | ExportRequest | None = None,
@@ -334,7 +354,7 @@ class WorkspaceApplication:
         type: str | None = None,
         format: str | None = None,
         fields: str | None = None,
-    ) -> list[str]:
+    ) -> ExportResult | list[str]:
         request = (
             facet
             if isinstance(facet, ExportRequest)
@@ -346,7 +366,16 @@ class WorkspaceApplication:
             # Keep the historical facade's exception type stable. Core callers
             # use ExportUseCase/CoreApplication and receive InvalidInputError.
             raise ValueError(str(error)) from error
+        if isinstance(facet, ExportRequest):
+            return result
         return [str(path) for path in result.paths]
+
+    def _legacy_export(self) -> list[str]:
+        """Publish the historical all-facets result for refresh composition."""
+        result = self.export()
+        if isinstance(result, ExportResult):
+            return [str(path) for path in result.paths]
+        return result
 
     def snapshot(self, output: Path | SnapshotRequest, archive: bool = False) -> SnapshotResult:
         request = (
@@ -389,7 +418,7 @@ class WorkspaceApplication:
         )
         reporter.phase_started("exports", 3, 4)
         try:
-            exports = self.export()
+            exports = self._legacy_export()
         except Exception as error:
             reporter.phase_finished("exports", 4, 4)
             return {
@@ -630,13 +659,45 @@ class CoreApplication(WorkspaceApplication):
         """Keep inherited refresh compatible with the typed scan contract."""
         return _legacy_scan_results(self.scan(ScanRequest(enabled_only=enabled_only)))
 
-    def export(self, request: ExportRequest | None = None) -> ExportResult:  # type: ignore[override]
-        """Publish through the typed core export contract."""
-        return ExportUseCase(self.database, self.config).execute(request)
+    @overload
+    def export(
+        self,
+        facet: ExportRequest,
+        *,
+        type: str | None = None,
+        format: str | None = None,
+        fields: str | None = None,
+    ) -> ExportResult: ...
 
-    def snapshot(self, request: SnapshotRequest) -> SnapshotResult:  # type: ignore[override]
+    @overload
+    def export(
+        self,
+        facet: str | None = None,
+        *,
+        type: str | None = None,
+        format: str | None = None,
+        fields: str | None = None,
+    ) -> list[str]: ...
+
+    def export(
+        self,
+        facet: str | ExportRequest | None = None,
+        *,
+        type: str | None = None,
+        format: str | None = None,
+        fields: str | None = None,
+    ) -> ExportResult | list[str]:
+        """Publish through the typed core export contract."""
+        if isinstance(facet, ExportRequest):
+            return ExportUseCase(self.database, self.config).execute(facet)
+        return super().export(facet, type=type, format=format, fields=fields)
+
+    def snapshot(self, request: Path | SnapshotRequest, archive: bool = False) -> SnapshotResult:
         """Publish through the typed core snapshot contract."""
-        return SnapshotUseCase(self.database).execute(request)
+        effective = (
+            request if isinstance(request, SnapshotRequest) else SnapshotRequest(request, archive)
+        )
+        return SnapshotUseCase(self.database).execute(effective)
 
 
 def _legacy_source(request: str | None, source_id: str | None) -> str | None:

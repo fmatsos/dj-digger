@@ -68,7 +68,7 @@ class ExportUseCase:
         except BaseException:
             shutil.rmtree(staging, ignore_errors=True)
             raise
-        else:
+        finally:
             shutil.rmtree(staging, ignore_errors=True)
 
     def _publish_to_staging(
@@ -107,32 +107,46 @@ class ExportUseCase:
     def _publish_group(
         destination: Path, staged_facets: list[PublishedFacet], staged_destination: Path
     ) -> list[PublishedFacet]:
-        destination.mkdir(parents=True, exist_ok=True)
-        targets = [
-            (facet.path, destination / facet.path.relative_to(staged_destination))
-            for facet in staged_facets
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        relative_facets = [
+            (facet, facet.path.relative_to(staged_destination)) for facet in staged_facets
         ]
-        backups: list[tuple[Path, Path]] = []
-        replaced: list[Path] = []
+        storage = destination.parent / ".dj-digger-publications"
+        storage.mkdir(exist_ok=True)
+        generation = Path(tempfile.mkdtemp(prefix="generation-", dir=storage))
+        generation.rmdir()
+        os.replace(staged_destination, generation)
+        next_link = _temporary_link(destination)
+        previous_directory: Path | None = None
+        switched = False
         try:
-            for index, (_, target) in enumerate(targets):
-                if target.exists():
-                    backup = staged_destination.parent / f".backup-{index}"
-                    os.replace(target, backup)
-                    backups.append((target, backup))
-            for source, target in targets:
-                os.replace(source, target)
-                replaced.append(target)
+            if destination.exists() and not destination.is_symlink():
+                if not destination.is_dir():
+                    raise NotADirectoryError(
+                        f"export destination is not a directory: {destination}"
+                    )
+                previous_directory = Path(tempfile.mkdtemp(prefix="previous-", dir=storage))
+                previous_directory.rmdir()
+                os.replace(destination, previous_directory)
+            os.symlink(
+                Path(storage.name) / generation.name,
+                next_link,
+                target_is_directory=True,
+            )
+            os.replace(next_link, destination)
+            switched = True
         except BaseException:
-            for target in replaced:
-                target.unlink(missing_ok=True)
-            for target, backup in backups:
-                if backup.exists():
-                    os.replace(backup, target)
+            next_link.unlink(missing_ok=True)
+            if previous_directory is not None and previous_directory.exists():
+                os.replace(previous_directory, destination)
+            shutil.rmtree(generation, ignore_errors=True)
             raise
+        finally:
+            if not switched:
+                next_link.unlink(missing_ok=True)
         return [
-            PublishedFacet(target, facet.row_count)
-            for facet, (_, target) in zip(staged_facets, targets, strict=True)
+            PublishedFacet(destination / relative, facet.row_count)
+            for facet, relative in relative_facets
         ]
 
     @classmethod
@@ -161,3 +175,12 @@ class ExportUseCase:
 
 
 __all__ = ["ExportRequest", "ExportResult", "ExportUseCase"]
+
+
+def _temporary_link(destination: Path) -> Path:
+    """Reserve a same-directory path for an atomic symlink replacement."""
+    descriptor, name = tempfile.mkstemp(prefix=f".{destination.name}-link-", dir=destination.parent)
+    os.close(descriptor)
+    path = Path(name)
+    path.unlink()
+    return path
