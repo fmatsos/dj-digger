@@ -12,14 +12,14 @@ from pathlib import Path
 from threading import Lock, Thread
 from typing import Any, cast
 
-from dj_digger.analysis.extractor import (
+from dj_digger.core.analysis.extractor import (
     AnalysisExtractionError,
     AnalysisExtractionResult,
     ResultStatus,
     Stage,
 )
-from dj_digger.analysis.pipeline import TimedAnalysisExtractor
-from dj_digger.analysis.worker import MAX_ERROR_LENGTH, PROTOCOL_VERSION
+from dj_digger.core.analysis.pipeline import TimedAnalysisExtractor
+from dj_digger.core.analysis.worker import MAX_ERROR_LENGTH, PROTOCOL_VERSION
 from dj_digger.core.catalog.models import Track
 from dj_digger.core.config import DspConfig
 
@@ -48,7 +48,7 @@ class IsolatedAnalysisExtractor(TimedAnalysisExtractor):
         dsp: DspConfig,
         *,
         executable: str | None = None,
-        worker_module: str = "dj_digger.analysis.worker",
+        worker_module: str = "dj_digger.core.analysis.worker",
         max_stdout_bytes: int = MAX_RESPONSE_BYTES,
         max_stderr_bytes: int = MAX_STDERR_BYTES,
     ) -> None:

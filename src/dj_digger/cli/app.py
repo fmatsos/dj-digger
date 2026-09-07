@@ -12,9 +12,12 @@ import typer
 
 from dj_digger import background
 from dj_digger.application import WorkspaceApplication
+from dj_digger.cli.commands.analyze import execute as execute_analyze
 from dj_digger.cli.commands.metadata import execute as execute_metadata
 from dj_digger.cli.commands.scan import execute as execute_scan
+from dj_digger.cli.progress import RichProgressReporter
 from dj_digger.completion import install_patches
+from dj_digger.core.application import AnalyzeRequest
 from dj_digger.core.config import WorkspaceConfig
 from dj_digger.curation import CurationCatalog, CurationCreation, CurationStatus
 from dj_digger.curation.agent import (
@@ -32,7 +35,6 @@ from dj_digger.curation.client import (
 from dj_digger.exports.curation import CurationExportContent
 from dj_digger.logging import RunLogger
 from dj_digger.mcp_server import create_curation_mcp_server
-from dj_digger.rich_progress import RichProgressReporter
 from dj_digger.set_copy import copy_set
 from dj_digger.terminal import render
 
@@ -464,16 +466,18 @@ def analyze(
 
     def action(service: WorkspaceApplication) -> dict[str, Any]:
         with _progress_reporter()(verbosity=ctx.obj.get("verbosity", 0)) as progress:
-            result = service.analyze(
-                source,
-                path_prefix=path,
-                limit=limit,
-                force=force,
-                workers=workers,
-                track_timeout=track_timeout,
+            return execute_analyze(
+                service,
+                AnalyzeRequest(
+                    source_id=source,
+                    path_prefix=path,
+                    limit=limit,
+                    force=force,
+                    workers=workers,
+                    track_timeout=track_timeout,
+                ),
                 progress=progress,
             )
-        return {"event": "analyze", "status": _result_status(result), **result.__dict__}
 
     _run(config, action, json_output=json_output)
 

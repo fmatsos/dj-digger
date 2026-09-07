@@ -8,9 +8,9 @@ from pathlib import Path
 
 from jsonschema import Draft202012Validator
 
-from dj_digger.analysis.extractor import AudioDecoder, CompositeAudioExtractor
-from dj_digger.analysis.ffmpeg import FFmpegProbe
-from dj_digger.analysis.rhythm import RhythmAnalyzer
+from dj_digger.core.analysis.extractor import AudioDecoder, CompositeAudioExtractor
+from dj_digger.core.analysis.ffmpeg import FFmpegProbe
+from dj_digger.core.analysis.rhythm import RhythmAnalyzer
 
 
 def main() -> None:

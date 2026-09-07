@@ -7,8 +7,8 @@ from dataclasses import dataclass
 from math import isfinite
 from statistics import fmean
 
-from dj_digger.analysis.rhythm import RhythmFacts
-from dj_digger.analysis.spectrum import SpectrumFacts
+from dj_digger.core.analysis.rhythm import RhythmFacts
+from dj_digger.core.analysis.spectrum import SpectrumFacts
 
 
 @dataclass(frozen=True)

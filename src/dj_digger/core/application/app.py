@@ -9,20 +9,22 @@ from pathlib import Path
 from types import TracebackType
 from typing import Any, Self, cast
 
-from dj_digger.analysis.config import CURRENT_ANALYZER_VERSION, AnalysisIdentity
-from dj_digger.analysis.exporters import AnalysisExporter
-from dj_digger.analysis.pipeline import (
+from dj_digger.core.analysis.config import CURRENT_ANALYZER_VERSION, AnalysisIdentity
+from dj_digger.core.analysis.exporters import AnalysisExporter
+from dj_digger.core.analysis.pipeline import (
     AnalysisExtractor,
-    AnalysisPipeline,
     AnalysisRunResult,
     TimedAnalysisExtractor,
 )
-from dj_digger.analysis.worker_client import IsolatedAnalysisExtractor
+from dj_digger.core.analysis.worker_client import IsolatedAnalysisExtractor
+from dj_digger.core.application.analysis_progress import NullProgressReporter, ProgressReporter
+from dj_digger.core.application.analyze import AnalyzeRequest, AnalyzeUseCase
 from dj_digger.core.application.metadata import (
     MetadataRequest,
     MetadataRunResult,
     MetadataUseCase,
 )
+from dj_digger.core.application.progress import ProgressSink
 from dj_digger.core.application.scan import ScanRequest, ScanRunResult, ScanUseCase
 from dj_digger.core.catalog.current_analysis import CurrentAnalysisProjector
 from dj_digger.core.catalog.database import Database
@@ -41,7 +43,6 @@ from dj_digger.exports.audit import AuditExporter
 from dj_digger.exports.curation import CurationExportContent, CurationExportResult, export_curation
 from dj_digger.exports.snapshot import SnapshotExporter, SnapshotResult
 from dj_digger.exports.tracks import TracksExporter
-from dj_digger.progress import NullProgressReporter, ProgressReporter
 
 
 @dataclass(frozen=True)
@@ -150,14 +151,7 @@ class WorkspaceApplication:
         progress: ProgressReporter | None = None,
     ) -> AnalysisRunResult:
         """Run the configured injectable audio analysis extractor."""
-        if source_id is not None:
-            self._selected_sources(source_id, enabled_only=True)
-        return AnalysisPipeline(
-            self.database,
-            self._analysis_identity,
-            self._analysis_extractor,
-            progress=progress,
-        ).run(
+        request = AnalyzeRequest(
             source_id=source_id,
             path_prefix=path_prefix,
             limit=limit,
@@ -165,6 +159,19 @@ class WorkspaceApplication:
             workers=workers,
             track_timeout=track_timeout,
         )
+        return self._analyze_request(request, progress=progress)
+
+    def _analyze_request(
+        self,
+        request: AnalyzeRequest,
+        *,
+        progress: ProgressReporter | ProgressSink | None = None,
+    ) -> AnalysisRunResult:
+        if request.source_id is not None:
+            self._selected_sources(request.source_id, enabled_only=True)
+        return AnalyzeUseCase(
+            self.database, self._analysis_identity, self._analysis_extractor
+        ).execute(request, progress=progress)
 
     def duplicates_analyze(
         self,
@@ -554,6 +561,33 @@ class CoreApplication(WorkspaceApplication):
     def metadata(self, request: MetadataRequest | None = None) -> MetadataRunResult:  # type: ignore[override]
         """Refresh metadata through the typed core contract."""
         return super().metadata(request or MetadataRequest())
+
+    def analyze(  # type: ignore[override]
+        self,
+        request: AnalyzeRequest | str | None = None,
+        progress: ProgressSink | ProgressReporter | None = None,
+        *,
+        source_id: str | None = None,
+        path_prefix: str | None = None,
+        limit: int | None = None,
+        force: bool = False,
+        workers: int = 1,
+        track_timeout: float = 1800.0,
+    ) -> AnalysisRunResult:
+        """Analyze through the typed core request, retaining refresh compatibility."""
+        effective = (
+            request
+            if isinstance(request, AnalyzeRequest)
+            else AnalyzeRequest(
+                source_id=request if isinstance(request, str) else source_id,
+                path_prefix=path_prefix,
+                limit=limit,
+                force=force,
+                workers=workers,
+                track_timeout=track_timeout,
+            )
+        )
+        return self._analyze_request(effective, progress=progress)
 
     def _scan_for_refresh(self, *, enabled_only: bool) -> list[ScanResult]:
         """Keep inherited refresh compatible with the typed scan contract."""

@@ -11,19 +11,19 @@ from typing import Literal, TypeVar
 
 import numpy as np
 
-from dj_digger.analysis.audio import TechnicalAudioMetadata
-from dj_digger.analysis.config import CURRENT_ANALYZER_VERSION, AnalysisIdentity
-from dj_digger.analysis.ffmpeg import FFmpegProbe
-from dj_digger.analysis.rhythm import RhythmAnalyzer, RhythmFacts
-from dj_digger.analysis.segmentation import AnalysisFrame, Segmenter, TrackSection
-from dj_digger.analysis.semantics import SemanticClassifier, SemanticLabel
-from dj_digger.analysis.spectrum import (
+from dj_digger.core.analysis.audio import TechnicalAudioMetadata
+from dj_digger.core.analysis.config import CURRENT_ANALYZER_VERSION, AnalysisIdentity
+from dj_digger.core.analysis.ffmpeg import FFmpegProbe
+from dj_digger.core.analysis.rhythm import RhythmAnalyzer, RhythmFacts
+from dj_digger.core.analysis.segmentation import AnalysisFrame, Segmenter, TrackSection
+from dj_digger.core.analysis.semantics import SemanticClassifier, SemanticLabel
+from dj_digger.core.analysis.spectrum import (
     FACT_NAMES,
     SpectrumAnalyzer,
     SpectrumConfig,
     SpectrumFacts,
 )
-from dj_digger.analysis.windows import DjWindowPlanner, IntroOutroWindows
+from dj_digger.core.analysis.windows import DjWindowPlanner, IntroOutroWindows
 from dj_digger.core.config import DspConfig
 
 Stage = Literal[

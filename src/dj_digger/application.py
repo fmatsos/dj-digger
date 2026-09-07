@@ -3,7 +3,7 @@
 import importlib.util
 import shutil
 
-from dj_digger.analysis.worker_client import IsolatedAnalysisExtractor
+from dj_digger.core.analysis.worker_client import IsolatedAnalysisExtractor
 from dj_digger.core.application.app import (
     CoreApplication,
     ScanResult,

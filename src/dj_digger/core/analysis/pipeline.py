@@ -8,14 +8,18 @@ from datetime import UTC, datetime
 from math import isfinite
 from typing import Any
 
-from dj_digger.analysis.config import AnalysisIdentity
-from dj_digger.analysis.eligibility import AnalysisEligibility
-from dj_digger.analysis.extractor import AnalysisExtractionError, AnalysisExtractionResult, Stage
-from dj_digger.analysis.persistence import AnalysisOutcome, AnalysisPersistence
+from dj_digger.core.analysis.config import AnalysisIdentity
+from dj_digger.core.analysis.eligibility import AnalysisEligibility
+from dj_digger.core.analysis.extractor import (
+    AnalysisExtractionError,
+    AnalysisExtractionResult,
+    Stage,
+)
+from dj_digger.core.analysis.persistence import AnalysisOutcome, AnalysisPersistence
+from dj_digger.core.application.analysis_progress import NullProgressReporter, ProgressReporter
 from dj_digger.core.catalog.database import Database
 from dj_digger.core.catalog.models import Track
 from dj_digger.core.catalog.repositories import TrackRepository
-from dj_digger.progress import NullProgressReporter, ProgressReporter
 
 AnalysisExtractor = Callable[[Track], AnalysisExtractionResult | Mapping[str, Any]]
 

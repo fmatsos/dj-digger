@@ -1,6 +1,13 @@
 """Public application use cases and contracts."""
 
-from dj_digger.core.application.app import CoreApplication
+from typing import Any
+
+from dj_digger.core.application.analysis_progress import (
+    AnalysisProgressReporter,
+    NullProgressReporter,
+    ProgressEventReporter,
+    ProgressReporter,
+)
 from dj_digger.core.application.errors import (
     CoreError,
     DependencyError,
@@ -20,6 +27,9 @@ from dj_digger.core.application.scan import (
 
 __all__ = [
     "CoreApplication",
+    "AnalyzeRequest",
+    "AnalyzeUseCase",
+    "AnalysisProgressReporter",
     "CoreError",
     "DependencyError",
     "DependencyTimeoutError",
@@ -29,10 +39,26 @@ __all__ = [
     "MetadataRunResult",
     "MetadataUseCase",
     "ProgressEvent",
+    "ProgressEventReporter",
+    "ProgressReporter",
     "ProgressSink",
+    "NullProgressReporter",
     "ResourceNotFoundError",
     "ScanRequest",
     "ScanRunResult",
     "ScanSourceResult",
     "StateConflictError",
 ]
+
+
+def __getattr__(name: str) -> Any:
+    """Load application facades lazily so analysis modules remain acyclic."""
+    if name == "CoreApplication":
+        from dj_digger.core.application.app import CoreApplication
+
+        return CoreApplication
+    if name in {"AnalyzeRequest", "AnalyzeUseCase"}:
+        from dj_digger.core.application.analyze import AnalyzeRequest, AnalyzeUseCase
+
+        return {"AnalyzeRequest": AnalyzeRequest, "AnalyzeUseCase": AnalyzeUseCase}[name]
+    raise AttributeError(name)
