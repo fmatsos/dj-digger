@@ -18,9 +18,18 @@ from dj_digger.cli.commands.duplicates import execute as execute_duplicates
 from dj_digger.cli.commands.export import execute as execute_export
 from dj_digger.cli.commands.mcp import serve as serve_mcp
 from dj_digger.cli.commands.metadata import execute as execute_metadata
+from dj_digger.cli.commands.operations import (
+    execute_doctor,
+    execute_integrity_check,
+    execute_optimize,
+    execute_quick_check,
+    execute_rebuild,
+    execute_status,
+)
 from dj_digger.cli.commands.scan import execute as execute_scan
 from dj_digger.cli.commands.snapshot import execute as execute_snapshot
 from dj_digger.cli.presenters.copy import copy_payload, copy_progress_lines
+from dj_digger.cli.presenters.jobs import jobs_payload
 from dj_digger.cli.progress import RichProgressReporter
 from dj_digger.completion import install_patches
 from dj_digger.core.application import (
@@ -441,31 +450,31 @@ def snapshot(
 @app.command()
 def doctor(config: ConfigOption, json_output: JsonOption = False) -> None:
     """Check workspace roots, schema migrations, and required binaries."""
-    _run(config, lambda service: service.doctor(), json_output=json_output)
+    _run(config, execute_doctor, json_output=json_output)
 
 
 @app.command()
 def status(config: ConfigOption, json_output: JsonOption = False) -> None:
     """Report source freshness and currently known catalog state."""
-    _run(config, lambda service: service.status(), json_output=json_output)
+    _run(config, execute_status, json_output=json_output)
 
 
 @database_app.command("optimize")
 def database_optimize(config: ConfigOption, json_output: JsonOption = False) -> None:
     """Update SQLite planner statistics when useful."""
-    _run(config, lambda service: service.optimize_database(), json_output=json_output)
+    _run(config, execute_optimize, json_output=json_output)
 
 
 @database_app.command("quick-check")
 def database_quick_check(config: ConfigOption, json_output: JsonOption = False) -> None:
     """Run SQLite's lightweight consistency check."""
-    _run(config, lambda service: service.quick_check_database(), json_output=json_output)
+    _run(config, execute_quick_check, json_output=json_output)
 
 
 @database_app.command("integrity-check")
 def database_integrity_check(config: ConfigOption, json_output: JsonOption = False) -> None:
     """Run SQLite's explicit full integrity check."""
-    _run(config, lambda service: service.integrity_check_database(), json_output=json_output)
+    _run(config, execute_integrity_check, json_output=json_output)
 
 
 @database_app.command("rebuild-current-analysis")
@@ -473,7 +482,7 @@ def database_rebuild_current_analysis(
     config: ConfigOption, json_output: JsonOption = False
 ) -> None:
     """Rebuild the derived latest-successful-analysis projection."""
-    _run(config, lambda service: service.rebuild_current_analysis(), json_output=json_output)
+    _run(config, execute_rebuild, json_output=json_output)
 
 
 @app.command()
@@ -509,11 +518,7 @@ def refresh(
 def jobs(config: ConfigOption, json_output: JsonOption = False) -> None:
     """List background jobs launched with --background and their status."""
     workspace_config = WorkspaceConfig.load(config)
-    payload = {
-        "event": "jobs",
-        "status": "succeeded",
-        "jobs": background.list_jobs(workspace_config.database),
-    }
+    payload = jobs_payload(background.list_jobs(workspace_config.database))
     if json_output:
         typer.echo(json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")))
     else:

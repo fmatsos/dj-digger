@@ -1,0 +1,39 @@
+"""Typed application access to durable job facts."""
+
+from __future__ import annotations
+
+from typing import Any
+
+from dj_digger.core.jobs import JOB_ID_ENV, JobRecord, JobRepository, current_job_id, jobs_dir
+
+
+class JobsUseCase:
+    """Expose the durable lifecycle without owning process execution."""
+
+    def __init__(self, repository: JobRepository) -> None:
+        self._repository = repository
+
+    def create(self, command: str | None = None) -> JobRecord:
+        return self._repository.create(command)
+
+    def start(self, job_id: str, pid: int) -> JobRecord:
+        return self._repository.start(job_id, pid)
+
+    def record_result(self, job_id: str, diagnostic: dict[str, Any]) -> JobRecord:
+        return self._repository.record_result(job_id, diagnostic)
+
+    def fail(self, job_id: str, error: str) -> JobRecord:
+        return self._repository.fail(job_id, error)
+
+    def list(self) -> list[JobRecord]:
+        return self._repository.list()
+
+
+__all__ = [
+    "JOB_ID_ENV",
+    "JobRecord",
+    "JobRepository",
+    "JobsUseCase",
+    "current_job_id",
+    "jobs_dir",
+]
