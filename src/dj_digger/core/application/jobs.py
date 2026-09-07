@@ -38,6 +38,9 @@ class JobsUseCase:
     def fail(self, job_id: str, error: str) -> JobRecord:
         return self._repository.fail(job_id, error)
 
+    def mark_unknown(self, job_id: str, *, code: str = "cleanup_failed") -> JobRecord:
+        return self._repository.mark_unknown(job_id, code=code)
+
     def list(self) -> list[JobRecord]:
         return self._repository.list()
 
