@@ -18,6 +18,11 @@ from dj_digger.analysis.pipeline import (
     TimedAnalysisExtractor,
 )
 from dj_digger.analysis.worker_client import IsolatedAnalysisExtractor
+from dj_digger.core.application.metadata import (
+    MetadataRequest,
+    MetadataRunResult,
+    MetadataUseCase,
+)
 from dj_digger.core.application.scan import ScanRequest, ScanRunResult, ScanUseCase
 from dj_digger.core.catalog.current_analysis import CurrentAnalysisProjector
 from dj_digger.core.catalog.database import Database
@@ -36,7 +41,6 @@ from dj_digger.exports.audit import AuditExporter
 from dj_digger.exports.curation import CurationExportContent, CurationExportResult, export_curation
 from dj_digger.exports.snapshot import SnapshotExporter, SnapshotResult
 from dj_digger.exports.tracks import TracksExporter
-from dj_digger.metadata.exiftool import ExifToolExtractor, MetadataRunResult, MetadataService
 from dj_digger.progress import NullProgressReporter, ProgressReporter
 
 
@@ -117,13 +121,22 @@ class WorkspaceApplication:
         return self.scan(enabled_only=enabled_only)
 
     def metadata(
-        self, source_id: str | None = None, *, path_prefix: str | None = None, force: bool = False
+        self,
+        source_id: str | MetadataRequest | None = None,
+        *,
+        path_prefix: str | None = None,
+        force: bool = False,
     ) -> MetadataRunResult:
-        if path_prefix is not None and not path_prefix.strip():
-            raise ValueError("path prefix must not be blank")
-        return MetadataService(self.database, ExifToolExtractor()).refresh(
-            source_id, force=force, path_prefix=path_prefix
+        request = (
+            source_id
+            if isinstance(source_id, MetadataRequest)
+            else MetadataRequest(source_id=source_id, path_prefix=path_prefix, force=force)
         )
+        return self._metadata_result(request)
+
+    def _metadata_result(self, request: MetadataRequest) -> MetadataRunResult:
+        """Execute one canonical metadata orchestration for all facades."""
+        return MetadataUseCase(self.database).execute(request)
 
     def analyze(
         self,
@@ -537,6 +550,10 @@ class CoreApplication(WorkspaceApplication):
     def scan(self, request: ScanRequest) -> ScanRunResult:  # type: ignore[override]
         """Scan the requested sources and return immutable typed results."""
         return self._scan_result(request)
+
+    def metadata(self, request: MetadataRequest | None = None) -> MetadataRunResult:  # type: ignore[override]
+        """Refresh metadata through the typed core contract."""
+        return super().metadata(request or MetadataRequest())
 
     def _scan_for_refresh(self, *, enabled_only: bool) -> list[ScanResult]:
         """Keep inherited refresh compatible with the typed scan contract."""

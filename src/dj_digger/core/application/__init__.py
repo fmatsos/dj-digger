@@ -10,6 +10,7 @@ from dj_digger.core.application.errors import (
     ResourceNotFoundError,
     StateConflictError,
 )
+from dj_digger.core.application.metadata import MetadataRequest, MetadataRunResult, MetadataUseCase
 from dj_digger.core.application.progress import ProgressEvent, ProgressSink
 from dj_digger.core.application.scan import (
     ScanRequest,
@@ -24,6 +25,9 @@ __all__ = [
     "DependencyTimeoutError",
     "IntegrityError",
     "InvalidInputError",
+    "MetadataRequest",
+    "MetadataRunResult",
+    "MetadataUseCase",
     "ProgressEvent",
     "ProgressSink",
     "ResourceNotFoundError",
