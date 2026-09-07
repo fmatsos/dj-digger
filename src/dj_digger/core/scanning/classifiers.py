@@ -3,7 +3,7 @@
 from enum import StrEnum
 from pathlib import Path
 
-from dj_digger.artifacts.discovery import classify_dj_artifact
+from dj_digger.core.artifacts.discovery import classify_dj_artifact
 
 AUDIO_EXTENSIONS = {".mp3", ".flac", ".wav", ".aiff", ".aif", ".m4a", ".aac", ".ogg", ".opus"}
 

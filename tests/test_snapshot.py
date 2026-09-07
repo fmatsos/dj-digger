@@ -8,7 +8,7 @@ from jsonschema import Draft202012Validator
 
 from dj_digger.catalog.database import Database
 from dj_digger.catalog.repositories import SourceRepository
-from dj_digger.exports.snapshot import SnapshotExporter
+from dj_digger.core.exports.snapshot import SnapshotExporter
 
 
 def test_snapshot_contains_hashed_canonical_facets_and_archive(tmp_path: Path) -> None:

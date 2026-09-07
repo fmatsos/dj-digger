@@ -4,7 +4,7 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
-from dj_digger.artifacts.discovery import classify_dj_artifact
+from dj_digger.core.artifacts.discovery import classify_dj_artifact
 from dj_digger.core.config import LibrarySourceConfig
 from dj_digger.core.scanning.classifiers import EntryKind, classify
 

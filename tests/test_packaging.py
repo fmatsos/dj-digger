@@ -51,5 +51,5 @@ def test_packaged_resources_are_resolved_without_current_working_directory(
     monkeypatch.chdir(tmp_path)
 
     assert resources.read_text("analysis.toml").startswith("[meta]\n")
-    assert '"$schema"' in resources.read_text("schemas/tracks.schema.json")
-    assert '"schema_version"' in resources.read_text("schemas/curation-result.schema.json")
+    assert '"$schema"' in resources.read_text("core/schemas/tracks.schema.json")
+    assert '"schema_version"' in resources.read_text("core/schemas/curation-result.schema.json")

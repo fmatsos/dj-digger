@@ -9,7 +9,7 @@ from jsonschema.exceptions import ValidationError
 from dj_digger.catalog.database import Database
 from dj_digger.catalog.read_repositories import LibraryReadRepository
 from dj_digger.catalog.repositories import SourceRepository, TrackRepository
-from dj_digger.exports.tracks import TracksExporter
+from dj_digger.core.exports.tracks import TracksExporter
 
 TRACK_INSERT = """
     INSERT INTO tracks (

@@ -14,8 +14,10 @@ from dj_digger import background
 from dj_digger.application import WorkspaceApplication
 from dj_digger.cli.commands.analyze import execute as execute_analyze
 from dj_digger.cli.commands.duplicates import execute as execute_duplicates
+from dj_digger.cli.commands.export import execute as execute_export
 from dj_digger.cli.commands.metadata import execute as execute_metadata
 from dj_digger.cli.commands.scan import execute as execute_scan
+from dj_digger.cli.commands.snapshot import execute as execute_snapshot
 from dj_digger.cli.progress import RichProgressReporter
 from dj_digger.completion import install_patches
 from dj_digger.core.application import (
@@ -23,8 +25,11 @@ from dj_digger.core.application import (
     DuplicateAnalyzeRequest,
     DuplicateListRequest,
     DuplicateMarkBestRequest,
+    ExportRequest,
+    SnapshotRequest,
 )
 from dj_digger.core.config import WorkspaceConfig
+from dj_digger.core.exports.curation import CurationExportContent
 from dj_digger.curation import CurationCatalog, CurationCreation, CurationStatus
 from dj_digger.curation.agent import (
     CurationGroundingError,
@@ -38,7 +43,6 @@ from dj_digger.curation.client import (
     CurationTimeoutError,
     CurationTransportError,
 )
-from dj_digger.exports.curation import CurationExportContent
 from dj_digger.logging import RunLogger
 from dj_digger.mcp_server import create_curation_mcp_server
 from dj_digger.set_copy import copy_set
@@ -581,11 +585,10 @@ def export(
     """Publish canonical catalog facets."""
     _run(
         config,
-        lambda service: {
-            "event": "export",
-            "status": "succeeded",
-            "exports": service.export(facet, type=type_, format=format_, fields=fields),
-        },
+        lambda service: execute_export(
+            service,
+            ExportRequest(facet=facet, type=type_, format=format_, fields=fields),
+        ),
         json_output=json_output,
     )
 
@@ -651,12 +654,7 @@ def snapshot(
     """Create a validated, optionally archived export snapshot."""
     _run(
         config,
-        lambda service: {
-            "event": "snapshot",
-            "status": "succeeded",
-            "directory": str((result := service.snapshot(output, archive)).directory),
-            "archive": None if result.archive is None else str(result.archive),
-        },
+        lambda service: execute_snapshot(service, SnapshotRequest(output, archive)),
         json_output=json_output,
     )
 

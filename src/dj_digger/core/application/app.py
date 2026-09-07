@@ -10,7 +10,6 @@ from types import TracebackType
 from typing import Any, Self, cast
 
 from dj_digger.core.analysis.config import CURRENT_ANALYZER_VERSION, AnalysisIdentity
-from dj_digger.core.analysis.exporters import AnalysisExporter
 from dj_digger.core.analysis.pipeline import (
     AnalysisExtractor,
     AnalysisRunResult,
@@ -27,7 +26,8 @@ from dj_digger.core.application.duplicates import (
     DuplicateMarkBestRequest,
     DuplicateMarkBestUseCase,
 )
-from dj_digger.core.application.errors import ResourceNotFoundError
+from dj_digger.core.application.errors import InvalidInputError, ResourceNotFoundError
+from dj_digger.core.application.export import ExportRequest, ExportResult, ExportUseCase
 from dj_digger.core.application.metadata import (
     MetadataRequest,
     MetadataRunResult,
@@ -35,6 +35,7 @@ from dj_digger.core.application.metadata import (
 )
 from dj_digger.core.application.progress import ProgressSink
 from dj_digger.core.application.scan import ScanRequest, ScanRunResult, ScanUseCase
+from dj_digger.core.application.snapshot import SnapshotRequest, SnapshotResult, SnapshotUseCase
 from dj_digger.core.catalog.current_analysis import CurrentAnalysisProjector
 from dj_digger.core.catalog.database import Database
 from dj_digger.core.catalog.migrations import CURRENT_VERSION
@@ -46,12 +47,13 @@ from dj_digger.core.duplicates.service import (
     DuplicateGroupDescription,
     DuplicateService,
 )
+from dj_digger.core.exports.curation import (
+    CurationExportContent,
+    CurationExportResult,
+    export_curation,
+)
 from dj_digger.curation import CurationCreation, CurationRepository, CurationStatus
 from dj_digger.curation.agent import CurationAgent, CurationRequest, CurationResult
-from dj_digger.exports.audit import AuditExporter
-from dj_digger.exports.curation import CurationExportContent, CurationExportResult, export_curation
-from dj_digger.exports.snapshot import SnapshotExporter, SnapshotResult
-from dj_digger.exports.tracks import TracksExporter
 
 
 @dataclass(frozen=True)
@@ -327,67 +329,30 @@ class WorkspaceApplication:
 
     def export(
         self,
-        facet: str | None = None,
+        facet: str | ExportRequest | None = None,
         *,
         type: str | None = None,
         format: str | None = None,
         fields: str | None = None,
     ) -> list[str]:
-        destination = self.config.exports
-        destination.mkdir(parents=True, exist_ok=True)
-        if facet not in {None, "all", "tracks", "artifacts", "analysis"}:
-            raise ValueError(f"unknown export facet: {facet}")
-        if type is not None and type not in {
-            "all",
-            "tracks",
-            "artifacts",
-            "analysis",
-            "sections",
-            "run",
-        }:
-            raise ValueError(f"unknown export type: {type}")
-        if fields is not None and type is None:
-            raise ValueError("--fields requires a leaf --type")
-        if fields is not None and type == "all":
-            raise ValueError("--fields requires a leaf --type")
-        if (
-            type is not None
-            and type != "all"
-            and facet not in {None, type, "analysis" if type in {"sections", "run"} else type}
-        ):
-            raise ValueError("--type and --facet select different exports")
-        selected = type or facet
-        if selected == "all" or selected is None:
-            selected = None
-        published: list[str] = []
-        # Validate/publish the atomic analysis group first.
-        analysis_selected = selected in {None, "analysis", "sections", "run"}
-        if analysis_selected:
-            published.extend(
-                str(item.path)
-                for item in AnalysisExporter(self.database).export(
-                    destination,
-                    format=format,
-                    fields=fields,
-                    leaf_type=type if type in {"analysis", "sections", "run"} else None,
-                )
-            )
-        if selected in {None, "tracks"}:
-            tracks = TracksExporter(self.database).export(
-                destination / "tracks.tsv", format=format, fields=fields
-            )
-            published.append(str(tracks.path))
-        if selected in {None, "artifacts"}:
-            published.extend(
-                str(item.path)
-                for item in AuditExporter(self.database).export(
-                    destination, format=format, fields=fields
-                )
-            )
-        return published
+        request = (
+            facet
+            if isinstance(facet, ExportRequest)
+            else ExportRequest(facet=facet, type=type, format=format, fields=fields)
+        )
+        try:
+            result = ExportUseCase(self.database, self.config).execute(request)
+        except InvalidInputError as error:
+            # Keep the historical facade's exception type stable. Core callers
+            # use ExportUseCase/CoreApplication and receive InvalidInputError.
+            raise ValueError(str(error)) from error
+        return [str(path) for path in result.paths]
 
-    def snapshot(self, output: Path, archive: bool) -> SnapshotResult:
-        return SnapshotExporter(self.database).create(output, archive)
+    def snapshot(self, output: Path | SnapshotRequest, archive: bool = False) -> SnapshotResult:
+        request = (
+            output if isinstance(output, SnapshotRequest) else SnapshotRequest(output, archive)
+        )
+        return SnapshotUseCase(self.database).execute(request)
 
     def refresh(
         self,
@@ -664,6 +629,14 @@ class CoreApplication(WorkspaceApplication):
     def _scan_for_refresh(self, *, enabled_only: bool) -> list[ScanResult]:
         """Keep inherited refresh compatible with the typed scan contract."""
         return _legacy_scan_results(self.scan(ScanRequest(enabled_only=enabled_only)))
+
+    def export(self, request: ExportRequest | None = None) -> ExportResult:  # type: ignore[override]
+        """Publish through the typed core export contract."""
+        return ExportUseCase(self.database, self.config).execute(request)
+
+    def snapshot(self, request: SnapshotRequest) -> SnapshotResult:  # type: ignore[override]
+        """Publish through the typed core snapshot contract."""
+        return SnapshotUseCase(self.database).execute(request)
 
 
 def _legacy_source(request: str | None, source_id: str | None) -> str | None:

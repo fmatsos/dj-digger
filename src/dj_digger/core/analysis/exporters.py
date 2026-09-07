@@ -12,8 +12,7 @@ from typing import Any, cast
 from jsonschema import Draft202012Validator, FormatChecker  # type: ignore[import-untyped]
 
 from dj_digger.core.catalog.database import Database
-from dj_digger.core.resources import read_text
-from dj_digger.exports.formats import (
+from dj_digger.core.exports.formats import (
     fields_for_schema,
     output_path,
     projected,
@@ -21,7 +20,8 @@ from dj_digger.exports.formats import (
     write_object,
     write_rows,
 )
-from dj_digger.exports.tracks import PublishedFacet
+from dj_digger.core.exports.tracks import PublishedFacet
+from dj_digger.core.resources import read_text
 
 
 @dataclass(frozen=True)
@@ -43,7 +43,7 @@ class AnalysisExporter:
                     json.loads(
                         (schemas_directory / filename).read_text(encoding="utf-8")
                         if schemas_directory is not None
-                        else read_text(f"schemas/{filename}")
+                        else read_text(f"core/schemas/{filename}")
                     ),
                 )
                 for name, filename in (
@@ -82,7 +82,7 @@ class AnalysisExporter:
             self._sections_validator.validate(row)
         self._run_validator.validate(run)
 
-        if format is not None or fields is not None:
+        if format is not None or fields is not None or leaf_type is not None:
             effective_formats = {
                 "analysis": format or "tsv",
                 "sections": format or "json",
@@ -100,11 +100,14 @@ class AnalysisExporter:
                 if leaf_type in {"analysis", "sections", "run"}
                 else ("analysis", "sections", "run")
             )
-            chosen = select_fields(schema_fields[selected_types[0]], fields)
+            chosen_by_type = {
+                name: select_fields(schema_fields[name], fields) if fields is not None else None
+                for name in selected_types
+            }
             paths_by_type = {
-                "analysis": output_path(destination / "dj-analysis.tsv", format or "tsv"),
-                "sections": output_path(destination / "dj-sections.jsonl", format or "json"),
-                "run": output_path(destination / "dj-analysis-run.json", format or "json"),
+                "analysis": _output_path(destination / "dj-analysis.tsv", format, fields, "tsv"),
+                "sections": _output_path(destination / "dj-sections.jsonl", format, fields, "json"),
+                "run": _output_path(destination / "dj-analysis-run.json", format, fields, "json"),
             }
             # Validate full rows above, then stage every selected artifact before replacement.
             destination.mkdir(parents=True, exist_ok=True)
@@ -115,18 +118,19 @@ class AnalysisExporter:
                 if "analysis" in selected_types:
                     write_rows(
                         staged_by_type["analysis"],
-                        projected(analyses, chosen),
-                        chosen or schema_fields["analysis"],
+                        projected(analyses, chosen_by_type["analysis"]),
+                        chosen_by_type["analysis"] or schema_fields["analysis"],
                         effective_formats["analysis"],
                     )
                 if "sections" in selected_types:
                     write_rows(
                         staged_by_type["sections"],
-                        projected(sections, chosen),
-                        chosen or schema_fields["sections"],
+                        projected(sections, chosen_by_type["sections"]),
+                        chosen_by_type["sections"] or schema_fields["sections"],
                         effective_formats["sections"],
                     )
                 if "run" in selected_types:
+                    chosen = chosen_by_type["run"]
                     value = run if chosen is None else {k: run.get(k) for k in chosen}
                     write_object(
                         staged_by_type["run"],
@@ -398,3 +402,10 @@ def _serialize(value: object) -> object:
     if isinstance(value, bool):
         return str(value).lower()
     return value
+
+
+def _output_path(path: Path, fmt: str | None, fields: str | None, default: str) -> Path:
+    """Keep canonical names unless custom projection requires a format suffix."""
+    if fmt is None and fields is None:
+        return path
+    return output_path(path, fmt or default)

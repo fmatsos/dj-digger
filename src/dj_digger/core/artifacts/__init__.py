@@ -1,4 +1,4 @@
-"""Compatibility facade for the canonical core artifact classifier."""
+"""DJ application artifact discovery."""
 
 from dj_digger.core.artifacts.discovery import classify_dj_artifact
 
