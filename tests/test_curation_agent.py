@@ -192,6 +192,8 @@ def test_successive_tools_and_catalog_regrounding(
         "get_curation_candidates",
         "create_curation",
     }
+    assert handler.requests[0]["max_completion_tokens"] == 1_000
+    assert "max_tokens" not in handler.requests[0]
 
 
 def test_custom_system_prompt_is_subordinate_and_cannot_expand_tools(
