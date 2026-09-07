@@ -31,10 +31,26 @@ def test_workspace_config_reads_explicit_curation_limits() -> None:
     config = WorkspaceConfig.load(Path("config/dj-digger.example.toml"))
 
     assert config.curation.base_url == "https://api.openai.com/v1"
+    assert config.curation.endpoint == "chat/completions"
     assert config.curation.model == "gpt-5-mini"
+    assert config.curation.reasoning_effort == "none"
     assert config.curation.api_key_env == "OPENAI_API_KEY"
     assert config.curation.max_turns == 8
     assert config.curation.max_output_tracks == 20
+
+
+@pytest.mark.parametrize("endpoint", ["chat/completions", "/responses"])
+def test_workspace_config_reads_curation_endpoint(tmp_path: Path, endpoint: str) -> None:
+    path = tmp_path / "curation-endpoint.toml"
+    path.write_text(
+        (FIXTURES / "dj-digger.toml").read_text()
+        + f'\n[curation]\nendpoint = "{endpoint}"\nreasoning_effort = "high"\n'
+    )
+
+    config = WorkspaceConfig.load(path)
+
+    assert config.curation.endpoint == endpoint.strip("/")
+    assert config.curation.reasoning_effort == "high"
 
 
 def test_workspace_config_rejects_cleartext_curation_secret(tmp_path: Path) -> None:

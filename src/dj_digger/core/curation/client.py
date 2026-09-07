@@ -104,18 +104,23 @@ class OpenAICompatibleClient:
     def complete(
         self, messages: Sequence[Mapping[str, Any]], tools: Sequence[Mapping[str, Any]]
     ) -> AssistantMessage:
-        payload = json.dumps(
-            {
+        if self._config.endpoint == "responses":
+            payload_value = _responses_payload(self._config, messages, tools)
+        else:
+            payload_value = {
                 "model": self._config.model,
                 "messages": list(messages),
                 "tools": list(tools),
                 "tool_choice": "auto",
                 "max_completion_tokens": self._config.max_output_tokens,
-            },
+                "reasoning_effort": self._config.reasoning_effort,
+            }
+        payload = json.dumps(
+            payload_value,
             separators=(",", ":"),
         ).encode()
         request = urllib.request.Request(
-            f"{self._config.base_url}/chat/completions",
+            f"{self._config.base_url}/{self._config.endpoint}",
             data=payload,
             headers={
                 "Authorization": f"Bearer {self._api_key}",
@@ -143,6 +148,8 @@ class OpenAICompatibleClient:
             raise CurationResponseError("curation model response exceeded its size limit")
         try:
             value = json.loads(raw)
+            if self._config.endpoint == "responses":
+                return _parse_responses_message(value)
             return _Completion.model_validate(value).choices[0].message
         except (UnicodeDecodeError, json.JSONDecodeError, ValidationError, TypeError):
             raise CurationResponseError("curation model returned an invalid response") from None
@@ -246,3 +253,88 @@ def _http_error_detail(error: urllib.error.HTTPError, api_key: str) -> str:
     message = message.replace(api_key, "[REDACTED]")[:2_000]
     suffix = f": {message}" if message else ""
     return f"HTTP {error.code}{suffix}"
+
+
+def _responses_payload(
+    config: CurationConfig,
+    messages: Sequence[Mapping[str, Any]],
+    tools: Sequence[Mapping[str, Any]],
+) -> dict[str, Any]:
+    input_items: list[dict[str, Any]] = []
+    for message in messages:
+        role = message.get("role")
+        if role == "assistant":
+            content = message.get("content")
+            if isinstance(content, str) and content:
+                input_items.append({"role": "assistant", "content": content})
+            tool_calls = message.get("tool_calls", [])
+            if isinstance(tool_calls, list):
+                for call in tool_calls:
+                    if not isinstance(call, dict) or not isinstance(call.get("function"), dict):
+                        continue
+                    function = call["function"]
+                    input_items.append(
+                        {
+                            "type": "function_call",
+                            "call_id": call.get("id"),
+                            "name": function.get("name"),
+                            "arguments": function.get("arguments"),
+                        }
+                    )
+        elif role == "tool":
+            input_items.append(
+                {
+                    "type": "function_call_output",
+                    "call_id": message.get("tool_call_id"),
+                    "output": message.get("content"),
+                }
+            )
+        else:
+            input_items.append(dict(message))
+    response_tools = []
+    for tool in tools:
+        function = tool.get("function")
+        if isinstance(function, Mapping):
+            response_tools.append({"type": "function", **function})
+    return {
+        "model": config.model,
+        "input": input_items,
+        "tools": response_tools,
+        "tool_choice": "auto",
+        "max_output_tokens": config.max_output_tokens,
+        "reasoning": {"effort": config.reasoning_effort},
+        "store": False,
+    }
+
+
+def _parse_responses_message(value: object) -> AssistantMessage:
+    if not isinstance(value, dict) or not isinstance(value.get("output"), list):
+        raise TypeError
+    content_parts: list[str] = []
+    tool_calls: list[ToolCall] = []
+    for item in value["output"]:
+        if not isinstance(item, dict):
+            continue
+        if item.get("type") == "function_call":
+            tool_calls.append(
+                ToolCall.model_validate(
+                    {
+                        "id": item.get("call_id"),
+                        "type": "function",
+                        "function": {"name": item.get("name"), "arguments": item.get("arguments")},
+                    }
+                )
+            )
+        elif item.get("type") == "message" and isinstance(item.get("content"), list):
+            for content in item["content"]:
+                if (
+                    isinstance(content, dict)
+                    and content.get("type") == "output_text"
+                    and isinstance(content.get("text"), str)
+                ):
+                    content_parts.append(content["text"])
+    return AssistantMessage(
+        role="assistant",
+        content="\n".join(content_parts) or None,
+        tool_calls=tool_calls,
+    )

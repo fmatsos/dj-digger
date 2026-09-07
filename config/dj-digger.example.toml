@@ -4,7 +4,9 @@ exports = "/workspace/exports"
 
 [curation]
 base_url = "https://api.openai.com/v1"
+endpoint = "chat/completions"
 model = "gpt-5-mini"
+reasoning_effort = "none"
 api_key_env = "OPENAI_API_KEY"
 request_timeout_seconds = 30
 total_timeout_seconds = 120
