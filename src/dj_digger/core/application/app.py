@@ -2,7 +2,6 @@
 
 import importlib.util
 import shutil
-import subprocess
 from dataclasses import dataclass, replace
 from pathlib import Path
 from types import TracebackType
@@ -33,12 +32,25 @@ from dj_digger.core.application.metadata import (
     MetadataRunResult,
     MetadataUseCase,
 )
+from dj_digger.core.application.operations import (
+    DatabaseIntegrityCheckResult,
+    DatabaseOptimizeResult,
+    DatabaseQuickCheckResult,
+    DatabaseRebuildResult,
+    DoctorResult,
+    DoctorUseCase,
+    IntegrityCheckDatabaseUseCase,
+    OptimizeDatabaseUseCase,
+    QuickCheckDatabaseUseCase,
+    RebuildCurrentAnalysisUseCase,
+    StatusResult,
+    StatusUseCase,
+    has_chromaprint_muxer,
+)
 from dj_digger.core.application.progress import ProgressSink
 from dj_digger.core.application.scan import ScanRequest, ScanRunResult, ScanUseCase
 from dj_digger.core.application.snapshot import SnapshotRequest, SnapshotResult, SnapshotUseCase
-from dj_digger.core.catalog.current_analysis import CurrentAnalysisProjector
 from dj_digger.core.catalog.database import Database
-from dj_digger.core.catalog.migrations import CURRENT_VERSION
 from dj_digger.core.catalog.repositories import SourceRepository
 from dj_digger.core.config import LibrarySourceConfig, WorkspaceConfig
 from dj_digger.core.curation.models import CurationCreation, CurationStatus
@@ -442,158 +454,36 @@ class WorkspaceApplication:
         }
 
     def status(self) -> dict[str, Any]:
-        sources: list[dict[str, Any]] = []
-        for source in self.config.sources:
-            present = self.database.scalar(
-                "SELECT COUNT(*) FROM tracks WHERE source_id = ? AND presence_status = 'present'",
-                (source.id,),
-            )
-            missing = self.database.scalar(
-                "SELECT COUNT(*) FROM tracks WHERE source_id = ? AND presence_status = 'missing'",
-                (source.id,),
-            )
-            latest = self.database.execute(
-                "SELECT id, status, finished_at FROM scan_runs WHERE source_id = ? "
-                "ORDER BY id DESC LIMIT 1",
-                (source.id,),
-            ).fetchone()
-            sources.append(
-                {
-                    "source_id": source.id,
-                    "enabled": source.enabled,
-                    "present_tracks": int(present or 0),
-                    "missing_tracks": int(missing or 0),
-                    "latest_scan": None
-                    if latest is None
-                    else {"id": latest[0], "status": latest[1], "finished_at": latest[2]},
-                }
-            )
-        analysis = self.database.execute(
-            "SELECT id, status, finished_at, analysis_schema_version, "
-            "analyzer_version, config_hash "
-            "FROM analysis_runs ORDER BY id DESC LIMIT 1"
-        ).fetchone()
-        analysis_identity = (
-            None
-            if analysis is None
-            else {
-                "schema_version": analysis[3],
-                "analyzer_version": analysis[4],
-                "config_hash": analysis[5],
-            }
-        )
-        analysis_facets = {
-            name: (self.config.exports / name).is_file()
-            for name in ("dj-analysis.tsv", "dj-sections.jsonl", "dj-analysis-run.json")
-        }
-        return {
-            "event": "status",
-            "status": "succeeded",
-            "sources": sources,
-            "latest_analysis": None
-            if analysis is None
-            else {
-                "id": analysis[0],
-                "status": analysis[1],
-                "finished_at": analysis[2],
-                "identity": analysis_identity,
-            },
-            "exports": {
-                "tracks": (self.config.exports / "tracks.tsv").is_file(),
-                "analysis": analysis_facets,
-            },
-        }
+        return StatusUseCase(self.database, self.config).execute().as_dict()
 
     def optimize_database(self) -> dict[str, Any]:
         """Run SQLite's bounded planner-statistics maintenance."""
-        self.database.optimize()
-        return {"event": "database.optimize", "status": "succeeded"}
+        return OptimizeDatabaseUseCase(self.database).execute().as_dict()
 
     def quick_check_database(self) -> dict[str, Any]:
         """Run the lightweight SQLite consistency check explicitly."""
-        result = self.database.quick_check()
-        return {
-            "event": "database.quick-check",
-            "status": "succeeded" if result == "ok" else "failed",
-            "quick_check": result,
-        }
+        return QuickCheckDatabaseUseCase(self.database).execute().as_dict()
 
     def integrity_check_database(self) -> dict[str, Any]:
         """Run SQLite's full integrity check explicitly."""
-        results = self.database.integrity_check()
-        return {
-            "event": "database.integrity-check",
-            "status": "succeeded" if results == ["ok"] else "failed",
-            "integrity_check": results,
-        }
+        return IntegrityCheckDatabaseUseCase(self.database).execute().as_dict()
 
     def rebuild_current_analysis(self) -> dict[str, Any]:
         """Rebuild the derived latest-success projection, then update planner statistics."""
-        projected_tracks = CurrentAnalysisProjector(self.database).rebuild()
-        self.database.optimize()
-        return {
-            "event": "database.rebuild-current-analysis",
-            "status": "succeeded",
-            "projected_tracks": projected_tracks,
-        }
+        return RebuildCurrentAnalysisUseCase(self.database).execute().as_dict()
 
     def doctor(self) -> dict[str, Any]:
-        issues: list[str] = []
-        for source in self.config.sources:
-            if not source.path.is_dir():
-                issues.append(f"source root unavailable: {source.id} ({source.path})")
-        for binary in ("exiftool",):
-            if shutil.which(binary) is None:
-                issues.append(f"required binary unavailable: {binary}")
-        analysis_enabled = any(source.enabled and source.analyze for source in self.config.sources)
-        duplicates_expected = any(source.enabled for source in self.config.sources)
-        ffmpeg_available = shutil.which("ffmpeg") is not None
-        if analysis_enabled or duplicates_expected:
-            for binary in ("ffprobe", "ffmpeg"):
-                if shutil.which(binary) is None:
-                    issues.append(f"required binary unavailable: {binary}")
-        if analysis_enabled:
-            if importlib.util.find_spec("essentia") is None:
-                issues.append("required dependency unavailable: essentia")
-            if self.config.dsp_path is not None:
-                try:
-                    from dj_digger.core.config import DspConfig
-
-                    DspConfig.load(self.config.dsp_path)
-                except (OSError, ValueError) as error:
-                    issues.append(f"DSP configuration invalid: {error}")
-        if duplicates_expected and ffmpeg_available and not _has_chromaprint_muxer():
-            issues.append("ffmpeg is missing the chromaprint muxer required for duplicates")
-        database = self.database.diagnostics()
-        version = int(database["schema_version"])
-        expected = CURRENT_VERSION
-        if version != expected:
-            issues.append(f"SQLite migration version is {version}, expected {expected}")
-        if database["journal_mode"] != "wal":
-            issues.append(f"SQLite journal mode is {database['journal_mode']}, expected wal")
-        if database["foreign_keys"] != 1:
-            issues.append("SQLite foreign keys are disabled")
-        if database["quick_check"] != "ok":
-            issues.append(f"SQLite quick check failed: {database['quick_check']}")
-        return {
-            "event": "doctor",
-            "status": "failed" if issues else "succeeded",
-            "database": database["path"],
-            "sqlite_version": database["sqlite_version"],
-            "migration_version": version,
-            "journal_mode": database["journal_mode"],
-            "foreign_keys": database["foreign_keys"],
-            "synchronous": database["synchronous"],
-            "busy_timeout_ms": database["busy_timeout_ms"],
-            "database_size_bytes": database["file_size_bytes"],
-            "wal_size_bytes": database["wal_size_bytes"],
-            "shm_present": database["shm_present"],
-            "page_count": database["page_count"],
-            "page_size_bytes": database["page_size_bytes"],
-            "freelist_count": database["freelist_count"],
-            "quick_check": database["quick_check"],
-            "issues": issues,
-        }
+        return (
+            DoctorUseCase(
+                self.database,
+                self.config,
+                chromaprint_check=_has_chromaprint_muxer,
+                which=shutil.which,
+                find_spec=importlib.util.find_spec,
+            )
+            .execute()
+            .as_dict()
+        )
 
     def _selected_sources(
         self, source_id: str | None, *, enabled_only: bool
@@ -619,6 +509,32 @@ class CoreApplication(WorkspaceApplication):
             config,
             analysis_extractor=cast(AnalysisExtractor | None, analysis_extractor),
         )
+
+    def status(self) -> StatusResult:  # type: ignore[override]
+        """Return the typed workspace status contract."""
+        return StatusUseCase(self.database, self.config).execute()
+
+    def doctor(self) -> DoctorResult:  # type: ignore[override]
+        """Return typed workspace and SQLite diagnostics."""
+        return DoctorUseCase(
+            self.database,
+            self.config,
+            chromaprint_check=_has_chromaprint_muxer,
+            which=shutil.which,
+            find_spec=importlib.util.find_spec,
+        ).execute()
+
+    def optimize_database(self) -> DatabaseOptimizeResult:  # type: ignore[override]
+        return OptimizeDatabaseUseCase(self.database).execute()
+
+    def quick_check_database(self) -> DatabaseQuickCheckResult:  # type: ignore[override]
+        return QuickCheckDatabaseUseCase(self.database).execute()
+
+    def integrity_check_database(self) -> DatabaseIntegrityCheckResult:  # type: ignore[override]
+        return IntegrityCheckDatabaseUseCase(self.database).execute()
+
+    def rebuild_current_analysis(self) -> DatabaseRebuildResult:  # type: ignore[override]
+        return RebuildCurrentAnalysisUseCase(self.database).execute()
 
     def get_curation(self, creation_id: str) -> CurationCreation | None:
         """Return one durable curation through the typed core boundary."""
@@ -746,11 +662,5 @@ def _worst_status(*statuses: str) -> str:
 
 
 def _has_chromaprint_muxer() -> bool:
-    """Report whether the available FFmpeg build can mux Chromaprint fingerprints."""
-    try:
-        result = subprocess.run(
-            ["ffmpeg", "-hide_banner", "-muxers"], check=True, capture_output=True, text=True
-        )
-    except (OSError, subprocess.CalledProcessError):
-        return False
-    return "chromaprint" in result.stdout
+    """Compatibility hook for tests and legacy callers."""
+    return has_chromaprint_muxer()
