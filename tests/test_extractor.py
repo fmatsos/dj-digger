@@ -5,16 +5,16 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from dj_digger.analysis.audio import TechnicalAudioMetadata
-from dj_digger.analysis.extractor import (
+from dj_digger.core.analysis.audio import TechnicalAudioMetadata
+from dj_digger.core.analysis.extractor import (
     AnalysisExtractionError,
     AnalysisExtractionResult,
     AudioDecoder,
     NumpySpectrumAdapter,
 )
-from dj_digger.analysis.rhythm import RhythmFacts
-from dj_digger.analysis.spectrum import SpectrumFacts
-from dj_digger.analysis.windows import IntroOutroWindows
+from dj_digger.core.analysis.rhythm import RhythmFacts
+from dj_digger.core.analysis.spectrum import SpectrumFacts
+from dj_digger.core.analysis.windows import IntroOutroWindows
 
 SPECTRUM_BANDS = {
     "sub": (20.0, 60.0),
@@ -112,7 +112,7 @@ class _Fail:
     ),
 )
 def test_composite_reports_each_stage(stage: str, tmp_path: Path) -> None:
-    from dj_digger.analysis.extractor import CompositeAudioExtractor
+    from dj_digger.core.analysis.extractor import CompositeAudioExtractor
 
     common = {
         "decoder": _Decoder(),
@@ -151,7 +151,7 @@ def test_decoder_builds_float32_mono_48khz_without_tempfile(
         assert kwargs["capture_output"] is True
         return type("Result", (), {"stdout": np.array([0.25, -0.5], dtype="<f4").tobytes()})()
 
-    monkeypatch.setattr("dj_digger.analysis.extractor.subprocess.run", run)
+    monkeypatch.setattr("dj_digger.core.analysis.extractor.subprocess.run", run)
     samples = AudioDecoder().decode(Path("track.mp3"))
     assert samples.dtype == np.float32
     assert samples.tolist() == [0.25, -0.5]
@@ -161,7 +161,7 @@ def test_decoder_builds_float32_mono_48khz_without_tempfile(
 def test_composite_passes_decoded_float32_buffer_to_rhythm_without_copy(
     tmp_path: Path,
 ) -> None:
-    from dj_digger.analysis.extractor import CompositeAudioExtractor
+    from dj_digger.core.analysis.extractor import CompositeAudioExtractor
 
     decoder = _Decoder()
     decoded = decoder.decode(tmp_path / "track.wav")
@@ -184,7 +184,7 @@ def test_composite_passes_decoded_float32_buffer_to_rhythm_without_copy(
 
 
 def test_composite_uses_new_analyzer_identity_for_percival_beat_grid() -> None:
-    from dj_digger.analysis.extractor import CompositeAudioExtractor
+    from dj_digger.core.analysis.extractor import CompositeAudioExtractor
 
     assert CompositeAudioExtractor().identity.analyzer_version == "dj-digger-analysis/3"
 
@@ -269,7 +269,7 @@ def test_numpy_spectrum_adapter_does_not_retain_all_frame_magnitudes(
         weakref.finalize(magnitude, released)
         return magnitude
 
-    monkeypatch.setattr("dj_digger.analysis.extractor.np.abs", track_abs)
+    monkeypatch.setattr("dj_digger.core.analysis.extractor.np.abs", track_abs)
     samples = np.sin(np.arange(80, dtype=np.float32))
 
     NumpySpectrumAdapter(SPECTRUM_BANDS, 8, 4).extract(samples, 48_000)
@@ -281,7 +281,7 @@ def test_decoder_wraps_ffmpeg_failures_with_decode_stage(monkeypatch: pytest.Mon
     def run(*_args: object, **_kwargs: object) -> object:
         raise OSError("ffmpeg missing")
 
-    monkeypatch.setattr("dj_digger.analysis.extractor.subprocess.run", run)
+    monkeypatch.setattr("dj_digger.core.analysis.extractor.subprocess.run", run)
     with pytest.raises(AnalysisExtractionError) as error:
         AudioDecoder().decode(Path("track.mp3"))
     assert error.value.stage == "decode"

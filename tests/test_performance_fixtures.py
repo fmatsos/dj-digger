@@ -6,7 +6,7 @@ from performance.benchmark_queries import ALL_BENCHMARK_CASES
 from performance.fixtures import build_catalog
 from performance.query_plans import explain, has_full_scan
 
-from dj_digger.catalog.database import Database
+from dj_digger.core.catalog.database import Database
 
 
 def test_build_catalog_has_requested_cardinality(tmp_path: Path) -> None:

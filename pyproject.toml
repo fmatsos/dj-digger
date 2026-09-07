@@ -23,6 +23,8 @@ dependencies = [
 dj-digger = "dj_digger.cli:app"
 
 [tool.hatch.build.targets.wheel]
+# Keep the package root so both canonical ``core`` resources and the CLI
+# subpackages are included in wheels and source distributions.
 packages = ["src/dj_digger"]
 
 [tool.hatch.build.targets.wheel.force-include]

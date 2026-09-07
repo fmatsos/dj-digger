@@ -8,9 +8,9 @@ from pathlib import Path
 from analysis_fixture import analysis_fixture
 from jsonschema import Draft202012Validator, FormatChecker
 
-from dj_digger.application import WorkspaceApplication
-from dj_digger.config import LibrarySourceConfig, WorkspaceConfig
-from dj_digger.exports.snapshot import SnapshotResult
+from dj_digger.core.application.app import WorkspaceApplication
+from dj_digger.core.config import LibrarySourceConfig, WorkspaceConfig
+from dj_digger.core.exports.snapshot import SnapshotResult
 
 _analysis = analysis_fixture
 

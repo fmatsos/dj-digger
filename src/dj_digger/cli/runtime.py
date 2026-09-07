@@ -12,7 +12,7 @@ from dj_digger.cli.presenters.scan import scan_payload
 from dj_digger.core.application import CoreApplication, MetadataRequest, RefreshRequest, ScanRequest
 from dj_digger.core.application.progress import ProgressSink
 from dj_digger.core.config import WorkspaceConfig
-from dj_digger.logging import RunLogger
+from dj_digger.core.run_log import RunLogger
 
 
 def run_scan(config_path: Path, source_id: str | None) -> dict[str, Any]:

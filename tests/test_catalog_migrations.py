@@ -6,9 +6,9 @@ from pathlib import Path
 
 import pytest
 
-from dj_digger.catalog.database import Database
-from dj_digger.catalog.migrations import migrate
-from dj_digger.catalog.repositories import (
+from dj_digger.core.catalog.database import Database
+from dj_digger.core.catalog.migrations import migrate
+from dj_digger.core.catalog.repositories import (
     ScanRunRepository,
     SourceRepository,
     TrackRepository,
@@ -32,7 +32,9 @@ V6_TABLES = (
 def _create_v6_catalog(path: Path, *, invalid_foreign_key: bool = False) -> None:
     root = Path(__file__).parents[1]
     connection = sqlite3.connect(path)
-    connection.executescript((root / "schemas/catalog-v6.sql").read_text(encoding="utf-8"))
+    connection.executescript(
+        (root / "src/dj_digger/core/catalog/sql/catalog-v6.sql").read_text(encoding="utf-8")
+    )
     connection.executescript(
         """
         INSERT INTO library_sources VALUES
@@ -101,7 +103,9 @@ V7_TABLES = V6_TABLES + ("current_track_analysis",)
 def _create_v7_catalog(path: Path) -> None:
     root = Path(__file__).parents[1]
     connection = sqlite3.connect(path)
-    connection.executescript((root / "schemas/catalog-v7.sql").read_text(encoding="utf-8"))
+    connection.executescript(
+        (root / "src/dj_digger/core/catalog/sql/catalog-v7.sql").read_text(encoding="utf-8")
+    )
     connection.executescript(
         """
         INSERT INTO library_sources VALUES
@@ -182,8 +186,8 @@ def _normalized_schema(connection: sqlite3.Connection) -> dict[tuple[str, str], 
 
 def test_current_schema_copy_matches_packaged_schema() -> None:
     root = Path(__file__).parents[1]
-    assert (root / "schemas/catalog.sql").read_bytes() == (
-        root / "src/dj_digger/catalog/sql/catalog.sql"
+    assert (root / "src/dj_digger/core/catalog/sql/catalog.sql").read_bytes() == (
+        root / "src/dj_digger/core/catalog/sql/catalog.sql"
     ).read_bytes()
 
 
@@ -198,12 +202,12 @@ def test_wheel_migrates_without_the_checkout_schema(tmp_path: Path) -> None:
     isolated_package = tmp_path / "installed"
     with zipfile.ZipFile(wheel) as archive:
         packaged_files = set(archive.namelist())
-        assert "dj_digger/catalog/sql/catalog.sql" in packaged_files
-        assert "dj_digger/catalog/sql/migrate-20260907063758.sql" in packaged_files
-        assert "dj_digger/catalog/sql/migrate-20260905221652.sql" in packaged_files
-        assert "dj_digger/catalog/sql/migrate-20260827105404.sql" in packaged_files
-        assert "dj_digger/catalog/sql/migrate-20260827225144.sql" in packaged_files
-        assert "dj_digger/catalog/sql/migrate-20260828150213.sql" in packaged_files
+        assert "dj_digger/core/catalog/sql/catalog.sql" in packaged_files
+        assert "dj_digger/core/catalog/sql/migrate-20260907063758.sql" in packaged_files
+        assert "dj_digger/core/catalog/sql/migrate-20260905221652.sql" in packaged_files
+        assert "dj_digger/core/catalog/sql/migrate-20260827105404.sql" in packaged_files
+        assert "dj_digger/core/catalog/sql/migrate-20260827225144.sql" in packaged_files
+        assert "dj_digger/core/catalog/sql/migrate-20260828150213.sql" in packaged_files
         archive.extractall(isolated_package)
 
     result = subprocess.run(
@@ -211,9 +215,9 @@ def test_wheel_migrates_without_the_checkout_schema(tmp_path: Path) -> None:
             sys.executable,
             "-c",
             "from pathlib import Path; "
-            "from dj_digger.catalog.database import Database; "
-            "from dj_digger.exports.audit import AuditExporter; "
-            "from dj_digger.exports.tracks import TracksExporter; "
+            "from dj_digger.core.catalog.database import Database; "
+            "from dj_digger.core.exports.audit import AuditExporter; "
+            "from dj_digger.core.exports.tracks import TracksExporter; "
             "database = Database.open(Path('catalog.sqlite')); "
             "database.migrate(); "
             "assert database.table_exists('tracks'); "
@@ -249,7 +253,7 @@ def test_isolated_wheel_upgrades_a_v6_catalog(tmp_path: Path) -> None:
             sys.executable,
             "-c",
             "from pathlib import Path; "
-            "from dj_digger.catalog.database import Database; "
+            "from dj_digger.core.catalog.database import Database; "
             "database = Database.open(Path('catalog.sqlite')); "
             "database.migrate(); "
             "assert database.scalar('PRAGMA user_version') == 11; "
@@ -279,7 +283,7 @@ def test_wheel_contains_valid_analysis_schemas_outside_checkout(tmp_path: Path) 
     script = (
         "import importlib.resources as r; "
         "from jsonschema import Draft202012Validator; import json; "
-        "from dj_digger.curation.validation import validate_curation_result; "
+        "from dj_digger.core.curation.validation import validate_curation_result; "
         "assert callable(validate_curation_result); "
         "base=r.files('dj_digger').joinpath('core', 'schemas'); "
         "[Draft202012Validator.check_schema(json.loads(base.joinpath(name).read_text())) "
@@ -337,7 +341,9 @@ def test_existing_current_catalog_is_adopted_by_sqlite_utils(tmp_path: Path) -> 
     path = tmp_path / "catalog.sqlite"
     connection = sqlite3.connect(path)
     root = Path(__file__).parents[1]
-    connection.executescript((root / "schemas/catalog-v10.sql").read_text(encoding="utf-8"))
+    connection.executescript(
+        (root / "src/dj_digger/core/catalog/sql/catalog-v10.sql").read_text(encoding="utf-8")
+    )
     connection.execute("PRAGMA user_version = 10")
     connection.commit()
     connection.close()
@@ -365,7 +371,9 @@ def test_v10_upgrade_preserves_creations_with_legacy_blank_text(
     path = tmp_path / "catalog.sqlite"
     connection = sqlite3.connect(path)
     root = Path(__file__).parents[1]
-    connection.executescript((root / "schemas/catalog-v10.sql").read_text(encoding="utf-8"))
+    connection.executescript(
+        (root / "src/dj_digger/core/catalog/sql/catalog-v10.sql").read_text(encoding="utf-8")
+    )
     connection.execute(
         """INSERT INTO curation_creations VALUES
         ('creation', 'Name', 'set', ?, ?, 'draft', 'now', 'now', NULL, '{}')""",
@@ -730,7 +738,7 @@ def _create_v9_catalog(path: Path) -> None:
     root = Path(__file__).parents[1]
     connection = sqlite3.connect(path)
     connection.executescript(
-        (root / "src/dj_digger/catalog/sql/catalog-v9.sql").read_text(encoding="utf-8")
+        (root / "src/dj_digger/core/catalog/sql/catalog-v9.sql").read_text(encoding="utf-8")
     )
     connection.execute("PRAGMA user_version = 9")
     connection.commit()

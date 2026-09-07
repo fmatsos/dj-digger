@@ -16,7 +16,7 @@ from dj_digger.core.application.curation import CurationRequest
 from dj_digger.core.config import WorkspaceConfig
 from dj_digger.core.curation import CurationStatus
 from dj_digger.core.exports.curation import CurationExportContent
-from dj_digger.logging import RunLogger
+from dj_digger.core.run_log import RunLogger
 
 curation_app = typer.Typer(help="Create, inspect, and validate catalog-grounded curations.")
 

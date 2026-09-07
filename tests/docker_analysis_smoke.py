@@ -30,7 +30,9 @@ def main() -> None:
         ("dj-analysis.schema.json", result.payload),
         ("dj-sections.schema.json", result.sections),
     ):
-        schema = json.loads((root / "schemas" / name).read_text(encoding="utf-8"))
+        schema = json.loads(
+            (root / "src/dj_digger/core/schemas" / name).read_text(encoding="utf-8")
+        )
         Draft202012Validator(schema).validate(document)
     print(json.dumps({"status": result.status, "sections": len(result.sections["sections"])}))
 

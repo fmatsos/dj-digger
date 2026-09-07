@@ -90,8 +90,8 @@ fi
 
     analysis)
       # analysis profile: worker/pipeline tests + Ruff + mypy
-      cmd="uv run pytest tests/test_analysis.py && uv run ruff check src/dj_digger/analysis && uv run mypy src/dj_digger/analysis"
-      "$root/.agents/scripts/project-env" sh -c 'uv run pytest tests/ -k analysis && uv run ruff check src/dj_digger/analysis && uv run mypy src/dj_digger/analysis' > "$logdir/analysis.log" 2>&1 || status=$?
+      cmd="uv run pytest tests/test_analysis.py && uv run ruff check src/dj_digger/core/analysis && uv run mypy src/dj_digger/core/analysis"
+      "$root/.agents/scripts/project-env" sh -c 'uv run pytest tests/ -k analysis && uv run ruff check src/dj_digger/core/analysis && uv run mypy src/dj_digger/core/analysis' > "$logdir/analysis.log" 2>&1 || status=$?
       ;;
 
     exports)
@@ -102,7 +102,7 @@ fi
 
     runtime)
       # runtime profile: CLI/application tests + Ruff + mypy
-      cmd="uv run pytest tests/test_cli.py && uv run ruff check src/dj_digger/cli.py && uv run mypy src/dj_digger"
+      cmd="uv run pytest tests/test_cli.py && uv run ruff check src/dj_digger/cli && uv run mypy src/dj_digger"
       "$root/.agents/scripts/project-env" sh -c 'uv run pytest tests/ -k cli && uv run ruff check src/dj_digger && uv run mypy src/dj_digger' > "$logdir/runtime.log" 2>&1 || status=$?
       ;;
 

@@ -8,12 +8,12 @@ from pathlib import Path
 
 import pytest
 
-from dj_digger.catalog.models import Track
-from dj_digger.config import DspConfig
 from dj_digger.core.analysis.extractor import AnalysisExtractionError, AnalysisExtractionResult
 from dj_digger.core.analysis.protocol import MAX_REQUEST_BYTES
 from dj_digger.core.analysis.worker import PROTOCOL_VERSION, execute_request
 from dj_digger.core.analysis.worker_client import IsolatedAnalysisExtractor
+from dj_digger.core.catalog.models import Track
+from dj_digger.core.config import DspConfig
 
 
 def _request(tmp_path: Path) -> dict[str, object]:
@@ -36,7 +36,7 @@ def _request(tmp_path: Path) -> dict[str, object]:
     }
 
 
-@pytest.mark.parametrize("module", ("dj_digger.core.analysis.worker", "dj_digger.analysis.worker"))
+@pytest.mark.parametrize("module", ("dj_digger.core.analysis.worker",))
 def test_worker_module_paths_execute_bounded_versioned_json(module: str) -> None:
     process = subprocess.run(
         [sys.executable, "-m", module],
@@ -70,7 +70,7 @@ class Input:
 sys.stdin = Input()
 with contextlib.redirect_stdout(io.StringIO()):
     try:
-        runpy.run_module("dj_digger.analysis.worker", run_name="__main__")
+        runpy.run_module("dj_digger.core.analysis.worker", run_name="__main__")
     except SystemExit:
         pass
 print(json.dumps({
@@ -86,7 +86,7 @@ print(json.dumps({
     assert json.loads(process.stdout) == {"sqlite": False, "catalog": False}
 
 
-@pytest.mark.parametrize("module", ("dj_digger.core.analysis.worker", "dj_digger.analysis.worker"))
+@pytest.mark.parametrize("module", ("dj_digger.core.analysis.worker",))
 def test_worker_rejects_oversized_input_without_decoding(module: str) -> None:
     process = subprocess.run(
         [sys.executable, "-m", module],

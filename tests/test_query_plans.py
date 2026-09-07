@@ -9,7 +9,7 @@ from performance.benchmark_queries import (
 from performance.fixtures import build_catalog
 from performance.query_plans import explain
 
-from dj_digger.catalog.database import Database
+from dj_digger.core.catalog.database import Database
 
 
 @pytest.fixture(scope="module")

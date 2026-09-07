@@ -3,8 +3,13 @@ from pathlib import Path
 
 import pytest
 
-from dj_digger.catalog.database import Database
-from dj_digger.curation import CandidateRef, CurationCatalog, CurationCatalogError, SearchFilters
+from dj_digger.core.catalog.database import Database
+from dj_digger.core.curation import (
+    CandidateRef,
+    CurationCatalog,
+    CurationCatalogError,
+    SearchFilters,
+)
 
 
 def _catalog(path: Path) -> None:

@@ -1,6 +1,6 @@
 import pytest
 
-from dj_digger.duplicates.mastering import (
+from dj_digger.core.duplicates.mastering import (
     DjMetrics,
     MasteringMeasurements,
     derive_dj_metrics,

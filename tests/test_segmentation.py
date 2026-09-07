@@ -1,6 +1,6 @@
-from dj_digger.analysis.rhythm import RhythmFacts
-from dj_digger.analysis.segmentation import AnalysisFrame, SectionFacts, Segmenter
-from dj_digger.analysis.spectrum import SpectrumFacts
+from dj_digger.core.analysis.rhythm import RhythmFacts
+from dj_digger.core.analysis.segmentation import AnalysisFrame, SectionFacts, Segmenter
+from dj_digger.core.analysis.spectrum import SpectrumFacts
 
 
 def frame(start: float, end: float, *, bass: float = 0.2, kick: float = 0.5) -> AnalysisFrame:

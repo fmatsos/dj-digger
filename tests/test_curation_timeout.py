@@ -15,15 +15,15 @@ from typing import Any
 import anyio
 import pytest
 
-from dj_digger.catalog.database import Database
-from dj_digger.config import CurationConfig, WorkspaceConfig
-from dj_digger.curation.agent import (
+from dj_digger.core.catalog.database import Database
+from dj_digger.core.config import CurationConfig, WorkspaceConfig
+from dj_digger.core.curation.agent import (
     CurationAgent,
     CurationGroundingError,
     CurationRequest,
     CurationTurnLimitError,
 )
-from dj_digger.curation.client import AssistantMessage, OpenAICompatibleClient
+from dj_digger.core.curation.client import AssistantMessage, OpenAICompatibleClient
 
 
 class _BlockingHandler(BaseHTTPRequestHandler):

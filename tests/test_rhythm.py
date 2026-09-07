@@ -3,7 +3,7 @@ from dataclasses import asdict
 import numpy as np
 import pytest
 
-from dj_digger.analysis.rhythm import (
+from dj_digger.core.analysis.rhythm import (
     EssentiaRhythmAdapter,
     RhythmAnalyzer,
     _disable_essentia_native_info_warning,
@@ -161,6 +161,6 @@ def test_essentia_logging_is_suppressed_before_standard_module_load(monkeypatch)
         )
         return standard
 
-    monkeypatch.setattr("dj_digger.analysis.rhythm.importlib.import_module", fake_import)
+    monkeypatch.setattr("dj_digger.core.analysis.rhythm.importlib.import_module", fake_import)
     assert _load_essentia_standard() is standard
     assert events == ["standard:False:False:True"]

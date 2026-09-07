@@ -6,9 +6,9 @@ from pathlib import Path
 import pytest
 from jsonschema.exceptions import ValidationError
 
-from dj_digger.catalog.database import Database
-from dj_digger.catalog.read_repositories import LibraryReadRepository
-from dj_digger.catalog.repositories import SourceRepository, TrackRepository
+from dj_digger.core.catalog.database import Database
+from dj_digger.core.catalog.read_repositories import LibraryReadRepository
+from dj_digger.core.catalog.repositories import SourceRepository, TrackRepository
 from dj_digger.core.exports.tracks import TracksExporter
 
 TRACK_INSERT = """
@@ -103,7 +103,7 @@ def database(tmp_path: Path) -> Database:
 
 
 def test_export_header_and_present_joined_rows(database: Database, tmp_path: Path) -> None:
-    schema = Path("schemas/tracks.schema.json")
+    schema = Path("src/dj_digger/core/schemas/tracks.schema.json")
     out = tmp_path / "tracks.tsv"
     columns = json.loads(schema.read_text())["x-tabular"]["columns"]
     with database.transaction():

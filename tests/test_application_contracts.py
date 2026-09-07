@@ -7,14 +7,14 @@ from types import SimpleNamespace
 
 import pytest
 
-from dj_digger.analysis.config import AnalysisIdentity
-from dj_digger.analysis.persistence import AnalysisOutcome, AnalysisPersistence
-from dj_digger.analysis.pipeline import AnalysisRunResult
-from dj_digger.application import WorkspaceApplication
-from dj_digger.catalog.database import Database
-from dj_digger.catalog.repositories import ScanRunRepository, SourceRepository, TrackRepository
-from dj_digger.config import LibrarySourceConfig, WorkspaceConfig
+from dj_digger.core.analysis.config import AnalysisIdentity
+from dj_digger.core.analysis.persistence import AnalysisOutcome, AnalysisPersistence
+from dj_digger.core.analysis.pipeline import AnalysisRunResult
 from dj_digger.core.application import CoreApplication, ScanRunResult, ScanSourceResult
+from dj_digger.core.application.app import WorkspaceApplication
+from dj_digger.core.catalog.database import Database
+from dj_digger.core.catalog.repositories import ScanRunRepository, SourceRepository, TrackRepository
+from dj_digger.core.config import LibrarySourceConfig, WorkspaceConfig
 
 
 class RecordingProgress:
@@ -74,7 +74,7 @@ def test_configured_sources_are_synchronized_atomically(monkeypatch, tmp_path: P
         if source_id == "second":
             raise RuntimeError("second source rejected")
 
-    monkeypatch.setattr("dj_digger.application.Database.open", record_open)
+    monkeypatch.setattr("dj_digger.core.application.app.Database.open", record_open)
     monkeypatch.setattr(SourceRepository, "upsert", fail_on_second)
 
     with pytest.raises(RuntimeError, match="second source rejected"):

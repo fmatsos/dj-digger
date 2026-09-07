@@ -5,8 +5,8 @@ from pathlib import Path
 
 from typer.testing import CliRunner
 
-from dj_digger.catalog.database import Database
 from dj_digger.cli import app
+from dj_digger.core.catalog.database import Database
 
 
 def write_config(path: Path, source: Path) -> Path:
@@ -59,7 +59,7 @@ def test_scan_failure_missing_and_restoration_keep_a_complete_history(
             raise OSError("traversal interrupted")
         return original_scandir(path)
 
-    monkeypatch.setattr("dj_digger.scanning.scanner.os.scandir", fail_after_observing_a)
+    monkeypatch.setattr("dj_digger.core.scanning.scanner.os.scandir", fail_after_observing_a)
     first_failure = scan(runner, config)
     second_failure = scan(runner, config)
 
@@ -79,7 +79,7 @@ def test_scan_failure_missing_and_restoration_keep_a_complete_history(
         ("failed",),
     ]
 
-    monkeypatch.setattr("dj_digger.scanning.scanner.os.scandir", original_scandir)
+    monkeypatch.setattr("dj_digger.core.scanning.scanner.os.scandir", original_scandir)
     assert scan(runner, config).exit_code == 0
     assert (
         database.scalar("SELECT presence_status FROM tracks WHERE relative_path = 'B.flac'")

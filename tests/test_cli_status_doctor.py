@@ -4,9 +4,9 @@ from pathlib import Path
 import pytest
 from typer.testing import CliRunner
 
-from dj_digger.application import WorkspaceApplication
 from dj_digger.cli import app
-from dj_digger.config import WorkspaceConfig
+from dj_digger.core.application.app import WorkspaceApplication
+from dj_digger.core.config import WorkspaceConfig
 
 
 def write_config(path: Path, *, source: Path, exports: Path) -> Path:

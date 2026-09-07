@@ -3,8 +3,8 @@ from pathlib import Path
 
 import pytest
 
-from dj_digger.catalog.database import Database
-from dj_digger.curation import CreateCurationDraft, CurationRepository, CurationTrack
+from dj_digger.core.catalog.database import Database
+from dj_digger.core.curation import CreateCurationDraft, CurationRepository, CurationTrack
 
 
 def _catalog_with_tracks(path: Path) -> Database:

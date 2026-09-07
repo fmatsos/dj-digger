@@ -1,7 +1,7 @@
 from pathlib import Path
 
-from dj_digger.config import LibrarySourceConfig
-from dj_digger.scanning.scanner import SourceScanner
+from dj_digger.core.config import LibrarySourceConfig
+from dj_digger.core.scanning.scanner import SourceScanner
 
 
 def test_scan_classifies_supported_dj_artifacts_and_serato_contents(tmp_path: Path) -> None:

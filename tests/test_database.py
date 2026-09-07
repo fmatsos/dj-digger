@@ -3,8 +3,8 @@ from pathlib import Path
 
 import pytest
 
-from dj_digger.catalog.database import Database
-from dj_digger.catalog.factory import DatabaseFactory
+from dj_digger.core.catalog.database import Database
+from dj_digger.core.catalog.factory import DatabaseFactory
 
 
 def test_open_configures_file_database_and_closes_after_context(tmp_path: Path) -> None:

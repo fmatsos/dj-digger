@@ -2,11 +2,11 @@ from pathlib import Path
 
 import pytest
 
-from dj_digger.analysis.audio import TechnicalAudioMetadata
-from dj_digger.analysis.ffmpeg import FFmpegProbe
-from dj_digger.catalog.database import Database
-from dj_digger.catalog.models import Track
-from dj_digger.catalog.repositories import TechnicalAudioMetadataRepository
+from dj_digger.core.analysis.audio import TechnicalAudioMetadata
+from dj_digger.core.analysis.ffmpeg import FFmpegProbe
+from dj_digger.core.catalog.database import Database
+from dj_digger.core.catalog.models import Track
+from dj_digger.core.catalog.repositories import TechnicalAudioMetadataRepository
 
 
 def test_ffmpeg_normalizes_facts_and_uses_read_only_argv(monkeypatch) -> None:
@@ -35,7 +35,7 @@ def test_ffmpeg_normalizes_facts_and_uses_read_only_argv(monkeypatch) -> None:
             "Result", (), {"stdout": "", "stderr": "I: -13.2 LUFS\nPeak: -0.4 dBFS\nLRA: 6.9 LU\n"}
         )()
 
-    monkeypatch.setattr("dj_digger.analysis.ffmpeg.subprocess.run", run)
+    monkeypatch.setattr("dj_digger.core.analysis.ffmpeg.subprocess.run", run)
     path = Path("odd;name\\n.flac")
 
     metadata = FFmpegProbe().probe(path)
@@ -83,7 +83,7 @@ def test_ffmpeg_tolerates_malformed_optional_facts_and_measurements(monkeypatch)
             )()
         return type("Result", (), {"stdout": "", "stderr": "no measurements"})()
 
-    monkeypatch.setattr("dj_digger.analysis.ffmpeg.subprocess.run", run)
+    monkeypatch.setattr("dj_digger.core.analysis.ffmpeg.subprocess.run", run)
 
     metadata = FFmpegProbe().probe(Path("track.mp3"))
 
@@ -120,7 +120,7 @@ def test_probe_facts_skips_the_loudness_measurement(monkeypatch) -> None:
         measure_calls.append(argv)
         return type("Result", (), {"stdout": "", "stderr": "I: -9.0 LUFS\n"})()
 
-    monkeypatch.setattr("dj_digger.analysis.ffmpeg.subprocess.run", run)
+    monkeypatch.setattr("dj_digger.core.analysis.ffmpeg.subprocess.run", run)
 
     metadata = FFmpegProbe().probe_facts(Path("track.mp3"))
 
@@ -146,7 +146,7 @@ def test_probe_facts_falls_back_to_bits_per_sample(monkeypatch) -> None:
             },
         )()
 
-    monkeypatch.setattr("dj_digger.analysis.ffmpeg.subprocess.run", run)
+    monkeypatch.setattr("dj_digger.core.analysis.ffmpeg.subprocess.run", run)
 
     metadata = FFmpegProbe().probe_facts(Path("track.flac"))
 

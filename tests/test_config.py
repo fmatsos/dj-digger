@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from dj_digger.config import DspConfig, WorkspaceConfig
+from dj_digger.core.config import DspConfig, WorkspaceConfig
 
 FIXTURES = Path(__file__).parent / "fixtures"
 

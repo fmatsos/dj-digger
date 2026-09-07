@@ -25,17 +25,17 @@ while IFS= read -r path; do
        [ "$path" = "tox.ini" ] || printf '%s\n' "$path" | grep -qE '^\.(agents|codex|docker-agent|github)/|^(scripts|skills|tests)/'; then
     category="focused"
   # Check for production modules
-  elif printf '%s\n' "$path" | grep -q '^src/dj_digger/catalog/'; then
+  elif printf '%s\n' "$path" | grep -q '^src/dj_digger/core/catalog/'; then
     category="catalog"
-  elif printf '%s\n' "$path" | grep -q '^src/dj_digger/analysis/'; then
+  elif printf '%s\n' "$path" | grep -q '^src/dj_digger/core/analysis/'; then
     category="analysis"
-  elif printf '%s\n' "$path" | grep -q '^src/dj_digger/exports/'; then
+  elif printf '%s\n' "$path" | grep -q '^src/dj_digger/core/exports/'; then
     category="exports"
   elif printf '%s\n' "$path" | grep -q '^src/dj_digger/copying/'; then
     category="subsystem"
   elif printf '%s\n' "$path" | grep -q '^src/dj_digger/.*\.py$'; then
-    # Check if it's cli.py or another top-level Python file
-    if [ "$path" = "src/dj_digger/cli.py" ] || \
+    # Check if it's the CLI package or another public entry module
+    if printf '%s\n' "$path" | grep -q '^src/dj_digger/cli/' || \
        [ "$path" = "src/dj_digger/__main__.py" ] || \
        [ "$path" = "src/dj_digger/__init__.py" ]; then
       category="runtime"
