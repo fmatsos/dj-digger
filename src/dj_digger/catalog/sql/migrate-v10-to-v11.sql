@@ -7,8 +7,8 @@ CREATE TABLE curation_creations (
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL CHECK (length(trim(name)) > 0),
     kind TEXT NOT NULL CHECK (kind IN ('set','playlist')),
-    user_prompt TEXT NOT NULL CHECK (length(trim(user_prompt)) > 0),
-    report_markdown TEXT NOT NULL CHECK (length(trim(report_markdown)) > 0),
+    user_prompt TEXT NOT NULL CHECK (length(trim(user_prompt, char(9, 10, 11, 12, 13, 28, 29, 30, 31, 32, 133, 160, 5760, 8192, 8193, 8194, 8195, 8196, 8197, 8198, 8199, 8200, 8201, 8202, 8232, 8233, 8239, 8287, 12288))) > 0),
+    report_markdown TEXT NOT NULL CHECK (length(trim(report_markdown, char(9, 10, 11, 12, 13, 28, 29, 30, 31, 32, 133, 160, 5760, 8192, 8193, 8194, 8195, 8196, 8197, 8198, 8199, 8200, 8201, 8202, 8232, 8233, 8239, 8287, 12288))) > 0),
     status TEXT NOT NULL CHECK (status IN ('draft','validated')),
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
@@ -47,11 +47,11 @@ SELECT
     name,
     kind,
     CASE
-        WHEN length(trim(user_prompt)) > 0 THEN user_prompt
+        WHEN length(trim(user_prompt, char(9, 10, 11, 12, 13, 28, 29, 30, 31, 32, 133, 160, 5760, 8192, 8193, 8194, 8195, 8196, 8197, 8198, 8199, 8200, 8201, 8202, 8232, 8233, 8239, 8287, 12288))) > 0 THEN user_prompt
         ELSE 'Legacy prompt unavailable'
     END,
     CASE
-        WHEN length(trim(report_markdown)) > 0 THEN report_markdown
+        WHEN length(trim(report_markdown, char(9, 10, 11, 12, 13, 28, 29, 30, 31, 32, 133, 160, 5760, 8192, 8193, 8194, 8195, 8196, 8197, 8198, 8199, 8200, 8201, 8202, 8232, 8233, 8239, 8287, 12288))) > 0 THEN report_markdown
         ELSE 'Legacy report unavailable'
     END,
     status,

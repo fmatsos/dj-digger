@@ -350,7 +350,13 @@ def test_existing_current_catalog_is_adopted_by_sqlite_utils(tmp_path: Path) -> 
 
 @pytest.mark.parametrize(
     ("legacy_prompt", "legacy_report"),
-    [("", "report"), ("prompt", "   ")],
+    [
+        ("", "report"),
+        ("prompt", "   "),
+        ("\t", "report"),
+        ("prompt", "\n"),
+        (" \t ", "report"),
+    ],
 )
 def test_v10_upgrade_preserves_creations_with_legacy_blank_text(
     tmp_path: Path, legacy_prompt: str, legacy_report: str
@@ -378,6 +384,45 @@ def test_v10_upgrade_preserves_creations_with_legacy_blank_text(
         legacy_prompt if legacy_prompt.strip() else "Legacy prompt unavailable",
         legacy_report if legacy_report.strip() else "Legacy report unavailable",
     )
+
+
+@pytest.mark.parametrize(
+    "blank_text",
+    [
+        chr(codepoint)
+        for codepoint in (
+            *range(0x09, 0x0E),
+            *range(0x1C, 0x21),
+            0x85,
+            0xA0,
+            0x1680,
+            *range(0x2000, 0x200B),
+            0x2028,
+            0x2029,
+            0x202F,
+            0x205F,
+            0x3000,
+        )
+    ],
+)
+@pytest.mark.parametrize("field", ["user_prompt", "report_markdown"])
+def test_curation_schema_rejects_application_whitespace(
+    tmp_path: Path, field: str, blank_text: str
+) -> None:
+    database = Database.open(tmp_path / "catalog.sqlite")
+    database.migrate()
+
+    with pytest.raises(sqlite3.IntegrityError):
+        database.execute(
+            """INSERT INTO curation_creations
+            (id, name, kind, user_prompt, report_markdown, status, created_at,
+             updated_at, validated_at, model_config_json)
+            VALUES ('creation', 'Name', 'set', ?, ?, 'draft', 'now', 'now', NULL, '{}')""",
+            (
+                blank_text if field == "user_prompt" else "prompt",
+                blank_text if field == "report_markdown" else "report",
+            ),
+        )
 
 
 def test_current_sections_reference_current_analysis_table(tmp_path: Path) -> None:
