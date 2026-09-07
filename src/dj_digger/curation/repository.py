@@ -5,7 +5,7 @@ import sqlite3
 from datetime import UTC, datetime
 from typing import cast
 
-from dj_digger.catalog.database import Database
+from dj_digger.core.catalog.database import Database
 from dj_digger.curation.models import (
     CreateCurationDraft,
     CurationCreation,

@@ -10,8 +10,8 @@ from typing import Any
 from mcp.types import CallToolResult
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
-from dj_digger.catalog.database import Database
-from dj_digger.config import WorkspaceConfig
+from dj_digger.core.catalog.database import Database
+from dj_digger.core.config import WorkspaceConfig
 from dj_digger.curation.catalog import CurationCatalog, CurationCatalogError
 from dj_digger.curation.client import (
     CurationClientError,

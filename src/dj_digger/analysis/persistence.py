@@ -9,9 +9,9 @@ from typing import Any
 from dj_digger.analysis.aggregation import canonical_json
 from dj_digger.analysis.config import AnalysisIdentity
 from dj_digger.analysis.extractor import AnalysisExtractionResult, Stage
-from dj_digger.catalog.current_analysis import CurrentAnalysisProjector
-from dj_digger.catalog.database import Database
-from dj_digger.catalog.models import Track
+from dj_digger.core.catalog.current_analysis import CurrentAnalysisProjector
+from dj_digger.core.catalog.database import Database
+from dj_digger.core.catalog.models import Track
 
 
 @dataclass(frozen=True)

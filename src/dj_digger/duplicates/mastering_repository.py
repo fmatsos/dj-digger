@@ -4,8 +4,8 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
 
-from dj_digger.catalog.database import Database
-from dj_digger.catalog.models import Track
+from dj_digger.core.catalog.database import Database
+from dj_digger.core.catalog.models import Track
 from dj_digger.duplicates.mastering import (
     MASTERING_ANALYSIS_VERSION,
     DjMetrics,

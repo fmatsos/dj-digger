@@ -15,11 +15,11 @@ from typing import Any
 
 from jsonschema import Draft202012Validator  # type: ignore[import-untyped]
 
-from dj_digger.catalog.database import Database
-from dj_digger.catalog.repositories import SourceRepository
+from dj_digger.core.catalog.database import Database
+from dj_digger.core.catalog.repositories import SourceRepository
+from dj_digger.core.resources import read_text
 from dj_digger.exports.audit import AuditExporter
 from dj_digger.exports.tracks import TracksExporter
-from dj_digger.resources import read_text
 
 
 @dataclass(frozen=True)

@@ -1,8 +1,8 @@
 """Select catalog tracks that require audio analysis."""
 
 from dj_digger.analysis.config import AnalysisIdentity
-from dj_digger.catalog.models import Track
-from dj_digger.catalog.repositories import TrackRepository
+from dj_digger.core.catalog.models import Track
+from dj_digger.core.catalog.repositories import TrackRepository
 
 
 class AnalysisEligibility:
