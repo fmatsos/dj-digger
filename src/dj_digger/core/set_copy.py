@@ -263,23 +263,29 @@ def _verify_source_unchanged(source: Path, source_fd: int, before: os.stat_resul
 def _set_recursive_ownership(output: Path, uid: int, gid: int) -> None:
     if os.name != "posix":
         raise ValueError("recursive ownership is not supported on this platform")
-    for root, directories, files, directory_fd in os.fwalk(
+    for _root, directories, files, directory_fd in os.fwalk(
         output, topdown=False, follow_symlinks=False
     ):
         for name in (*directories, *files):
             try:
                 os.chown(name, uid, gid, dir_fd=directory_fd, follow_symlinks=False)
             except OSError as error:
-                if error.errno != errno.EINVAL or not hasattr(os, "lchown"):
+                if error.errno != errno.EINVAL:
                     raise
+                if not hasattr(os, "lchown"):
+                    raise ValueError(
+                        "cannot change ownership safely: descriptor-anchored lchown unavailable"
+                    ) from error
                 # Linux rejects combining dir_fd and follow_symlinks=False.  The
                 # procfs descriptor path keeps the directory anchored while lchown
                 # prevents a final symlink from being followed.
                 descriptor_path = f"/proc/self/fd/{directory_fd}/{name}"
                 try:
                     os.lchown(descriptor_path, uid, gid)
-                except OSError:
-                    os.lchown(Path(root) / name, uid, gid)
+                except OSError as descriptor_error:
+                    raise ValueError(
+                        "cannot change ownership safely: descriptor-anchored lchown failed"
+                    ) from descriptor_error
     os.chown(output, uid, gid, follow_symlinks=False)
 
 
