@@ -27,17 +27,30 @@ class ExportRequest:
 
 
 @dataclass(frozen=True)
+class ExportMaintenanceWarning:
+    """Non-fatal maintenance warning after a committed publication."""
+
+    code: str
+    message: str
+
+
+@dataclass(frozen=True)
 class ExportResult:
     """Typed facets published by one immutable export generation.
 
     Consumers reading more than one facet must resolve and retain
-    ``generation_path`` for the whole read.  The public facet paths remain
-    stable compatibility paths, but resolving them independently around a
-    publication switch cannot provide a cross-file snapshot.
+    ``generation_path`` for the whole read, and must finish that grouped read
+    before starting or allowing the next publication.  The path is kept
+    through one immediately concurrent publication as the previous generation;
+    it is not a durable interprocess lease and may be removed after a second
+    later publication.  The public facet paths remain stable compatibility
+    paths, but resolving them independently around a publication switch cannot
+    provide a cross-file snapshot.
     """
 
     facets: tuple[PublishedFacet, ...]
     generation_path: Path
+    maintenance_warning: ExportMaintenanceWarning | None = None
 
     @property
     def paths(self) -> tuple[Path, ...]:
@@ -72,7 +85,11 @@ class ExportUseCase:
             with self._database.read_transaction():
                 staged_facets = self._publish_to_staging(staged_destination, request, selected)
             published = self._publish_group(destination, staged_facets, staged_destination)
-            return ExportResult(published.facets, published.generation_path)
+            return ExportResult(
+                published.facets,
+                published.generation_path,
+                published.maintenance_warning,
+            )
         except ValueError as error:
             message = str(error)
             if message.startswith("--fields") or message.startswith("unknown field"):
@@ -122,6 +139,7 @@ class ExportUseCase:
             (facet, facet.path.relative_to(staged_destination)) for facet in staged_facets
         ]
         storage = destination.parent / ".dj-digger-publications"
+        _validate_storage_path(storage)
         _ensure_symlink_support(destination.parent)
         generation: Path | None = None
         next_link: Path | None = None
@@ -129,7 +147,9 @@ class ExportUseCase:
         previous_generation: Path | None = None
         switched = False
         try:
+            _validate_storage_path(storage)
             storage.mkdir(exist_ok=True)
+            _validate_storage_path(storage)
             storage_root = storage.resolve()
             if destination.is_symlink() and destination.exists():
                 current = destination.resolve(strict=True)
@@ -156,7 +176,6 @@ class ExportUseCase:
             os.replace(next_link, destination)
             switched = True
             generation_path = generation.resolve(strict=True)
-            _cleanup_generations(storage, {generation_path, previous_generation})
         except BaseException:
             if switched:
                 raise
@@ -171,12 +190,21 @@ class ExportUseCase:
             if generation is not None and not switched:
                 shutil.rmtree(generation, ignore_errors=True)
         assert generation is not None
+        maintenance_warning: ExportMaintenanceWarning | None = None
+        try:
+            _cleanup_generations(storage, {generation_path, previous_generation})
+        except Exception:
+            maintenance_warning = ExportMaintenanceWarning(
+                code="publication_cleanup_deferred",
+                message="generation cleanup was deferred after the publication succeeded",
+            )
         return _PublishedGroup(
             tuple(
                 PublishedFacet(destination / relative, facet.row_count)
                 for facet, relative in relative_facets
             ),
             generation_path,
+            maintenance_warning,
         )
 
     @classmethod
@@ -204,13 +232,29 @@ class ExportUseCase:
         return None if selected in {None, "all"} else selected
 
 
-__all__ = ["ExportRequest", "ExportResult", "ExportUseCase"]
+__all__ = [
+    "ExportMaintenanceWarning",
+    "ExportRequest",
+    "ExportResult",
+    "ExportUseCase",
+]
 
 
 @dataclass(frozen=True)
 class _PublishedGroup:
     facets: tuple[PublishedFacet, ...]
     generation_path: Path
+    maintenance_warning: ExportMaintenanceWarning | None
+
+
+def _validate_storage_path(storage: Path) -> None:
+    """Reject symlinked publication storage before resolving or cleaning it."""
+    if storage.is_symlink():
+        raise DependencyError(
+            f"publication storage must be a real directory, not a symlink: {storage.name}"
+        )
+    if storage.exists() and not storage.is_dir():
+        raise DependencyError(f"publication storage is not a directory: {storage.name}")
 
 
 def _ensure_symlink_support(parent: Path) -> None:

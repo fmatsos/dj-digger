@@ -10,6 +10,7 @@ import dj_digger.core.application.export as export_module
 from dj_digger.core.application import (
     CoreApplication,
     DependencyError,
+    ExportMaintenanceWarning,
     ExportRequest,
     ExportResult,
     ExportUseCase,
@@ -75,6 +76,25 @@ def test_generation_cleanup_runs_when_promotion_fails_after_staging(
 
     storage = config.exports.parent / ".dj-digger-publications"
     assert not storage.exists() or not list(storage.glob("generation-*"))
+
+
+def test_cleanup_failure_after_switch_returns_success_with_typed_warning(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    config = _config(tmp_path)
+    monkeypatch.setattr(
+        export_module,
+        "_cleanup_generations",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(OSError("maintenance failed")),
+    )
+
+    with CoreApplication(config) as core:
+        result = core.export(ExportRequest(facet="tracks"))
+
+    assert result.generation_path.is_dir()
+    assert isinstance(result.maintenance_warning, ExportMaintenanceWarning)
+    assert result.maintenance_warning.code == "publication_cleanup_deferred"
+    assert (config.exports / "tracks.tsv").is_file()
 
 
 def test_first_and_repeated_publications_keep_at_most_one_previous(
@@ -174,6 +194,33 @@ def test_generation_path_pins_a_complete_immutable_group(tmp_path: Path) -> None
         (old.generation_path / filename).read_text(encoding="utf-8").strip()
         for filename in ("tracks.tsv", "library-artifacts.tsv")
     ] == ["tracks.tsv:old", "library-artifacts.tsv:old"]
+    newest_root, newest_facets = staged("newest", "newest")
+    ExportUseCase._publish_group(destination, newest_facets, newest_root)
+    assert not old.generation_path.exists()
+
+
+def test_symlinked_publication_storage_is_rejected_without_touching_target(
+    tmp_path: Path,
+) -> None:
+    destination = tmp_path / "exports"
+    target = tmp_path / "external-storage"
+    target.mkdir()
+    external_generation = target / "generation-external"
+    external_generation.mkdir()
+    marker = external_generation / "marker.txt"
+    marker.write_text("external", encoding="utf-8")
+    storage = tmp_path / ".dj-digger-publications"
+    storage.symlink_to(target, target_is_directory=True)
+    root = tmp_path / "stage" / "publication"
+    root.mkdir(parents=True)
+    path = root / "tracks.tsv"
+    path.write_text("new", encoding="utf-8")
+
+    with pytest.raises(DependencyError, match="must be a real directory"):
+        ExportUseCase._publish_group(destination, [PublishedFacet(path, 1)], root)
+
+    assert marker.read_text(encoding="utf-8") == "external"
+    assert external_generation.is_dir()
 
 
 def test_group_switch_is_old_or_new_for_a_concurrent_reader(
