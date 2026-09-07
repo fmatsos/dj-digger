@@ -64,7 +64,7 @@ def curation_error(error: Exception) -> str:
     if isinstance(error, CurationResponseError):
         return "The model returned an invalid response; verify model compatibility and retry."
     if isinstance(error, CurationTransportError):
-        return "The model request failed; check endpoint availability and authentication."
+        return f"The model request failed: {error}"
     if isinstance(error, CurationMCPError):
         return "The catalog tool failed; run database quick-check and retry."
     if isinstance(error, CurationGroundingError):
