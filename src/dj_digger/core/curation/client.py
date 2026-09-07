@@ -81,14 +81,14 @@ class CompletionClient(Protocol):
 
 
 class _Choice(BaseModel):
-    model_config = ConfigDict(extra="forbid", strict=True)
+    model_config = ConfigDict(extra="ignore", strict=True)
     index: int
     message: AssistantMessage
     finish_reason: str | None
 
 
 class _Completion(BaseModel):
-    model_config = ConfigDict(extra="forbid", strict=True)
+    model_config = ConfigDict(extra="ignore", strict=True)
     choices: list[_Choice] = Field(min_length=1, max_length=1)
 
 

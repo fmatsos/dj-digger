@@ -125,6 +125,10 @@ def _reply(
     *, content: str | None = None, calls: list[dict[str, Any]] | None = None
 ) -> dict[str, Any]:
     return {
+        "id": "chatcmpl-test",
+        "object": "chat.completion",
+        "created": 1_788_817_156,
+        "model": "gpt-5.6-luna",
         "choices": [
             {
                 "index": 0,
@@ -137,7 +141,9 @@ def _reply(
                 },
                 "finish_reason": "tool_calls" if calls else "stop",
             }
-        ]
+        ],
+        "service_tier": "default",
+        "system_fingerprint": None,
     }
 
 
