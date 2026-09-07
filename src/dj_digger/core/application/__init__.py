@@ -33,6 +33,9 @@ from dj_digger.core.application.scan import (
 
 __all__ = [
     "CoreApplication",
+    "CopySetRequest",
+    "CopySetUseCase",
+    "SetCopyResult",
     "ExportRequest",
     "ExportResult",
     "ExportUseCase",
@@ -79,6 +82,18 @@ def __getattr__(name: str) -> Any:
         from dj_digger.core.application.app import CoreApplication
 
         return CoreApplication
+    if name in {"CopySetRequest", "CopySetUseCase", "SetCopyResult"}:
+        from dj_digger.core.application.copy_set import (
+            CopySetRequest,
+            CopySetUseCase,
+            SetCopyResult,
+        )
+
+        return {
+            "CopySetRequest": CopySetRequest,
+            "CopySetUseCase": CopySetUseCase,
+            "SetCopyResult": SetCopyResult,
+        }[name]
     if name in {"AnalyzeRequest", "AnalyzeUseCase"}:
         from dj_digger.core.application.analyze import AnalyzeRequest, AnalyzeUseCase
 

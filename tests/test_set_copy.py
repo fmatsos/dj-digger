@@ -7,7 +7,8 @@ from pathlib import Path
 
 import pytest
 
-from dj_digger.set_copy import _resolve_owner, _set_recursive_ownership, copy_set
+from dj_digger.core.application.copy_set import copy_set
+from dj_digger.core.set_copy import _resolve_owner, _set_recursive_ownership
 
 
 def _track(library: Path, relative: str, contents: bytes) -> Path:
