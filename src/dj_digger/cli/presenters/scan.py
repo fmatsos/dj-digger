@@ -3,6 +3,7 @@
 from typing import Any
 
 from dj_digger.core.application import ScanRunResult
+from dj_digger.core.diagnostics import DiagnosticStatus
 
 
 def scan_payload(result: ScanRunResult) -> dict[str, Any]:
@@ -18,6 +19,10 @@ def scan_payload(result: ScanRunResult) -> dict[str, Any]:
     ]
     return {
         "event": "scan",
-        "status": "succeeded" if all(item["succeeded"] for item in scans) else "failed",
+        "status": (
+            DiagnosticStatus.SUCCEEDED
+            if all(item["succeeded"] for item in scans)
+            else DiagnosticStatus.FAILED
+        ),
         "scans": scans,
     }

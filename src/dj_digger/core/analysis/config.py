@@ -4,6 +4,10 @@ from dataclasses import dataclass
 
 CURRENT_ANALYZER_VERSION = "dj-digger-analysis/3"
 
+#: Wall-clock budget for one track, shared by the CLI, the pipeline and duplicates.
+DEFAULT_TRACK_TIMEOUT_SECONDS = 1800.0
+DEFAULT_WORKERS = 1
+
 
 @dataclass(frozen=True)
 class AnalysisIdentity:

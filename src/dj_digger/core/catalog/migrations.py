@@ -5,6 +5,8 @@ from importlib.resources import files
 
 from sqlite_utils import Database, Migrations
 
+from dj_digger.core.errors import IntegrityError, StateConflictError
+
 CURRENT_VERSION = 11
 CURRENT_SCHEMA = "catalog.sql"
 MIGRATIONS = Migrations("dj-digger")
@@ -58,9 +60,13 @@ def migrate(connection: sqlite3.Connection) -> None:
     """Initialize or upgrade a catalog using the sqlite-utils migration registry."""
     current = _version(connection)
     if current > CURRENT_VERSION:
-        raise RuntimeError(f"legacy catalog version {current} is unsupported; recreate the catalog")
+        raise StateConflictError(
+            f"legacy catalog version {current} is unsupported; recreate the catalog"
+        )
     if 0 < current < 6:
-        raise RuntimeError(f"legacy catalog version {current} is unsupported; recreate the catalog")
+        raise StateConflictError(
+            f"legacy catalog version {current} is unsupported; recreate the catalog"
+        )
     MIGRATIONS.apply(Database(connection))
 
 
@@ -111,7 +117,7 @@ def _run_script_transaction(
             raise RuntimeError("migration script changed user_version unexpectedly")
         violations = connection.execute("PRAGMA foreign_key_check").fetchall()
         if violations:
-            raise RuntimeError(f"foreign key check failed during migration: {violations!r}")
+            raise IntegrityError(f"foreign key check failed during migration: {violations!r}")
         connection.execute(f"PRAGMA user_version = {target_version}")
         connection.commit()
     except BaseException:

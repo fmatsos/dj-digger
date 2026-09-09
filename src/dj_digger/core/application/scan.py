@@ -2,9 +2,9 @@
 
 from dataclasses import dataclass
 
-from dj_digger.core.application.errors import InvalidInputError
 from dj_digger.core.catalog.database import Database
 from dj_digger.core.config import LibrarySourceConfig, WorkspaceConfig
+from dj_digger.core.errors import InvalidInputError
 from dj_digger.core.scanning.lifecycle import ScanLifecycle
 from dj_digger.core.scanning.scanner import SourceScanner
 

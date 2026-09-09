@@ -25,11 +25,14 @@ def test_job_repository_records_sanitized_failure_and_unknown_dead_process(tmp_p
     repository = JobRepository(tmp_path / "catalog.sqlite")
     created = repository.create("status")
 
-    failed = repository.fail(created.job_id, "unavailable")
+    failed = repository.fail(
+        created.job_id, "ffmpeg is not installed", error_class="dependency unavailable"
+    )
     assert failed.status == "failed"
     assert failed.result == {
         "code": "job_failed",
-        "error": "unavailable",
+        "error": "dependency unavailable",
+        "error_class": "dependency unavailable",
         "event": "job",
         "status": "failed",
     }

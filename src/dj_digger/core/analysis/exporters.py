@@ -2,7 +2,6 @@
 
 import csv
 import json
-import os
 import tempfile
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -12,6 +11,8 @@ from typing import Any, cast
 from jsonschema import Draft202012Validator, FormatChecker  # type: ignore[import-untyped]
 
 from dj_digger.core.catalog.database import Database
+from dj_digger.core.errors import InvalidInputError, StateConflictError
+from dj_digger.core.exports.atomic import replace_all_atomically
 from dj_digger.core.exports.formats import (
     fields_for_schema,
     output_path,
@@ -89,7 +90,7 @@ class AnalysisExporter:
                 "run": format or "json",
             }
             if format is not None and format not in {"json", "csv", "tsv"}:
-                raise ValueError(f"unknown export format: {format}")
+                raise InvalidInputError(f"unknown export format: {format}")
             schema_fields = {
                 "analysis": fields_for_schema(self._schemas.analysis),
                 "sections": fields_for_schema(self._schemas.sections),
@@ -138,26 +139,10 @@ class AnalysisExporter:
                         chosen or schema_fields["run"],
                         effective_formats["run"],
                     )
-                custom_backups: list[tuple[Path, Path]] = []
-                custom_replaced: list[Path] = []
-                try:
-                    for name in selected_types:
-                        target = paths_by_type[name]
-                        if target.exists():
-                            backup = Path(tmp) / f"{target.name}.bak"
-                            os.replace(target, backup)
-                            custom_backups.append((target, backup))
-                    for name in selected_types:
-                        target = paths_by_type[name]
-                        os.replace(staged_by_type[name], target)
-                        custom_replaced.append(target)
-                except BaseException:
-                    for target in custom_replaced:
-                        target.unlink(missing_ok=True)
-                    for target, backup in custom_backups:
-                        if backup.exists():
-                            os.replace(backup, target)
-                    raise
+                replace_all_atomically(
+                    [(staged_by_type[name], paths_by_type[name]) for name in selected_types],
+                    backup_directory=Path(tmp),
+                )
             counts = {"analysis": len(analyses), "sections": len(sections), "run": 1}
             return [PublishedFacet(paths_by_type[name], counts[name]) for name in selected_types]
 
@@ -172,28 +157,10 @@ class AnalysisExporter:
             self._write_tsv(staged[0], analyses)
             self._write_jsonl(staged[1], sections)
             self._write_json(staged[2], run)
-            for path in staged:
-                with path.open("rb") as handle:
-                    os.fsync(handle.fileno())
             targets = (analysis_path, sections_path, run_path)
-            backups: list[tuple[Path, Path]] = []
-            replaced: list[Path] = []
-            try:
-                for target in targets:
-                    if target.exists():
-                        backup = Path(tmp) / (target.name + ".bak")
-                        os.replace(target, backup)
-                        backups.append((target, backup))
-                for source, target in zip(staged, targets):
-                    os.replace(source, target)
-                    replaced.append(target)
-            except BaseException:
-                for target in replaced:
-                    target.unlink(missing_ok=True)
-                for target, backup in backups:
-                    if backup.exists():
-                        os.replace(backup, target)
-                raise
+            replace_all_atomically(
+                list(zip(staged, targets, strict=True)), backup_directory=Path(tmp)
+            )
         return [
             PublishedFacet(analysis_path, len(analyses)),
             PublishedFacet(sections_path, len(sections)),
@@ -314,7 +281,7 @@ class AnalysisExporter:
             """
         ).fetchone()
         if row is None:
-            raise ValueError("cannot publish analysis facets without an analysis run")
+            raise StateConflictError("cannot publish analysis facets without an analysis run")
         (
             run_id,
             started,
@@ -388,7 +355,7 @@ class AnalysisExporter:
 def _object(raw: object) -> Mapping[str, Any]:
     value = json.loads(cast(str, raw))
     if not isinstance(value, dict):
-        raise ValueError("analysis payload must be a JSON object")
+        raise StateConflictError("analysis payload must be a JSON object")
     return cast(Mapping[str, Any], value)
 
 

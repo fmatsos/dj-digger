@@ -3,6 +3,7 @@
 from typing import Any
 
 from dj_digger.core.analysis.pipeline import AnalysisRunResult
+from dj_digger.core.diagnostics import DiagnosticStatus
 
 
 def analyze_payload(result: AnalysisRunResult) -> dict[str, Any]:
@@ -10,8 +11,11 @@ def analyze_payload(result: AnalysisRunResult) -> dict[str, Any]:
     failed = int(getattr(result, "failed", 0))
     analyzed = int(getattr(result, "analyzed", 0))
     status = getattr(result, "status", None)
-    if status not in {"succeeded", "partial", "failed"}:
-        status = "failed" if failed and not analyzed else ("partial" if failed else "succeeded")
+    if status not in set(DiagnosticStatus):
+        if failed and not analyzed:
+            status = DiagnosticStatus.FAILED
+        else:
+            status = DiagnosticStatus.PARTIAL if failed else DiagnosticStatus.SUCCEEDED
     return {
         "event": "analyze",
         "status": status,

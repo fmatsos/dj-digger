@@ -6,33 +6,45 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-_ABSOLUTE_PATH = re.compile(r"(?<![A-Za-z0-9_])/(?:[^\s,;\"']+)")
-_SAFE_ERROR_CLASSES = (
-    "authentication",
-    "dependency unavailable",
-    "invalid response",
-    "state conflict",
-    "stale",
-    "timeout",
-    "unavailable",
-)
+from dj_digger.core.errors import UNCLASSIFIED, classify
+
+# Absolute filesystem paths are private library facts; URLs are configuration
+# the operator needs to read back, so they are matched first and preserved.
+_URL = r"[A-Za-z][A-Za-z0-9+.\-]*://[^\s,;\"']+"
+_ABSOLUTE_PATH = r"(?<![A-Za-z0-9_:/])/(?:[^\s,;\"']+)"
+_SCRUBBED = re.compile(f"(?P<url>{_URL})|(?P<path>{_ABSOLUTE_PATH})")
+
+
+def _scrub_paths(value: str) -> str:
+    return _SCRUBBED.sub(lambda match: match.group("url") or "<path>", value)
 
 
 def sanitize_error(error: object) -> str:
-    """Map arbitrary exception detail to a safe, stable failure class."""
-    message = str(error).lower()
-    for classification in _SAFE_ERROR_CLASSES:
-        if classification in message:
-            return classification
-    return "operation failed"
+    """Map arbitrary exception detail to a safe, stable failure class.
+
+    Classification comes from the exception type, so rewording a message never
+    silently changes what a run log reports, and an unexpected exception can
+    never leak private library detail into persisted facts.
+    """
+    return classify(error)
 
 
 def sanitize_diagnostic(diagnostic: dict[str, Any]) -> dict[str, Any]:
-    """Remove private paths and arbitrary exception detail from persisted facts."""
+    """Remove private paths and arbitrary exception detail from persisted facts.
+
+    A boundary that caught a real exception records its failure class under
+    ``error_class``; that classification is reused here because the ``error``
+    field is already a message string by the time it reaches persistence.
+    Without it the message is dropped entirely rather than guessed at.
+    """
+    declared = diagnostic.get("error_class")
+    top_level_class = declared if isinstance(declared, str) else UNCLASSIFIED
 
     def sanitize_value(key: str, value: Any) -> Any:
         if key == "error":
-            return sanitize_error(value)
+            if value is None:
+                return None
+            return top_level_class if isinstance(value, str) else sanitize_error(value)
         if isinstance(value, dict):
             return {
                 str(child_key): sanitize_value(str(child_key), child)
@@ -43,7 +55,7 @@ def sanitize_diagnostic(diagnostic: dict[str, Any]) -> dict[str, Any]:
         if isinstance(value, tuple):
             return [sanitize_value(key, child) for child in value]
         if isinstance(value, str):
-            return _ABSOLUTE_PATH.sub("<path>", value)
+            return _scrub_paths(value)
         return value
 
     return {str(key): sanitize_value(str(key), value) for key, value in diagnostic.items()}
