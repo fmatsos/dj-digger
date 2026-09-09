@@ -15,6 +15,7 @@ from dj_digger.core.application import CoreApplication
 from dj_digger.core.application.curation import CurationRequest
 from dj_digger.core.config import WorkspaceConfig
 from dj_digger.core.curation import CurationStatus
+from dj_digger.core.errors import classify
 from dj_digger.core.exports.curation import CurationExportContent
 from dj_digger.core.run_log import RunLogger
 
@@ -73,7 +74,12 @@ def _run_curation(
     except Exception as error:
         message = curation_error(error)
         RunLogger(config.database).write(
-            {"event": "curation", "status": "failed", "error": message}
+            {
+                "event": "curation",
+                "status": "failed",
+                "error": message,
+                "error_class": classify(error),
+            }
         )
         typer.echo(f"Error: {message}", err=True)
         raise typer.Exit(1) from None
@@ -121,7 +127,12 @@ def curation_create(
         if workspace is not None:
             try:
                 RunLogger(workspace.database).write(
-                    {"event": "curation", "status": "failed", "error": message}
+                    {
+                        "event": "curation",
+                        "status": "failed",
+                        "error": message,
+                        "error_class": classify(error),
+                    }
                 )
             except OSError:
                 pass

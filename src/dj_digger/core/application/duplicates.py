@@ -4,6 +4,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
+from dj_digger.core.analysis.config import DEFAULT_TRACK_TIMEOUT_SECONDS
 from dj_digger.core.application.analysis_progress import ProgressReporter
 from dj_digger.core.catalog.database import Database
 from dj_digger.core.config import MasteringConfig
@@ -21,7 +22,7 @@ class DuplicateAnalyzeRequest:
 
     source_id: str | None = None
     workers: int = 1
-    track_timeout: float = 1800.0
+    track_timeout: float = DEFAULT_TRACK_TIMEOUT_SECONDS
     mark_best_quality: bool = False
     mastering: bool = False
 

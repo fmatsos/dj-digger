@@ -17,6 +17,7 @@ from typing import Literal
 
 from dj_digger.core.catalog.database import Database
 from dj_digger.core.config import WorkspaceConfig
+from dj_digger.core.errors import InvalidInputError, ResourceNotFoundError, StateConflictError
 from dj_digger.core.set_copy import copy_track_atomic
 
 CurationExportContent = Literal["playlist", "report", "both"]
@@ -51,7 +52,7 @@ def export_curation(
 ) -> CurationExportResult:
     """Stage and atomically publish one persisted draft or validated curation."""
     if content not in {"playlist", "report", "both"}:
-        raise ValueError("--content must be playlist, report, or both")
+        raise InvalidInputError("--content must be playlist, report, or both")
     output = output.absolute()
     _validate_destination(output)
     output.parent.mkdir(parents=True, exist_ok=True)
@@ -62,7 +63,7 @@ def export_curation(
                 "SELECT report_markdown FROM curation_creations WHERE id = ?", (creation_id,)
             ).fetchone()
             if row is None:
-                raise ValueError(f"unknown curation ID: {creation_id}")
+                raise ResourceNotFoundError(f"unknown curation ID: {creation_id}")
             report = str(row[0])
             tracks = tuple(
                 _Track(
@@ -84,7 +85,7 @@ def export_curation(
                 )
             )
             if not tracks:
-                raise ValueError("curation contains no tracks")
+                raise StateConflictError("curation contains no tracks")
             roots = {source.id: source.path.resolve() for source in config.sources}
             selected_sources = {track.source_id for track in tracks}
             if content in {"playlist", "both"} and not copy_files and len(selected_sources) > 1:
@@ -143,13 +144,13 @@ def _validate_destination(output: Path) -> None:
     except FileNotFoundError:
         return
     kind = "symbolic link" if stat.S_ISLNK(status.st_mode) else "existing path"
-    raise ValueError(f"refusing to overwrite destination {kind}: {output}")
+    raise InvalidInputError(f"refusing to overwrite destination {kind}: {output}")
 
 
 def _resolve_track(track: _Track, roots: dict[str, Path]) -> Path:
     root = roots.get(track.source_id)
     if root is None:
-        raise ValueError(f"source is not configured: {track.source_id}")
+        raise ResourceNotFoundError(f"source is not configured: {track.source_id}")
     relative = _validate_relative_track_path(track)
     candidate = root / relative
     try:

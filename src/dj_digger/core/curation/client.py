@@ -15,6 +15,7 @@ from typing import Any, Protocol
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from dj_digger.core.config import CurationConfig
+from dj_digger.core.errors import DependencyError
 
 __all__ = [
     "CurationClientError",
@@ -30,24 +31,32 @@ __all__ = [
 ]
 
 
-class CurationClientError(RuntimeError):
+class CurationClientError(DependencyError):
     """Sanitized base error for the remote model boundary."""
 
 
 class CurationAuthenticationError(CurationClientError):
     """The configured environment variable has no usable credential."""
 
+    classification = "authentication"
+
 
 class CurationTimeoutError(CurationClientError):
     """The bounded model request timed out."""
+
+    classification = "timeout"
 
 
 class CurationTransportError(CurationClientError):
     """The model endpoint could not return a successful response."""
 
+    classification = "unavailable"
+
 
 class CurationResponseError(CurationClientError):
     """The model endpoint returned a malformed response."""
+
+    classification = "invalid response"
 
 
 class _FunctionCall(BaseModel):

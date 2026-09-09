@@ -2,7 +2,10 @@
 
 from dataclasses import dataclass
 
-from dj_digger.core.analysis.config import AnalysisIdentity
+from dj_digger.core.analysis.config import (
+    DEFAULT_TRACK_TIMEOUT_SECONDS,
+    AnalysisIdentity,
+)
 from dj_digger.core.analysis.pipeline import (
     AnalysisExtractor,
     AnalysisPipeline,
@@ -27,7 +30,7 @@ class AnalyzeRequest:
     limit: int | None = None
     force: bool = False
     workers: int = 1
-    track_timeout: float = 1800.0
+    track_timeout: float = DEFAULT_TRACK_TIMEOUT_SECONDS
 
 
 class AnalyzeUseCase:

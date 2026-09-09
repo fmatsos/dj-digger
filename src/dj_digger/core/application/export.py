@@ -9,9 +9,9 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from dj_digger.core.analysis.exporters import AnalysisExporter
-from dj_digger.core.application.errors import DependencyError, InvalidInputError
 from dj_digger.core.catalog.database import Database
 from dj_digger.core.config import WorkspaceConfig
+from dj_digger.core.errors import DependencyError, InvalidInputError
 from dj_digger.core.exports.audit import AuditExporter
 from dj_digger.core.exports.tracks import PublishedFacet, TracksExporter
 

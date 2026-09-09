@@ -25,6 +25,7 @@ from dj_digger.core.analysis.spectrum import (
 )
 from dj_digger.core.analysis.windows import DjWindowPlanner, IntroOutroWindows
 from dj_digger.core.config import DspConfig
+from dj_digger.core.errors import DependencyError
 
 Stage = Literal[
     "decode",
@@ -39,7 +40,7 @@ Stage = Literal[
 ResultStatus = Literal["succeeded", "partial", "failed"]
 
 
-class AnalysisExtractionError(RuntimeError):
+class AnalysisExtractionError(DependencyError):
     def __init__(self, stage: Stage, message: str, cause: Exception | None = None) -> None:
         super().__init__(message)
         self.stage = stage

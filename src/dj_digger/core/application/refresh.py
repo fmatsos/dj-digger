@@ -7,7 +7,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from dj_digger.core.analysis.config import AnalysisIdentity
+from dj_digger.core.analysis.config import (
+    DEFAULT_TRACK_TIMEOUT_SECONDS,
+    AnalysisIdentity,
+)
 from dj_digger.core.analysis.pipeline import (
     AnalysisExtractor,
     AnalysisRunResult,
@@ -32,7 +35,7 @@ class RefreshRequest:
     """Bounds for one complete scan-to-publication refresh."""
 
     workers: int = 1
-    track_timeout: float = 1800.0
+    track_timeout: float = DEFAULT_TRACK_TIMEOUT_SECONDS
 
 
 @dataclass(frozen=True)

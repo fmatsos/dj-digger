@@ -9,12 +9,13 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from dj_digger.core.duplicates.mastering import MasteringMeasurements, derive_mastering_measurements
+from dj_digger.core.errors import DependencyError
 
 _MAX_DIAGNOSTICS = 8_192
 _NUMBER = r"[-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][-+]?\d+)?"
 
 
-class EbuR128AnalysisError(RuntimeError):
+class EbuR128AnalysisError(DependencyError):
     """A classified failure while running or parsing FFmpeg."""
 
     def __init__(self, stage: str, message: str) -> None:

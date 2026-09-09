@@ -2,12 +2,21 @@
 
 from __future__ import annotations
 
+from enum import StrEnum
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 QualityStatus = Literal["unique", "verified_best", "best_effort", "unverified_unfingerprinted"]
-AnalysisStatus = Literal["ok", "failed", "missing"]
+
+
+class AnalysisStatus(StrEnum):
+    """How much analysis a curation candidate currently has."""
+
+    OK = "ok"
+    FAILED = "failed"
+    MISSING = "missing"
+
 
 __all__ = [
     "QualityStatus",
@@ -230,7 +239,13 @@ class CandidateDetailsV1(_Model):
 
 
 CurationKind = Literal["set", "playlist"]
-CurationStatus = Literal["draft", "validated"]
+
+
+class CurationStatus(StrEnum):
+    """Lifecycle of one persisted curation."""
+
+    DRAFT = "draft"
+    VALIDATED = "validated"
 
 
 class CurationTrack(_Model):

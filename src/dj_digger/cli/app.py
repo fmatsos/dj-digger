@@ -1,9 +1,7 @@
 """Command-line interface for DJ Digger."""
 
-import json
 import math
 import os
-import sys
 from pathlib import Path
 from typing import Annotated, Any
 
@@ -31,9 +29,16 @@ from dj_digger.cli.commands.snapshot import execute as execute_snapshot
 from dj_digger.cli.completion import install_patches
 from dj_digger.cli.presenters.copy import copy_payload, copy_progress_lines
 from dj_digger.cli.presenters.jobs import jobs_payload
-from dj_digger.cli.rich_progress import RichProgressReporter
-from dj_digger.cli.runtime import ConfigLoadError, config_failure, load_config
-from dj_digger.cli.terminal import render
+from dj_digger.cli.runtime import (
+    EXIT_FAILED,
+    Diagnostic,
+    configure_logging,
+    emit_json,
+    run_command,
+    run_command_with_progress,
+    run_with_config,
+)
+from dj_digger.core.analysis.config import DEFAULT_TRACK_TIMEOUT_SECONDS, DEFAULT_WORKERS
 from dj_digger.core.application import (
     AnalyzeRequest,
     CopySetRequest,
@@ -42,12 +47,12 @@ from dj_digger.core.application import (
     DuplicateListRequest,
     DuplicateMarkBestRequest,
     ExportRequest,
+    MetadataRequest,
     RefreshRequest,
+    ScanRequest,
     SnapshotRequest,
 )
-from dj_digger.core.run_log import RunLogger
-
-install_patches()
+from dj_digger.core.diagnostics import DiagnosticStatus
 
 app = typer.Typer(
     help="Catalog and export DJ music libraries.",
@@ -67,6 +72,7 @@ def callback(
     """DJ Digger command-line application."""
     ctx.ensure_object(dict)
     ctx.obj["verbosity"] = verbose
+    configure_logging(verbose)
     if ctx.invoked_subcommand is None:
         typer.echo(ctx.get_help())
 
@@ -144,76 +150,19 @@ BackgroundOption = Annotated[
 ]
 
 
-def _run(
-    config_path: Path, action: Any, *, event: str = "command", json_output: bool = False
-) -> None:
-    package = sys.modules.get("dj_digger.cli")
-    application_type = (
-        CoreApplication if package is None else getattr(package, "CoreApplication", CoreApplication)
-    )
-    logger_type = RunLogger if package is None else getattr(package, "RunLogger", RunLogger)
-    try:
-        config = load_config(config_path)
-    except ConfigLoadError as error:
-        diagnostic = config_failure(event, error)
-        if json_output:
-            typer.echo(
-                json.dumps(diagnostic, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
-            )
-        else:
-            render(diagnostic)
-        raise typer.Exit(1) from None
-    logger = logger_type(config.database)
-    try:
-        with application_type(config) as service:
-            diagnostic = action(service)
-    except Exception as error:
-        diagnostic = {"event": event, "status": "failed", "error": str(error)}
-    logger.write(diagnostic)
-    job_id = background.current_job_id()
-    if job_id is not None:
-        background.record_result(config.database, job_id, diagnostic)
-    if json_output:
-        typer.echo(
-            json.dumps(diagnostic, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
-        )
-    else:
-        render(diagnostic)
-    if diagnostic.get("status") == "failed":
-        raise typer.Exit(1)
-    if diagnostic.get("status") == "partial":
-        raise typer.Exit(2)
-
-
 def _run_in_background(
     config_path: Path, command: str, argv: list[str], *, json_output: bool = False
 ) -> None:
-    try:
-        config = load_config(config_path)
-    except ConfigLoadError as error:
-        diagnostic = config_failure(command, error)
-        if json_output:
-            typer.echo(
-                json.dumps(diagnostic, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
-            )
-        else:
-            render(diagnostic)
-        raise typer.Exit(1) from None
-    info = background.launch(config.database, command, argv)
-    diagnostic = {"event": command, "status": "background", **info}
-    if json_output:
-        typer.echo(
-            json.dumps(diagnostic, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
-        )
-    else:
-        render(diagnostic)
-
-
-def _progress_reporter() -> type[RichProgressReporter]:
-    package = sys.modules.get("dj_digger.cli")
-    if package is None:
-        return RichProgressReporter
-    return getattr(package, "RichProgressReporter", RichProgressReporter)
+    run_with_config(
+        config_path,
+        lambda config: {
+            "event": command,
+            "status": DiagnosticStatus.BACKGROUND,
+            **background.launch(config.database, command, argv),
+        },
+        event=command,
+        json_output=json_output,
+    )
 
 
 @app.command()
@@ -223,15 +172,12 @@ def scan(
     json_output: JsonOption = False,
 ) -> None:
     """Scan configured source roots and reconcile successful observations."""
-    diagnostic = execute_scan(config, source)
-    if json_output:
-        typer.echo(
-            json.dumps(diagnostic, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
-        )
-    else:
-        render(diagnostic)
-    if diagnostic.get("status") == "failed":
-        raise typer.Exit(1)
+    run_command(
+        config,
+        lambda service: execute_scan(service, ScanRequest(source_id=source)),
+        event="scan",
+        json_output=json_output,
+    )
 
 
 @app.command()
@@ -243,17 +189,14 @@ def metadata(
     json_output: JsonOption = False,
 ) -> None:
     """Refresh embedded metadata for current tracks."""
-    diagnostic = execute_metadata(config, source, path, force)
-    if json_output:
-        typer.echo(
-            json.dumps(diagnostic, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
-        )
-    else:
-        render(diagnostic)
-    if diagnostic.get("status") == "failed":
-        raise typer.Exit(1)
-    if diagnostic.get("status") == "partial":
-        raise typer.Exit(2)
+    run_command(
+        config,
+        lambda service: execute_metadata(
+            service, MetadataRequest(source_id=source, path_prefix=path, force=force)
+        ),
+        event="metadata",
+        json_output=json_output,
+    )
 
 
 @app.command()
@@ -264,8 +207,8 @@ def analyze(
     path: Annotated[str | None, typer.Option()] = None,
     limit: Annotated[int | None, typer.Option()] = None,
     force: Annotated[bool, typer.Option()] = False,
-    workers: PositiveWorkersOption = 1,
-    track_timeout: TrackTimeoutOption = 1800.0,
+    workers: PositiveWorkersOption = DEFAULT_WORKERS,
+    track_timeout: TrackTimeoutOption = DEFAULT_TRACK_TIMEOUT_SECONDS,
     background: BackgroundOption = False,
     json_output: JsonOption = False,
 ) -> None:
@@ -286,22 +229,24 @@ def analyze(
         _run_in_background(config, "analyze", argv, json_output=json_output)
         return
 
-    def action(service: CoreApplication) -> dict[str, Any]:
-        with _progress_reporter()(verbosity=ctx.obj.get("verbosity", 0)) as progress:
-            return execute_analyze(
-                service,
-                AnalyzeRequest(
-                    source_id=source,
-                    path_prefix=path,
-                    limit=limit,
-                    force=force,
-                    workers=workers,
-                    track_timeout=track_timeout,
-                ),
-                progress=progress,
-            )
-
-    _run(config, action, event="analyze", json_output=json_output)
+    run_command_with_progress(
+        config,
+        lambda service, progress: execute_analyze(
+            service,
+            AnalyzeRequest(
+                source_id=source,
+                path_prefix=path,
+                limit=limit,
+                force=force,
+                workers=workers,
+                track_timeout=track_timeout,
+            ),
+            progress=progress,
+        ),
+        event="analyze",
+        verbosity=ctx.obj.get("verbosity", 0),
+        json_output=json_output,
+    )
 
 
 @app.command()
@@ -314,8 +259,8 @@ def duplicates(
     mastering: Annotated[bool, typer.Option("--mastering")] = False,
     dj_review: Annotated[bool, typer.Option("--dj-review")] = False,
     source: Annotated[str | None, typer.Option()] = None,
-    workers: PositiveWorkersOption = 1,
-    track_timeout: TrackTimeoutOption = 1800.0,
+    workers: PositiveWorkersOption = DEFAULT_WORKERS,
+    track_timeout: TrackTimeoutOption = DEFAULT_TRACK_TIMEOUT_SECONDS,
     background: BackgroundOption = False,
     json_output: JsonOption = False,
 ) -> None:
@@ -352,32 +297,36 @@ def duplicates(
         _run_in_background(config, "duplicates", argv, json_output=json_output)
         return
 
-    def action(service: CoreApplication) -> dict[str, Any]:
+    if analyze:
+        run_command_with_progress(
+            config,
+            lambda service, progress: execute_duplicates(
+                service,
+                DuplicateAnalyzeRequest(
+                    source_id=source,
+                    workers=workers,
+                    track_timeout=track_timeout,
+                    mark_best_quality=mark_best_quality,
+                    mastering=mastering,
+                ),
+                progress=progress,
+            ),
+            event="duplicates",
+            verbosity=ctx.obj.get("verbosity", 0),
+            json_output=json_output,
+        )
+        return
+
+    def action(service: CoreApplication) -> Diagnostic:
         if list_:
             return execute_duplicates(
                 service,
                 DuplicateListRequest(source_id=source),
                 dj_review=dj_review,
             )
-        if analyze:
-            with _progress_reporter()(verbosity=ctx.obj.get("verbosity", 0)) as progress:
-                return execute_duplicates(
-                    service,
-                    DuplicateAnalyzeRequest(
-                        source_id=source,
-                        workers=workers,
-                        track_timeout=track_timeout,
-                        mark_best_quality=mark_best_quality,
-                        mastering=mastering,
-                    ),
-                    progress=progress,
-                )
-        return execute_duplicates(
-            service,
-            DuplicateMarkBestRequest(source_id=source),
-        )
+        return execute_duplicates(service, DuplicateMarkBestRequest(source_id=source))
 
-    _run(config, action, event="duplicates", json_output=json_output)
+    run_command(config, action, event="duplicates", json_output=json_output)
 
 
 def _was_passed_on_command_line(ctx: typer.Context, name: str) -> bool:
@@ -395,7 +344,7 @@ def export(
     json_output: JsonOption = False,
 ) -> None:
     """Publish canonical catalog facets."""
-    _run(
+    run_command(
         config,
         lambda service: execute_export(
             service,
@@ -444,9 +393,9 @@ def copy(
         )
     except (OSError, ValueError) as error:
         typer.echo(f"Error: {error}", err=True)
-        raise typer.Exit(1) from None
+        raise typer.Exit(EXIT_FAILED) from None
     if json_output:
-        typer.echo(json.dumps(copy_payload(result), separators=(",", ":")))
+        emit_json(copy_payload(result))
     elif verbose:
         typer.echo(f"\nOWNERSHIP {owner} -> {output.resolve()}")
         typer.echo(f"\nPlaylist: {result.playlist}\nText list: {result.text_list}")
@@ -460,7 +409,7 @@ def snapshot(
     json_output: JsonOption = False,
 ) -> None:
     """Create a validated, optionally archived export snapshot."""
-    _run(
+    run_command(
         config,
         lambda service: execute_snapshot(service, SnapshotRequest(output, archive)),
         event="snapshot",
@@ -471,31 +420,36 @@ def snapshot(
 @app.command()
 def doctor(config: ConfigOption, json_output: JsonOption = False) -> None:
     """Check workspace roots, schema migrations, and required binaries."""
-    _run(config, execute_doctor, event="doctor", json_output=json_output)
+    run_command(config, execute_doctor, event="doctor", json_output=json_output)
 
 
 @app.command()
 def status(config: ConfigOption, json_output: JsonOption = False) -> None:
     """Report source freshness and currently known catalog state."""
-    _run(config, execute_status, event="status", json_output=json_output)
+    run_command(config, execute_status, event="status", json_output=json_output)
 
 
 @database_app.command("optimize")
 def database_optimize(config: ConfigOption, json_output: JsonOption = False) -> None:
     """Update SQLite planner statistics when useful."""
-    _run(config, execute_optimize, event="database.optimize", json_output=json_output)
+    run_command(config, execute_optimize, event="database.optimize", json_output=json_output)
 
 
 @database_app.command("quick-check")
 def database_quick_check(config: ConfigOption, json_output: JsonOption = False) -> None:
     """Run SQLite's lightweight consistency check."""
-    _run(config, execute_quick_check, event="database.quick-check", json_output=json_output)
+    run_command(config, execute_quick_check, event="database.quick-check", json_output=json_output)
 
 
 @database_app.command("integrity-check")
 def database_integrity_check(config: ConfigOption, json_output: JsonOption = False) -> None:
     """Run SQLite's explicit full integrity check."""
-    _run(config, execute_integrity_check, event="database.integrity-check", json_output=json_output)
+    run_command(
+        config,
+        execute_integrity_check,
+        event="database.integrity-check",
+        json_output=json_output,
+    )
 
 
 @database_app.command("rebuild-current-analysis")
@@ -503,7 +457,7 @@ def database_rebuild_current_analysis(
     config: ConfigOption, json_output: JsonOption = False
 ) -> None:
     """Rebuild the derived latest-successful-analysis projection."""
-    _run(
+    run_command(
         config,
         execute_rebuild,
         event="database.rebuild-current-analysis",
@@ -515,8 +469,8 @@ def database_rebuild_current_analysis(
 def refresh(
     config: ConfigOption,
     ctx: typer.Context,
-    workers: PositiveWorkersOption = 1,
-    track_timeout: TrackTimeoutOption = 1800.0,
+    workers: PositiveWorkersOption = DEFAULT_WORKERS,
+    track_timeout: TrackTimeoutOption = DEFAULT_TRACK_TIMEOUT_SECONDS,
     background: BackgroundOption = False,
     json_output: JsonOption = False,
 ) -> None:
@@ -529,40 +483,33 @@ def refresh(
         _run_in_background(config, "refresh", argv, json_output=json_output)
         return
 
-    def action(service: CoreApplication) -> dict[str, Any]:
-        with _progress_reporter()(verbosity=ctx.obj.get("verbosity", 0)) as progress:
-            return execute_refresh(
-                service,
-                RefreshRequest(workers=workers, track_timeout=track_timeout),
-                progress=progress,
-            )
-
-    _run(config, action, event="refresh", json_output=json_output)
+    run_command_with_progress(
+        config,
+        lambda service, progress: execute_refresh(
+            service,
+            RefreshRequest(workers=workers, track_timeout=track_timeout),
+            progress=progress,
+        ),
+        event="refresh",
+        verbosity=ctx.obj.get("verbosity", 0),
+        json_output=json_output,
+    )
 
 
 @app.command()
 def jobs(config: ConfigOption, json_output: JsonOption = False) -> None:
     """List background jobs launched with --background and their status."""
-    try:
-        workspace_config = load_config(config)
-    except ConfigLoadError as error:
-        diagnostic = config_failure("jobs", error)
-        if json_output:
-            typer.echo(
-                json.dumps(diagnostic, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
-            )
-        else:
-            render(diagnostic)
-        raise typer.Exit(1) from None
-    payload = jobs_payload(background.list_jobs(workspace_config.database))
-    if json_output:
-        typer.echo(json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")))
-    else:
-        render(payload)
+    run_with_config(
+        config,
+        lambda workspace: jobs_payload(background.list_jobs(workspace.database)),
+        event="jobs",
+        json_output=json_output,
+    )
 
 
 def main() -> None:
     """Run the DJ Digger command-line application."""
+    install_patches()
     app()
 
 

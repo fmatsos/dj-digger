@@ -1,10 +1,13 @@
 import os
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 
+import pytest
 from typer import _completion_shared
 
+from dj_digger.cli import completion
 from dj_digger.cli.completion import _read_profile, replace_profile_region
 
 
@@ -123,3 +126,76 @@ def test_read_profile_preserves_utf16_encoding(tmp_path: Path) -> None:
 
     assert content == "# réglage utilisateur\n"
     assert encoding == "utf-16"
+
+
+def test_importing_the_cli_package_does_not_patch_typer() -> None:
+    """Importing the CLI must stay free of global side effects on Typer.
+
+    Runs in a fresh interpreter: asserting on import-time behaviour in-process
+    would require tearing ``dj_digger.cli`` out of ``sys.modules`` and leaking
+    that into every later test.
+    """
+    probe = (
+        "from typer import _completion_shared as shared;"
+        "before = shared.install_powershell;"
+        "import dj_digger.cli;"
+        "assert shared.install_powershell is before, 'importing dj_digger.cli patched Typer';"
+        "import dj_digger.cli.completion as completion;"
+        "completion.install_patches();"
+        "assert shared.install_powershell is not before, 'install_patches() did not apply'"
+    )
+
+    result = subprocess.run(
+        [sys.executable, "-c", probe], capture_output=True, check=False, text=True
+    )
+
+    assert result.returncode == 0, result.stderr
+
+
+def test_install_patches_is_idempotent_and_reversible(monkeypatch: pytest.MonkeyPatch) -> None:
+    original = _completion_shared.install_powershell
+    monkeypatch.setattr(completion, "_patched", False, raising=False)
+    monkeypatch.setattr(_completion_shared, "install_powershell", original)
+
+    completion.install_patches()
+    patched = _completion_shared.install_powershell
+    completion.install_patches()
+
+    assert patched is not original
+    assert _completion_shared.install_powershell is patched
+
+
+def test_install_patches_tolerates_a_missing_typer_internal(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(completion, "_patched", False, raising=False)
+    monkeypatch.delattr(_completion_shared, "install_powershell", raising=False)
+
+    completion.install_patches()
+
+    assert not hasattr(_completion_shared, "install_powershell")
+
+
+def test_powershell_install_never_relaxes_the_execution_policy(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Installing completion must never mutate the user's PowerShell policy."""
+    profile = tmp_path / "profile.ps1"
+    commands: list[list[str]] = []
+
+    def fake_run(argv: list[str], **kwargs: object) -> subprocess.CompletedProcess[bytes]:
+        commands.append(argv)
+        if "Get-ExecutionPolicy" in argv:
+            return subprocess.CompletedProcess(argv, 0, b"Restricted\r\n", b"")
+        return subprocess.CompletedProcess(argv, 0, str(profile).encode("utf-8"), b"")
+
+    monkeypatch.setattr(completion.subprocess, "run", fake_run)
+
+    installed = completion._install_powershell(
+        prog_name="dj-digger", complete_var="_DJ_DIGGER_COMPLETE", shell="pwsh"
+    )
+
+    assert installed == profile
+    assert "dj-digger completion" in profile.read_text(encoding="utf-8")
+    assert not any("Set-ExecutionPolicy" in argument for argv in commands for argument in argv)
+    assert "Set-ExecutionPolicy" in capsys.readouterr().err
