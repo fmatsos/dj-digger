@@ -8,7 +8,11 @@ from datetime import UTC, datetime
 from math import isfinite
 from typing import Any
 
-from dj_digger.core.analysis.config import AnalysisIdentity
+from dj_digger.core.analysis.config import (
+    DEFAULT_TRACK_TIMEOUT_SECONDS,
+    DEFAULT_WORKERS,
+    AnalysisIdentity,
+)
 from dj_digger.core.analysis.eligibility import AnalysisEligibility
 from dj_digger.core.analysis.extractor import (
     AnalysisExtractionError,
@@ -20,6 +24,7 @@ from dj_digger.core.application.analysis_progress import NullProgressReporter, P
 from dj_digger.core.catalog.database import Database
 from dj_digger.core.catalog.models import Track
 from dj_digger.core.catalog.repositories import TrackRepository
+from dj_digger.core.errors import InvalidInputError
 
 AnalysisExtractor = Callable[[Track], AnalysisExtractionResult | Mapping[str, Any]]
 
@@ -84,19 +89,19 @@ class AnalysisPipeline:
         path_prefix: str | None = None,
         limit: int | None = None,
         force: bool = False,
-        workers: int = 1,
-        track_timeout: float = 1800.0,
+        workers: int = DEFAULT_WORKERS,
+        track_timeout: float = DEFAULT_TRACK_TIMEOUT_SECONDS,
     ) -> AnalysisRunResult:
         """Analyze selected tracks, preserving reuse and append-only history."""
         with self._database.advisory_lock("analysis-pipeline"):
             if path_prefix is not None and not path_prefix.strip():
-                raise ValueError("path prefix must not be blank")
+                raise InvalidInputError("path prefix must not be blank")
             if limit is not None and limit < 1:
-                raise ValueError("limit must be positive")
+                raise InvalidInputError("limit must be positive")
             if workers < 1:
-                raise ValueError("workers must be positive")
+                raise InvalidInputError("workers must be positive")
             if not isfinite(track_timeout) or track_timeout <= 0:
-                raise ValueError("track timeout must be positive")
+                raise InvalidInputError("track timeout must be positive")
 
             self._persistence.reconcile_running_runs(finished_at=_now())
             selected = (

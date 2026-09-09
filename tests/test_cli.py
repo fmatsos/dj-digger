@@ -6,10 +6,11 @@ import pytest
 import typer
 from typer.testing import CliRunner
 
-from dj_digger.cli import _run, app
+from dj_digger.cli import app, runtime
 from dj_digger.cli.presenters.metadata import metadata_payload
 from dj_digger.cli.presenters.scan import scan_payload
 from dj_digger.core.application import MetadataRunResult, ScanRunResult, ScanSourceResult
+from dj_digger.core.errors import InvalidInputError
 
 
 def _write_config(path: Path, filename: str = "config.toml", *, source_id: str = "library") -> Path:
@@ -197,6 +198,7 @@ def test_missing_discovered_config_requests_explicit_option(
 
 
 def test_run_closes_its_application_when_the_action_fails(monkeypatch) -> None:
+    """A failing action must still close the catalog session it was given."""
     events: list[str] = []
 
     class FakeApplication:
@@ -219,11 +221,65 @@ def test_run_closes_its_application_when_the_action_fails(monkeypatch) -> None:
             pass
 
     config = type("Config", (), {"database": Path("catalog.sqlite")})()
-    monkeypatch.setattr("dj_digger.cli.WorkspaceConfig.load", lambda _path: config)
-    monkeypatch.setattr("dj_digger.cli.CoreApplication", FakeApplication)
-    monkeypatch.setattr("dj_digger.cli.RunLogger", FakeLogger)
+    monkeypatch.setattr(runtime.WorkspaceConfig, "load", staticmethod(lambda _path: config))
 
     with pytest.raises(typer.Exit):
-        _run(Path("config.toml"), lambda _service: (_ for _ in ()).throw(RuntimeError("boom")))
+        runtime.run_command(
+            Path("config.toml"),
+            lambda _service: (_ for _ in ()).throw(RuntimeError("boom")),
+            event="probe",
+            application_factory=FakeApplication,
+            logger_factory=FakeLogger,
+        )
 
     assert events == ["created", "entered", "closed"]
+
+
+def test_run_records_the_failure_class_derived_from_the_exception_type(monkeypatch) -> None:
+    """The persisted diagnostic carries a typed failure class, not a guess."""
+    written: list[dict[str, object]] = []
+
+    class FakeApplication:
+        def __init__(self, _config) -> None:
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args) -> None:
+            return None
+
+    class FakeLogger:
+        def __init__(self, _database) -> None:
+            pass
+
+        def write(self, diagnostic) -> None:
+            written.append(diagnostic)
+
+    def failing(_service):
+        raise InvalidInputError("limit must be positive")
+
+    config = type("Config", (), {"database": Path("catalog.sqlite")})()
+    monkeypatch.setattr(runtime.WorkspaceConfig, "load", staticmethod(lambda _path: config))
+
+    diagnostic = runtime.execute_command(
+        Path("config.toml"),
+        failing,
+        event="probe",
+        application_factory=lambda _config: FakeApplication(_config),
+        logger_factory=FakeLogger,
+    )
+
+    assert diagnostic["status"] == "failed"
+    assert diagnostic["error_class"] == "invalid input"
+    assert written == [diagnostic]
+
+
+@pytest.mark.parametrize(
+    ("status", "expected"),
+    [("succeeded", 0), ("partial", 2), ("failed", 1), (None, 0)],
+)
+def test_every_command_shares_one_status_to_exit_code_mapping(
+    status: str | None, expected: int
+) -> None:
+    assert runtime.exit_code_for({"status": status} if status else {}) == expected

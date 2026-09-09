@@ -20,7 +20,7 @@ dependencies = [
 ]
 
 [project.scripts]
-dj-digger = "dj_digger.cli:app"
+dj-digger = "dj_digger.cli:main"
 
 [tool.hatch.build.targets.wheel]
 # Keep the package root so both canonical ``core`` resources and the CLI

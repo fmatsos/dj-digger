@@ -15,6 +15,7 @@ from dj_digger.core.catalog.repositories import (
     EventRepository,
     SourceRepository,
 )
+from dj_digger.core.errors import DependencyError
 
 EMBEDDED_FIELDS = (
     "Title",
@@ -60,7 +61,7 @@ class ExtractionBatch:
     failures: dict[int, str]
 
 
-class ExtractionError(RuntimeError):
+class ExtractionError(DependencyError):
     """ExifTool could not produce usable metadata for a requested track."""
 
 

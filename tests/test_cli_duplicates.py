@@ -112,7 +112,9 @@ def test_analyze_propagates_source_and_execution_options(monkeypatch, tmp_path: 
             elapsed_seconds=0.1,
         )
 
-    monkeypatch.setattr("dj_digger.cli.CoreApplication.duplicates_analyze", duplicates_analyze)
+    monkeypatch.setattr(
+        "dj_digger.core.application.app.CoreApplication.duplicates_analyze", duplicates_analyze
+    )
 
     result = CliRunner().invoke(
         app,
@@ -161,7 +163,9 @@ def test_analyze_uses_safe_execution_defaults(monkeypatch, tmp_path: Path) -> No
             elapsed_seconds=0.0,
         )
 
-    monkeypatch.setattr("dj_digger.cli.CoreApplication.duplicates_analyze", duplicates_analyze)
+    monkeypatch.setattr(
+        "dj_digger.core.application.app.CoreApplication.duplicates_analyze", duplicates_analyze
+    )
 
     result = CliRunner().invoke(
         app, ["duplicates", "--analyze", "--config", str(_config(tmp_path)), "--json"]
@@ -185,7 +189,9 @@ def test_analyze_maps_partial_failure_to_exit_code_two(monkeypatch, tmp_path: Pa
             elapsed_seconds=0.0,
         )
 
-    monkeypatch.setattr("dj_digger.cli.CoreApplication.duplicates_analyze", duplicates_analyze)
+    monkeypatch.setattr(
+        "dj_digger.core.application.app.CoreApplication.duplicates_analyze", duplicates_analyze
+    )
 
     result = CliRunner().invoke(
         app, ["duplicates", "--analyze", "--config", str(_config(tmp_path)), "--json"]
@@ -221,7 +227,9 @@ def test_list_emits_ordered_groups_with_members_and_quality_state(
             )
         ]
 
-    monkeypatch.setattr("dj_digger.cli.CoreApplication.duplicates_list", duplicates_list)
+    monkeypatch.setattr(
+        "dj_digger.core.application.app.CoreApplication.duplicates_list", duplicates_list
+    )
 
     result = CliRunner().invoke(
         app, ["duplicates", "--list", "--config", str(_config(tmp_path)), "--json"]
@@ -242,7 +250,9 @@ def test_review_sort_changes_presentation_order_without_changing_group_membershi
             DuplicateGroupDescription(group_id="a-group", members=(), dj_review_recommended=True),
         ]
 
-    monkeypatch.setattr("dj_digger.cli.CoreApplication.duplicates_list", duplicates_list)
+    monkeypatch.setattr(
+        "dj_digger.core.application.app.CoreApplication.duplicates_list", duplicates_list
+    )
 
     result = CliRunner().invoke(
         app,
@@ -260,7 +270,7 @@ def test_mark_best_quality_reports_failed_status_and_exit_code(monkeypatch, tmp_
         return QualityMarkResult(status="failed", marked_best=0, incomplete_track_ids=(3, 5))
 
     monkeypatch.setattr(
-        "dj_digger.cli.CoreApplication.duplicates_mark_best_quality",
+        "dj_digger.core.application.app.CoreApplication.duplicates_mark_best_quality",
         duplicates_mark_best_quality,
     )
 

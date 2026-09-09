@@ -6,6 +6,7 @@ from collections.abc import Iterable, Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
+from dj_digger.core.errors import InvalidInputError
 from dj_digger.core.exports.atomic import publish_atomic
 
 FORMATS = {"json", "csv", "tsv"}
@@ -23,15 +24,15 @@ def select_fields(available: Sequence[str], fields: str | None) -> tuple[str, ..
     if fields is None:
         return None
     if not fields.strip():
-        raise ValueError("--fields must not be blank")
+        raise InvalidInputError("--fields must not be blank")
     selected = tuple(part.strip() for part in fields.split(","))
     if any(not part for part in selected):
-        raise ValueError("--fields contains a blank field")
+        raise InvalidInputError("--fields contains a blank field")
     if len(set(selected)) != len(selected):
-        raise ValueError("--fields contains duplicate fields")
+        raise InvalidInputError("--fields contains duplicate fields")
     unknown = [part for part in selected if part not in available]
     if unknown:
-        raise ValueError(f"unknown field: {unknown[0]}")
+        raise InvalidInputError(f"unknown field: {unknown[0]}")
     return selected
 
 
@@ -47,7 +48,7 @@ def output_path(path: Path, fmt: str | None) -> Path:
     if fmt is None:
         return path
     if fmt not in FORMATS:
-        raise ValueError(f"unknown export format: {fmt}")
+        raise InvalidInputError(f"unknown export format: {fmt}")
     return path.with_suffix(f".{fmt}")
 
 

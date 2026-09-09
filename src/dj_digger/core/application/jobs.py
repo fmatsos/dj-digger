@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from dj_digger.core.errors import UNCLASSIFIED
 from dj_digger.core.jobs import (
     JOB_ID_ENV,
     JobRecord,
@@ -35,8 +36,8 @@ class JobsUseCase:
     def record_result(self, job_id: str, diagnostic: dict[str, Any]) -> JobRecord:
         return self._repository.record_result(job_id, diagnostic)
 
-    def fail(self, job_id: str, error: str) -> JobRecord:
-        return self._repository.fail(job_id, error)
+    def fail(self, job_id: str, error: str, *, error_class: str = UNCLASSIFIED) -> JobRecord:
+        return self._repository.fail(job_id, error, error_class=error_class)
 
     def mark_unknown(self, job_id: str, *, code: str = "cleanup_failed") -> JobRecord:
         return self._repository.mark_unknown(job_id, code=code)

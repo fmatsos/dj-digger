@@ -8,6 +8,8 @@ from typing import Any, Protocol
 import numpy as np
 from numpy.typing import NDArray
 
+from dj_digger.core.errors import DependencyError
+
 Samples = NDArray[np.float32]
 
 
@@ -46,7 +48,7 @@ class EssentiaTempoAdapter:
         try:
             es = _load_essentia_standard()
         except ImportError as error:
-            raise RuntimeError("Essentia is required for tempo analysis") from error
+            raise DependencyError("Essentia is required for tempo analysis") from error
 
         return float(es.PercivalBpmEstimator(sampleRate=sample_rate)(samples))
 
@@ -61,7 +63,7 @@ class EssentiaBeatGridAdapter:
         try:
             es = _load_essentia_standard()
         except ImportError as error:
-            raise RuntimeError("Essentia is required for beat-grid analysis") from error
+            raise DependencyError("Essentia is required for beat-grid analysis") from error
 
         window = es.Windowing(type="hann")
         fft = es.FFT()
@@ -106,7 +108,7 @@ class EssentiaKeyAdapter:
         try:
             es = _load_essentia_standard()
         except ImportError as error:
-            raise RuntimeError("Essentia is required for key analysis") from error
+            raise DependencyError("Essentia is required for key analysis") from error
 
         key, scale, confidence = es.KeyExtractor(sampleRate=sample_rate)(samples)
         return str(key), str(scale), float(confidence)
@@ -118,7 +120,7 @@ def _disable_essentia_native_info_warning(essentia: object) -> None:
     if log is None or not all(
         hasattr(log, name) for name in ("infoActive", "warningActive", "errorActive")
     ):
-        raise RuntimeError("Essentia logging controls are unavailable")
+        raise DependencyError("Essentia logging controls are unavailable")
     log.infoActive = False
     log.warningActive = False
     log.errorActive = True

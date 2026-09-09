@@ -8,6 +8,7 @@ from dj_digger.cli.presenters.duplicates import (
     duplicate_mark_best_payload,
 )
 from dj_digger.core.application import (
+    CoreApplication,
     DuplicateAnalysisResult,
     DuplicateAnalyzeRequest,
     DuplicateListRequest,
@@ -18,7 +19,7 @@ from dj_digger.core.application.progress import ProgressSink
 
 
 def execute(
-    service: Any,
+    service: CoreApplication,
     request: DuplicateAnalyzeRequest | DuplicateListRequest | DuplicateMarkBestRequest,
     *,
     progress: ProgressSink | None = None,

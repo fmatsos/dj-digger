@@ -8,6 +8,7 @@ from math import isfinite
 from pathlib import Path
 
 from dj_digger.core.analysis.audio import TechnicalAudioMetadata
+from dj_digger.core.analysis.config import DEFAULT_TRACK_TIMEOUT_SECONDS, DEFAULT_WORKERS
 from dj_digger.core.analysis.ebur128 import EbuR128Analyzer
 from dj_digger.core.analysis.ffmpeg import FFmpegProbe
 from dj_digger.core.application.analysis_progress import NullProgressReporter, ProgressReporter
@@ -26,6 +27,7 @@ from dj_digger.core.duplicates.mastering_comparison import MasteringComparison, 
 from dj_digger.core.duplicates.mastering_repository import MasteringRepository
 from dj_digger.core.duplicates.quality import QualityMarkResult, QualitySelector
 from dj_digger.core.duplicates.repository import DuplicateGroup, DuplicateRepository
+from dj_digger.core.errors import InvalidInputError
 
 TECHNICAL_PROBE_VERSION = "ffmpeg-facts/1"
 
@@ -127,17 +129,17 @@ class DuplicateService:
         self,
         *,
         source_id: str | None = None,
-        workers: int = 1,
-        track_timeout: float = 1800.0,
+        workers: int = DEFAULT_WORKERS,
+        track_timeout: float = DEFAULT_TRACK_TIMEOUT_SECONDS,
         mark_best_quality: bool = False,
         mastering: bool = False,
     ) -> DuplicateAnalysisResult:
         """Fingerprint present tracks in the requested scope, reusing current results."""
         with self._database.advisory_lock("duplicates"):
             if workers < 1:
-                raise ValueError("workers must be positive")
+                raise InvalidInputError("workers must be positive")
             if not isfinite(track_timeout) or track_timeout <= 0:
-                raise ValueError("track timeout must be positive")
+                raise InvalidInputError("track timeout must be positive")
 
             started = time.monotonic()
             tracks = self._repository.present_tracks(source_id)

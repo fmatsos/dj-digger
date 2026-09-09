@@ -11,6 +11,7 @@ from typing import Any
 
 from dj_digger.core.jobs import (
     JOB_ID_ENV,
+    TERMINAL_JOB_STATUSES,
     JobRecord,
     JobRepository,
     current_job_id,
@@ -45,7 +46,7 @@ def launch(database_path: Path, command: str, argv: list[str]) -> dict[str, Any]
                 repository.start(created.job_id, process.pid)
             except Exception:
                 current = repository.get(created.job_id)
-                if current.status in {"succeeded", "partial", "failed", "unknown"}:
+                if current.status in TERMINAL_JOB_STATUSES:
                     return {"job_id": created.job_id, "pid": process.pid, "log": str(log_file)}
                 raise
     except BaseException:

@@ -5,10 +5,12 @@ import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
+from dj_digger.core.errors import DependencyError
+
 FINGERPRINT_VERSION = "ffmpeg-chromaprint/1"
 
 
-class FingerprintExtractionError(Exception):
+class FingerprintExtractionError(DependencyError):
     """Raised when FFmpeg fails to produce a usable Chromaprint fingerprint."""
 
 

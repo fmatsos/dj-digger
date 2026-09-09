@@ -6,7 +6,12 @@ from pathlib import Path
 from types import TracebackType
 from typing import Self
 
-from dj_digger.core.analysis.config import CURRENT_ANALYZER_VERSION, AnalysisIdentity
+from dj_digger.core.analysis.config import (
+    CURRENT_ANALYZER_VERSION,
+    DEFAULT_TRACK_TIMEOUT_SECONDS,
+    DEFAULT_WORKERS,
+    AnalysisIdentity,
+)
 from dj_digger.core.analysis.pipeline import (
     AnalysisExtractor,
     AnalysisRunResult,
@@ -24,7 +29,6 @@ from dj_digger.core.application.duplicates import (
     DuplicateMarkBestRequest,
     DuplicateMarkBestUseCase,
 )
-from dj_digger.core.application.errors import ResourceNotFoundError
 from dj_digger.core.application.export import ExportRequest, ExportResult, ExportUseCase
 from dj_digger.core.application.metadata import (
     MetadataRequest,
@@ -63,6 +67,11 @@ from dj_digger.core.duplicates.quality import QualityMarkResult
 from dj_digger.core.duplicates.service import (
     DuplicateAnalysisResult,
     DuplicateGroupDescription,
+)
+from dj_digger.core.errors import (
+    InvalidInputError,
+    ResourceNotFoundError,
+    StateConflictError,
 )
 from dj_digger.core.exports.curation import (
     CurationExportContent,
@@ -222,10 +231,7 @@ class CoreApplication:
     def _require_duplicate_source(self, source_id: str | None) -> None:
         if source_id is None:
             return
-        try:
-            self._selected_sources(source_id, enabled_only=True)
-        except ValueError as error:
-            raise ResourceNotFoundError(str(error)) from error
+        self._selected_sources(source_id, enabled_only=True)
 
     async def create_curation(self, request: CurationRequest) -> CurationResult:
         """Run and persist one catalog-grounded draft asynchronously."""
@@ -241,12 +247,13 @@ class CoreApplication:
 
     def validate_curation(self, creation_id: str) -> CurationCreation:
         """Explicitly transition a draft to validated."""
-        creation = CurationRepository(self.database).get(creation_id)
+        curations = CurationRepository(self.database)
+        creation = curations.get(creation_id)
         if creation is None:
-            raise ValueError("unknown curation ID")
+            raise ResourceNotFoundError("unknown curation ID")
         if creation.status != "draft":
-            raise RuntimeError("curation is already validated")
-        return CurationRepository(self.database).validate(creation_id)
+            raise StateConflictError("curation is already validated")
+        return curations.validate(creation_id)
 
     def export_curation(
         self,
@@ -278,14 +285,16 @@ class CoreApplication:
         self,
         request: RefreshRequest | None = None,
         *,
-        workers: int = 1,
-        track_timeout: float = 1800.0,
+        workers: int = DEFAULT_WORKERS,
+        track_timeout: float = DEFAULT_TRACK_TIMEOUT_SECONDS,
         progress: ProgressReporter | ProgressSink | None = None,
     ) -> RefreshResult:
         """Run scan, metadata, analysis, and one atomic export publication."""
         effective = request or RefreshRequest(workers=workers, track_timeout=track_timeout)
-        if request is not None and (workers != 1 or track_timeout != 1800.0):
-            raise ValueError("refresh request conflicts with worker options")
+        if request is not None and (
+            workers != DEFAULT_WORKERS or track_timeout != DEFAULT_TRACK_TIMEOUT_SECONDS
+        ):
+            raise InvalidInputError("refresh request conflicts with worker options")
         return RefreshUseCase(
             self.database,
             self.config,
@@ -349,7 +358,7 @@ class CoreApplication:
             return sources
         selected = tuple(source for source in sources if source.id == source_id)
         if not selected:
-            raise ValueError(f"unknown or disabled source: {source_id}")
+            raise ResourceNotFoundError(f"unknown or disabled source: {source_id}")
         return selected
 
 

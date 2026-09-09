@@ -88,7 +88,7 @@ def test_analyze_propagates_selection_and_execution_options(monkeypatch, tmp_pat
             {"__dict__": {"eligible": 0, "analyzed": 0, "reused": 0, "failed": 0}},
         )()
 
-    monkeypatch.setattr("dj_digger.cli.CoreApplication.analyze", analyze)
+    monkeypatch.setattr("dj_digger.core.application.app.CoreApplication.analyze", analyze)
 
     result = CliRunner().invoke(
         app,
@@ -136,7 +136,7 @@ def test_analyze_uses_safe_execution_defaults(monkeypatch, tmp_path: Path) -> No
             {"__dict__": {"eligible": 0, "analyzed": 0, "reused": 0, "failed": 0}},
         )()
 
-    monkeypatch.setattr("dj_digger.cli.CoreApplication.analyze", analyze)
+    monkeypatch.setattr("dj_digger.core.application.app.CoreApplication.analyze", analyze)
 
     result = CliRunner().invoke(app, ["analyze", "--config", str(_config(tmp_path))])
 
@@ -163,8 +163,11 @@ def test_analyze_installs_rich_progress_reporter(monkeypatch, tmp_path: Path) ->
         events.append(("analyze", progress))
         return type("Result", (), {"__dict__": {"failed": 0, "analyzed": 0}})()
 
-    monkeypatch.setattr("dj_digger.cli.RichProgressReporter", Progress)
-    monkeypatch.setattr("dj_digger.cli.CoreApplication.analyze", analyze)
+    monkeypatch.setattr(
+        "dj_digger.cli.runtime.progress_reporter",
+        lambda verbosity: Progress(verbosity=verbosity),
+    )
+    monkeypatch.setattr("dj_digger.core.application.app.CoreApplication.analyze", analyze)
 
     result = CliRunner().invoke(app, ["-v", "analyze", "--config", str(_config(tmp_path))])
 

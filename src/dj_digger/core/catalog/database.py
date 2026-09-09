@@ -10,6 +10,7 @@ from types import TracebackType
 from typing import Any, Self
 
 from dj_digger.core.catalog.migrations import migrate
+from dj_digger.core.errors import StateConflictError
 
 
 class Database:
@@ -154,7 +155,7 @@ class Database:
             try:
                 fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
             except BlockingIOError as error:
-                raise RuntimeError(f"advisory lock {name!r} is already held") from error
+                raise StateConflictError(f"advisory lock {name!r} is already held") from error
             try:
                 yield
             finally:

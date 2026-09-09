@@ -7,7 +7,7 @@ from typing import Any, cast
 
 from dj_digger.core.analysis.audio import TechnicalAudioMetadata
 from dj_digger.core.catalog.database import Database
-from dj_digger.core.catalog.models import Track
+from dj_digger.core.catalog.models import PresenceStatus, Track
 
 
 def _now() -> str:
@@ -636,5 +636,5 @@ def _track_from_row(row: tuple[Any, ...]) -> Track:
         extension=str(row[4]),
         size_bytes=int(row[5]),
         mtime_ns=int(row[6]),
-        presence_status=str(row[7]),
+        presence_status=PresenceStatus(row[7]),
     )

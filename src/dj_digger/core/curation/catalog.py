@@ -35,11 +35,12 @@ from dj_digger.core.curation.models import (
     SectionSummary,
     SourceSummary,
 )
+from dj_digger.core.errors import StateConflictError
 
 __all__ = ["CurationCatalogError", "CurationCatalog"]
 
 
-class CurationCatalogError(RuntimeError):
+class CurationCatalogError(StateConflictError):
     """Sanitized public error raised by the curation read model."""
 
 

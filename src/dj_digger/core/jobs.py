@@ -16,16 +16,34 @@ from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from enum import StrEnum
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any
 from uuid import uuid4
 
+from dj_digger.core.errors import UNCLASSIFIED, StateConflictError
 from dj_digger.core.run_log import sanitize_diagnostic
 
 JOB_ID_ENV = "DJ_DIGGER_JOB_ID"
-JobStatus = Literal["starting", "running", "succeeded", "partial", "failed", "unknown"]
-_TERMINAL_STATUSES: frozenset[JobStatus] = frozenset({"succeeded", "partial", "failed", "unknown"})
-_RESULT_STATUSES: frozenset[str] = frozenset({"succeeded", "partial", "failed"})
+
+
+class JobStatus(StrEnum):
+    """Lifecycle of one detached background command."""
+
+    STARTING = "starting"
+    RUNNING = "running"
+    SUCCEEDED = "succeeded"
+    PARTIAL = "partial"
+    FAILED = "failed"
+    UNKNOWN = "unknown"
+
+
+TERMINAL_JOB_STATUSES: frozenset[JobStatus] = frozenset(
+    {JobStatus.SUCCEEDED, JobStatus.PARTIAL, JobStatus.FAILED, JobStatus.UNKNOWN}
+)
+_RESULT_STATUSES: frozenset[str] = frozenset(
+    {JobStatus.SUCCEEDED, JobStatus.PARTIAL, JobStatus.FAILED}
+)
 _FAILURE_CODES: frozenset[str] = frozenset(
     {
         "cleanup_failed",
@@ -40,7 +58,7 @@ _THREAD_LOCKS: dict[Path, threading.RLock] = {}
 _THREAD_LOCKS_GUARD = threading.Lock()
 
 
-class JobStateError(RuntimeError):
+class JobStateError(StateConflictError):
     """A durable job transition conflicts with its current state."""
 
 
@@ -93,7 +111,7 @@ class JobRepository:
                 record = JobRecord(
                     job_id,
                     _safe_command(command),
-                    "starting",
+                    JobStatus.STARTING,
                     started_at=started_at,
                     log=str(log_file),
                 )
@@ -107,12 +125,12 @@ class JobRepository:
             raise ValueError("job process ID must be positive")
         with self._locked():
             record = self._read_locked(job_id)
-            if record.status != "starting":
+            if record.status != JobStatus.STARTING:
                 raise JobStateError(f"cannot start job {job_id}: current status is {record.status}")
             updated = JobRecord(
                 record.job_id,
                 record.command,
-                "running",
+                JobStatus.RUNNING,
                 pid,
                 record.started_at,
                 record.finished_at,
@@ -130,20 +148,21 @@ class JobRepository:
 
     def record_result(self, job_id: str, diagnostic: dict[str, Any]) -> JobRecord:
         _validate_job_id(job_id)
-        result_status = diagnostic.get("status")
-        if not isinstance(result_status, str) or result_status not in _RESULT_STATUSES:
+        raw_status = diagnostic.get("status")
+        if not isinstance(raw_status, str) or raw_status not in _RESULT_STATUSES:
             raise ValueError("job result status must be succeeded, partial, or failed")
+        result_status = JobStatus(raw_status)
         safe_diagnostic = sanitize_diagnostic(diagnostic)
         with self._locked():
             record = self._read_locked(job_id)
-            if record.status in _TERMINAL_STATUSES:
+            if record.status in TERMINAL_JOB_STATUSES:
                 raise JobStateError(
                     f"cannot record result for job {job_id}: current status is {record.status}"
                 )
             updated = JobRecord(
                 record.job_id,
                 record.command,
-                result_status,  # type: ignore[arg-type]
+                result_status,
                 record.pid,
                 record.started_at,
                 datetime.now(UTC).isoformat(),
@@ -153,15 +172,28 @@ class JobRepository:
             self._write_locked(updated)
             return updated
 
-    def fail(self, job_id: str, error: str, *, code: str = "job_failed") -> JobRecord:
+    def fail(
+        self,
+        job_id: str,
+        error: str,
+        *,
+        code: str = "job_failed",
+        error_class: str = UNCLASSIFIED,
+    ) -> JobRecord:
+        """Record a job failure with an explicitly declared failure class.
+
+        ``error`` carries private detail and is never persisted; ``error_class``
+        is what a caller holding the real exception derived with ``classify``.
+        """
         safe_code = code if code in _FAILURE_CODES else "job_failed"
         return self.record_result(
             job_id,
             {
                 "event": "job",
-                "status": "failed",
+                "status": JobStatus.FAILED,
                 "code": safe_code,
                 "error": error,
+                "error_class": error_class,
             },
         )
 
@@ -171,21 +203,21 @@ class JobRepository:
         safe_code = code if code in _FAILURE_CODES else "job_failed"
         with self._locked():
             record = self._read_locked(job_id)
-            if record.status in _TERMINAL_STATUSES:
+            if record.status in TERMINAL_JOB_STATUSES:
                 raise JobStateError(
                     f"cannot mark job {job_id} unknown: current status is {record.status}"
                 )
             updated = JobRecord(
                 record.job_id,
                 record.command,
-                "unknown",
+                JobStatus.UNKNOWN,
                 record.pid,
                 record.started_at,
                 datetime.now(UTC).isoformat(),
                 record.log,
                 {
                     "event": "job",
-                    "status": "unknown",
+                    "status": JobStatus.UNKNOWN,
                     "code": safe_code,
                     "error": "operation outcome is unknown",
                 },
@@ -203,16 +235,20 @@ class JobRepository:
                     record = _from_dict(json.loads(path.read_text(encoding="utf-8")))
                 except (KeyError, OSError, TypeError, ValueError, json.JSONDecodeError):
                     continue
-                if record.status == "running" and not _pid_alive(record.pid):
+                if record.status == JobStatus.RUNNING and not _pid_alive(record.pid):
                     record = JobRecord(
                         record.job_id,
                         record.command,
-                        "unknown",
+                        JobStatus.UNKNOWN,
                         record.pid,
                         record.started_at,
                         datetime.now(UTC).isoformat(),
                         record.log,
-                        {"event": "job", "status": "failed", "code": "process_missing"},
+                        {
+                            "event": "job",
+                            "status": JobStatus.FAILED,
+                            "code": "process_missing",
+                        },
                     )
                     self._write_locked(record)
                 records.append(record)
@@ -277,9 +313,11 @@ def _from_dict(payload: object) -> JobRecord:
     """Decode one durable record, rejecting non-object JSON consistently."""
     if not isinstance(payload, Mapping):
         raise ValueError("durable job record must be a JSON object")
-    status = payload.get("status", "unknown")
-    if status not in {"starting", "running", "succeeded", "partial", "failed", "unknown"}:
-        raise ValueError("invalid durable job status")
+    raw_status = payload.get("status", JobStatus.UNKNOWN)
+    try:
+        status = JobStatus(raw_status)
+    except ValueError:
+        raise ValueError("invalid durable job status") from None
     job_id = str(payload["job_id"])
     _validate_job_id(job_id)
     return JobRecord(
@@ -339,6 +377,7 @@ def _fsync_directory(directory: Path) -> None:
 
 __all__ = [
     "JOB_ID_ENV",
+    "TERMINAL_JOB_STATUSES",
     "JobRecord",
     "JobRepository",
     "JobStateError",

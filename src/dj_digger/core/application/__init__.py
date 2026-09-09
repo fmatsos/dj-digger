@@ -21,15 +21,6 @@ from dj_digger.core.application.curation import (
     CurationTurnLimitError,
     CurationUseCase,
 )
-from dj_digger.core.application.errors import (
-    CoreError,
-    DependencyError,
-    DependencyTimeoutError,
-    IntegrityError,
-    InvalidInputError,
-    ResourceNotFoundError,
-    StateConflictError,
-)
 from dj_digger.core.application.export import (
     ExportMaintenanceWarning,
     ExportRequest,
@@ -63,6 +54,15 @@ from dj_digger.core.application.scan import (
     ScanRequest,
     ScanRunResult,
     ScanSourceResult,
+)
+from dj_digger.core.errors import (
+    CoreError,
+    DependencyError,
+    DependencyTimeoutError,
+    IntegrityError,
+    InvalidInputError,
+    ResourceNotFoundError,
+    StateConflictError,
 )
 
 __all__ = [

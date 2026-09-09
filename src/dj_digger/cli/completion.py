@@ -1,14 +1,31 @@
-"""Small compatibility fix for Typer's PowerShell completion installer."""
+"""Compatibility fixes for Typer's PowerShell completion installer.
+
+Typer's own installer rewrites the entire PowerShell profile and relaxes the
+user's execution policy as a side effect. This module replaces it with a
+marked-region rewrite that preserves unrelated profile content and reports —
+never silently changes — a policy that would keep the profile from loading.
+"""
 
 import codecs
 import subprocess
+import sys
 from pathlib import Path
 
 from typer import _completion_shared
 
 _START = "# >>> dj-digger completion >>>"
 _END = "# <<< dj-digger completion <<<"
-_original_install_powershell = _completion_shared.install_powershell
+_PROGRAM = "dj-digger"
+_SHELL_TIMEOUT_SECONDS = 30.0
+_BLOCKING_EXECUTION_POLICIES = frozenset({"restricted", "allsigned"})
+_EXECUTION_POLICY_NOTICE = (
+    "PowerShell execution policy is {policy}, so the profile that enables "
+    "dj-digger completion will not load. dj-digger does not change security "
+    "settings for you; run this yourself if you want completion active:\n"
+    "  Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser"
+)
+
+_patched = False
 
 
 def _without_marked_regions(profile: str) -> str:
@@ -77,18 +94,39 @@ def _read_profile(path: Path) -> tuple[str, str]:
     raise UnicodeError("could not decode the PowerShell profile")
 
 
+def _report_blocking_execution_policy(shell: str) -> None:
+    """Warn when the effective policy would keep the profile from loading.
+
+    Reporting instead of calling ``Set-ExecutionPolicy`` keeps a completion
+    install from silently weakening the machine's script-execution posture.
+    """
+    try:
+        result = subprocess.run(
+            [shell, "-NoProfile", "-Command", "Get-ExecutionPolicy"],
+            capture_output=True,
+            check=False,
+            timeout=_SHELL_TIMEOUT_SECONDS,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return
+    if result.returncode != 0:
+        return
+    policy = result.stdout.decode("utf-8", errors="replace").strip()
+    if policy.lower() in _BLOCKING_EXECUTION_POLICIES:
+        print(_EXECUTION_POLICY_NOTICE.format(policy=policy), file=sys.stderr)
+
+
 def _install_powershell(*, prog_name: str, complete_var: str, shell: str) -> Path:
-    if prog_name != "dj-digger":
+    if prog_name != _PROGRAM:
         return _original_install_powershell(
             prog_name=prog_name, complete_var=complete_var, shell=shell
         )
-    subprocess.run(
-        [shell, "-Command", "Set-ExecutionPolicy", "Unrestricted", "-Scope", "CurrentUser"]
-    )
+    _report_blocking_execution_policy(shell)
     result = subprocess.run(
         [shell, "-NoProfile", "-Command", "echo", "$profile"],
         check=True,
         stdout=subprocess.PIPE,
+        timeout=_SHELL_TIMEOUT_SECONDS,
     )
     path_obj = Path(_decode_path(result.stdout).strip())
     path_obj.parent.mkdir(parents=True, exist_ok=True)
@@ -100,6 +138,28 @@ def _install_powershell(*, prog_name: str, complete_var: str, shell: str) -> Pat
     return path_obj
 
 
+def _original_install_powershell(*, prog_name: str, complete_var: str, shell: str) -> Path:
+    """Delegate to whichever installer Typer shipped, resolved at call time."""
+    installer = getattr(_completion_shared, "install_powershell", None)
+    if installer is None or installer is _install_powershell:
+        raise RuntimeError("Typer no longer exposes a PowerShell completion installer")
+    installed: Path = installer(prog_name=prog_name, complete_var=complete_var, shell=shell)
+    return installed
+
+
 def install_patches() -> None:
-    """Apply installer fixes once, after Typer has been imported."""
+    """Apply the installer fix once, tolerating changes to Typer internals.
+
+    Called from the CLI entry point rather than at import time: importing
+    ``dj_digger.cli`` must not mutate a third-party module for the whole process.
+    """
+    global _patched
+    if _patched:
+        return
+    _patched = True
+    if getattr(_completion_shared, "install_powershell", None) is None:
+        return
     _completion_shared.install_powershell = _install_powershell
+
+
+__all__ = ["install_patches", "replace_profile_region"]

@@ -83,7 +83,10 @@ def test_refresh_passes_the_live_reporter_to_the_application(monkeypatch, tmp_pa
         received.extend([progress, request.workers, request.track_timeout])
         return {"event": "refresh", "status": "succeeded", "published": True}
 
-    monkeypatch.setattr("dj_digger.cli.RichProgressReporter", ReporterContext)
+    monkeypatch.setattr(
+        "dj_digger.cli.runtime.progress_reporter",
+        lambda verbosity: ReporterContext(verbosity=verbosity),
+    )
     monkeypatch.setattr(CoreApplication, "refresh", refresh)
 
     result = CliRunner().invoke(
@@ -171,7 +174,10 @@ def test_refresh_global_verbosity_count_is_zero_one_or_two(monkeypatch, tmp_path
         def __exit__(self, exc_type, exc_value, traceback):
             return None
 
-    monkeypatch.setattr("dj_digger.cli.RichProgressReporter", ReporterContext)
+    monkeypatch.setattr(
+        "dj_digger.cli.runtime.progress_reporter",
+        lambda verbosity: ReporterContext(verbosity=verbosity),
+    )
     monkeypatch.setattr(
         "dj_digger.core.application.app.CoreApplication.refresh",
         lambda self, request, *, progress=None: {

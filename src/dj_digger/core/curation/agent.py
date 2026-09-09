@@ -22,6 +22,7 @@ from dj_digger.core.curation.client import (
 )
 from dj_digger.core.curation.models import CandidateDetails, CandidateRef, CurationCreation
 from dj_digger.core.curation.prompts import CUSTOM_SYSTEM_PROMPT_PREFIX, SYSTEM_PROMPT
+from dj_digger.core.errors import StateConflictError
 from dj_digger.core.mcp_server import create_curation_mcp_server
 
 ALLOWED_TOOLS = (
@@ -46,20 +47,26 @@ __all__ = [
 ]
 
 
-class CurationAgentError(RuntimeError):
+class CurationAgentError(StateConflictError):
     """Sanitized, typed orchestration failure."""
 
 
 class CurationTurnLimitError(CurationAgentError):
     """The model did not finish within its configured turn budget."""
 
+    classification = "timeout"
+
 
 class CurationMCPError(CurationAgentError):
     """The local MCP composition or tool execution failed."""
 
+    classification = "unavailable"
+
 
 class CurationGroundingError(CurationAgentError):
     """The result was not grounded in currently available catalog candidates."""
+
+    classification = "stale"
 
 
 class CurationRequest(BaseModel):

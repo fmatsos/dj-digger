@@ -1,10 +1,10 @@
 """Presentation mapping for curation commands."""
 
-import json
 from typing import Any
 
 import typer
 
+from dj_digger.cli.runtime import emit_json
 from dj_digger.core.curation.models import CurationCreation
 
 
@@ -29,7 +29,7 @@ def creation_payload(creation: CurationCreation, *, include_report: bool = True)
 def emit_curation(payload: dict[str, Any], *, json_output: bool) -> None:
     """Emit one curation payload in JSON or the historical text format."""
     if json_output:
-        typer.echo(json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")))
+        emit_json(payload)
         return
     typer.echo(f"{payload['name']} ({payload['id']})")
     typer.echo(f"kind: {payload['kind']}")

@@ -1,16 +1,14 @@
 """Metadata command adapter."""
 
-from pathlib import Path
 from typing import Any
 
-from dj_digger.cli.runtime import run_metadata
+from dj_digger.cli.presenters.metadata import metadata_payload
+from dj_digger.core.application import CoreApplication, MetadataRequest
 
 
-def execute(
-    config: Path,
-    source: str | None,
-    path: str | None,
-    force: bool,
-) -> dict[str, Any]:
-    """Execute metadata refresh through the core boundary."""
-    return run_metadata(config, source, path, force)
+def execute(service: CoreApplication, request: MetadataRequest) -> dict[str, Any]:
+    """Execute one typed metadata request through the core boundary."""
+    return metadata_payload(service.metadata(request))
+
+
+__all__ = ["execute"]
