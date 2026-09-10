@@ -1,0 +1,300 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dj-digger.local/schemas/v1a/dj-sections.schema.json",
+  "title": "DJ Digger unified structural section analysis record",
+  "description": "Validates one line/record in dj-sections.jsonl.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "source_id",
+    "track_id",
+    "path",
+    "analysis_schema_version",
+    "sections"
+  ],
+  "properties": {
+    "source_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "track_id": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "path": {
+      "type": "string",
+      "minLength": 1
+    },
+    "analysis_schema_version": {
+      "const": 2
+    },
+    "sections": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "index",
+          "start_seconds",
+          "end_seconds",
+          "start_bar",
+          "end_bar",
+          "bars",
+          "facts",
+          "derived",
+          "semantic",
+          "transition_suitability_in",
+          "transition_suitability_out"
+        ],
+        "properties": {
+          "index": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "start_seconds": {
+            "type": "number",
+            "minimum": 0
+          },
+          "end_seconds": {
+            "type": "number",
+            "exclusiveMinimum": 0
+          },
+          "start_bar": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "end_bar": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "bars": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "facts": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "bpm",
+              "beat_stability",
+              "kick_present",
+              "kick_strength",
+              "kick_density",
+              "bass_density",
+              "sub_energy",
+              "low_energy",
+              "low_mid_energy",
+              "loudness_lufs",
+              "onset_density",
+              "spectral_centroid",
+              "energy_slope"
+            ],
+            "properties": {
+              "bpm": {
+                "type": [
+                  "number",
+                  "null"
+                ],
+                "exclusiveMinimum": 0
+              },
+              "beat_stability": {
+                "type": [
+                  "number",
+                  "null"
+                ],
+                "minimum": 0,
+                "maximum": 1
+              },
+              "kick_present": {
+                "type": "boolean"
+              },
+              "kick_strength": {
+                "type": [
+                  "number",
+                  "null"
+                ],
+                "minimum": 0,
+                "maximum": 1
+              },
+              "kick_density": {
+                "type": [
+                  "number",
+                  "null"
+                ],
+                "minimum": 0,
+                "maximum": 1
+              },
+              "bass_density": {
+                "type": [
+                  "number",
+                  "null"
+                ],
+                "minimum": 0,
+                "maximum": 1
+              },
+              "sub_energy": {
+                "type": [
+                  "number",
+                  "null"
+                ],
+                "minimum": 0,
+                "maximum": 1
+              },
+              "low_energy": {
+                "type": [
+                  "number",
+                  "null"
+                ],
+                "minimum": 0,
+                "maximum": 1
+              },
+              "low_mid_energy": {
+                "type": [
+                  "number",
+                  "null"
+                ],
+                "minimum": 0,
+                "maximum": 1
+              },
+              "loudness_lufs": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "onset_density": {
+                "type": [
+                  "number",
+                  "null"
+                ],
+                "minimum": 0
+              },
+              "spectral_centroid": {
+                "type": [
+                  "number",
+                  "null"
+                ],
+                "minimum": 0
+              },
+              "energy_slope": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              }
+            }
+          },
+          "derived": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "percussion_only",
+              "bass_light",
+              "bass_heavy",
+              "energy_rising",
+              "energy_falling",
+              "stable_groove",
+              "kick_absent"
+            ],
+            "properties": {
+              "percussion_only": {
+                "type": "boolean"
+              },
+              "bass_light": {
+                "type": "boolean"
+              },
+              "bass_heavy": {
+                "type": "boolean"
+              },
+              "energy_rising": {
+                "type": "boolean"
+              },
+              "energy_falling": {
+                "type": "boolean"
+              },
+              "stable_groove": {
+                "type": "boolean"
+              },
+              "kick_absent": {
+                "type": "boolean"
+              }
+            }
+          },
+          "semantic": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "label",
+              "confidence"
+            ],
+            "properties": {
+              "label": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "enum": [
+                  "intro",
+                  "groove",
+                  "break",
+                  "build",
+                  "drop",
+                  "peak",
+                  "outro",
+                  null
+                ]
+              },
+              "confidence": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              }
+            },
+            "allOf": [
+              {
+                "if": {
+                  "properties": {
+                    "confidence": {
+                      "minimum": 0.8
+                    }
+                  }
+                },
+                "then": {},
+                "else": {
+                  "properties": {
+                    "label": {
+                      "type": "null"
+                    }
+                  }
+                }
+              }
+            ]
+          },
+          "transition_suitability_in": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "transition_suitability_out": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          }
+        }
+      }
+    }
+  },
+  "x-jsonl": {
+    "one_record_per_line": true,
+    "encoding": "UTF-8"
+  }
+}

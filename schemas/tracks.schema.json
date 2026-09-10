@@ -1,0 +1,288 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dj-digger.local/schemas/v2/tracks.schema.json",
+  "title": "DJ Digger canonical public inventory row",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "source_id",
+    "track_id",
+    "path",
+    "absolute_path",
+    "filename",
+    "extension",
+    "size_bytes",
+    "mtime",
+    "set_eligible",
+    "title",
+    "artist",
+    "album_artist",
+    "album",
+    "track_number",
+    "disc_number",
+    "genre",
+    "date",
+    "year",
+    "composer",
+    "comment",
+    "tag_bpm",
+    "tag_initial_key",
+    "grouping",
+    "duration_seconds",
+    "sample_rate",
+    "channels",
+    "codec",
+    "container",
+    "bitrate",
+    "lossless",
+    "duplicate_group_id",
+    "duplicate_best_quality",
+    "integrated_lufs",
+    "loudness_range_lu",
+    "true_peak_dbtp",
+    "short_term_lufs_p50",
+    "short_term_lufs_p95",
+    "peak_to_loudness_ratio_db",
+    "required_gain_db",
+    "available_gain_db",
+    "gain_deficit_db"
+  ],
+  "properties": {
+    "source_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "track_id": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "path": {
+      "type": "string",
+      "minLength": 1
+    },
+    "absolute_path": {
+      "type": "string",
+      "minLength": 1
+    },
+    "filename": {
+      "type": "string",
+      "minLength": 1
+    },
+    "extension": {
+      "type": "string",
+      "pattern": "^\\.[A-Za-z0-9]+$"
+    },
+    "size_bytes": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "mtime": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}$"
+    },
+    "set_eligible": {
+      "type": "boolean"
+    },
+    "title": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "artist": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "album_artist": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "album": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "track_number": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "disc_number": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "genre": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "date": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "year": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "composer": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "comment": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "tag_bpm": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "exclusiveMinimum": 0
+    },
+    "tag_initial_key": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "grouping": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "duration_seconds": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0
+    },
+    "sample_rate": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 1
+    },
+    "channels": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 1
+    },
+    "codec": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "container": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "bitrate": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 0
+    },
+    "lossless": {
+      "type": [
+        "boolean",
+        "null"
+      ]
+    },
+    "duplicate_group_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "duplicate_best_quality": {
+      "type": [
+        "boolean",
+        "null"
+      ]
+    },
+    "integrated_lufs": {"type": ["number", "null"]},
+    "loudness_range_lu": {"type": ["number", "null"]},
+    "true_peak_dbtp": {"type": ["number", "null"]},
+    "short_term_lufs_p50": {"type": ["number", "null"]},
+    "short_term_lufs_p95": {"type": ["number", "null"]},
+    "peak_to_loudness_ratio_db": {"type": ["number", "null"]},
+    "required_gain_db": {"type": ["number", "null"]},
+    "available_gain_db": {"type": ["number", "null"]},
+    "gain_deficit_db": {"type": ["number", "null"]}
+  },
+  "x-tabular": {
+    "format": "TSV",
+    "encoding": "UTF-8",
+    "header": true,
+    "columns": [
+      "source_id",
+      "track_id",
+      "path",
+      "absolute_path",
+      "filename",
+      "extension",
+      "size_bytes",
+      "mtime",
+      "set_eligible",
+      "title",
+      "artist",
+      "album_artist",
+      "album",
+      "track_number",
+      "disc_number",
+      "genre",
+      "date",
+      "year",
+      "composer",
+      "comment",
+      "tag_bpm",
+      "tag_initial_key",
+      "grouping",
+      "duration_seconds",
+      "sample_rate",
+      "channels",
+      "codec",
+      "container",
+      "bitrate",
+      "lossless",
+      "duplicate_group_id",
+      "duplicate_best_quality",
+      "integrated_lufs",
+      "loudness_range_lu",
+      "true_peak_dbtp",
+      "short_term_lufs_p50",
+      "short_term_lufs_p95",
+      "peak_to_loudness_ratio_db",
+      "required_gain_db",
+      "available_gain_db",
+      "gain_deficit_db"
+    ],
+    "null_serialization": ""
+  }
+}
