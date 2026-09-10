@@ -62,3 +62,15 @@ def test_schema_bundle_references_the_canonical_packaged_resources() -> None:
     for relative_path in bundle["schemas"].values():
         assert relative_path.startswith("dj_digger/")
         assert (Path("src") / relative_path).is_file(), relative_path
+
+
+def test_public_schema_tree_matches_packaged_resources() -> None:
+    """Keep repository consumers compatible without letting the mirrors drift."""
+    public_schemas = Path("schemas")
+    packaged_schemas = Path("src/dj_digger/core/schemas")
+    packaged_sql = Path("src/dj_digger/core/catalog/sql")
+
+    for public_path in public_schemas.glob("*.json"):
+        assert public_path.read_bytes() == (packaged_schemas / public_path.name).read_bytes()
+    for public_path in public_schemas.glob("catalog*.sql"):
+        assert public_path.read_bytes() == (packaged_sql / public_path.name).read_bytes()
