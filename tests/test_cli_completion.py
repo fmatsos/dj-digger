@@ -165,6 +165,28 @@ def test_install_patches_is_idempotent_and_reversible(monkeypatch: pytest.Monkey
     assert _completion_shared.install_powershell is patched
 
 
+def test_patched_installer_delegates_alternate_program_names(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    installed = tmp_path / "alternate-profile.ps1"
+    calls: list[tuple[str, str, str]] = []
+
+    def original(*, prog_name: str, complete_var: str, shell: str) -> Path:
+        calls.append((prog_name, complete_var, shell))
+        return installed
+
+    monkeypatch.setattr(completion, "_patched", False)
+    monkeypatch.setattr(_completion_shared, "install_powershell", original)
+
+    completion.install_patches()
+    result = _completion_shared.install_powershell(
+        prog_name="python -m dj_digger.cli", complete_var="_ALT_COMPLETE", shell="powershell"
+    )
+
+    assert result == installed
+    assert calls == [("python -m dj_digger.cli", "_ALT_COMPLETE", "powershell")]
+
+
 def test_install_patches_tolerates_a_missing_typer_internal(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
