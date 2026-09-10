@@ -17,7 +17,7 @@ from rich.progress import (
 )
 from rich.text import Text
 
-from dj_digger.core.application.progress import ProgressEvent
+from dj_digger.core.progress import ProgressEvent
 
 
 class _TrackSpeedColumn(ProgressColumn):

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import Any
 
 from dj_digger.core.errors import UNCLASSIFIED
@@ -33,7 +34,7 @@ class JobsUseCase:
     def get(self, job_id: str) -> JobRecord:
         return self._repository.get(job_id)
 
-    def record_result(self, job_id: str, diagnostic: dict[str, Any]) -> JobRecord:
+    def record_result(self, job_id: str, diagnostic: Mapping[str, Any]) -> JobRecord:
         return self._repository.record_result(job_id, diagnostic)
 
     def fail(self, job_id: str, error: str, *, error_class: str = UNCLASSIFIED) -> JobRecord:

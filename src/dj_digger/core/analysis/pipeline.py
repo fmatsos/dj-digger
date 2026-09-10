@@ -2,7 +2,6 @@
 
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Mapping
-from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor, wait
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from math import isfinite
@@ -20,11 +19,12 @@ from dj_digger.core.analysis.extractor import (
     Stage,
 )
 from dj_digger.core.analysis.persistence import AnalysisOutcome, AnalysisPersistence
-from dj_digger.core.application.analysis_progress import NullProgressReporter, ProgressReporter
 from dj_digger.core.catalog.database import Database
 from dj_digger.core.catalog.models import Track
 from dj_digger.core.catalog.repositories import TrackRepository
+from dj_digger.core.concurrency import bounded_results
 from dj_digger.core.errors import InvalidInputError
+from dj_digger.core.progress import NullProgressReporter, ProgressReporter
 
 AnalysisExtractor = Callable[[Track], AnalysisExtractionResult | Mapping[str, Any]]
 
@@ -105,7 +105,7 @@ class AnalysisPipeline:
 
             self._persistence.reconcile_running_runs(finished_at=_now())
             selected = (
-                self._all_eligible(source_id, path_prefix)
+                self._tracks.eligible_for_analysis(source_id=source_id, path_prefix=path_prefix)
                 if force
                 else AnalysisEligibility(self._tracks).pending(
                     self._identity, source_id, path_prefix
@@ -115,8 +115,21 @@ class AnalysisPipeline:
                 selected = selected[:limit]
             started = _now()
 
-            reusable = [track for track in selected if self._is_reusable(track)]
-            pending = [track for track in selected if track not in reusable]
+            # Only a forced run can select tracks that already have a usable
+            # result; the eligibility query excludes them otherwise.
+            reusable_ids = (
+                self._tracks.ids_with_current_analysis(
+                    schema_version=self._identity.schema_version,
+                    analyzer_version=self._identity.analyzer_version,
+                    config_hash=self._identity.config_hash,
+                    source_id=source_id,
+                    path_prefix=path_prefix,
+                )
+                if force
+                else set()
+            )
+            reusable = [track for track in selected if track.id in reusable_ids]
+            pending = [track for track in selected if track.id not in reusable_ids]
             self._progress.analysis_started(total=len(selected), completed=len(reusable))
             try:
                 run_id = self._persistence.start_run(
@@ -132,46 +145,6 @@ class AnalysisPipeline:
                 )
             finally:
                 self._progress.analysis_finished()
-
-    def _all_eligible(self, source_id: str | None, path_prefix: str | None) -> list[Track]:
-        query = """
-            SELECT t.id, t.source_id, t.relative_path, t.filename, t.extension, t.size_bytes,
-                   t.mtime_ns, t.presence_status
-            FROM tracks t JOIN library_sources s ON s.source_id = t.source_id
-            WHERE t.presence_status = 'present' AND s.enabled = 1 AND s.analyze = 1
-        """
-        parameters: list[object] = []
-        if source_id is not None:
-            query += " AND t.source_id = ?"
-            parameters.append(source_id)
-        if path_prefix is not None:
-            escaped = path_prefix.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
-            query += " AND t.relative_path LIKE ? ESCAPE '\\'"
-            parameters.append(f"{escaped}%")
-        query += " ORDER BY t.source_id, t.relative_path, t.id"
-        return [Track(*row) for row in self._database.execute(query, parameters).fetchall()]
-
-    def _is_reusable(self, track: Track) -> bool:
-        return (
-            self._database.scalar(
-                """
-            SELECT 1 FROM audio_analysis
-            WHERE track_id = ? AND input_size_bytes = ? AND input_mtime_ns = ?
-              AND analysis_schema_version = ? AND analyzer_version = ? AND config_hash = ?
-              AND analysis_status = 'succeeded'
-            LIMIT 1
-            """,
-                (
-                    track.id,
-                    track.size_bytes,
-                    track.mtime_ns,
-                    self._identity.schema_version,
-                    self._identity.analyzer_version,
-                    self._identity.config_hash,
-                ),
-            )
-            is not None
-        )
 
     def _extract_all(
         self, run_id: int, tracks: list[Track], workers: int, track_timeout: float
@@ -190,36 +163,18 @@ class AnalysisPipeline:
                     stage = error.stage
                 return AnalysisOutcome(track, {}, str(error), stage)
 
-        tracks_iterator = iter(tracks)
-        with ThreadPoolExecutor(max_workers=workers) as executor:
-            futures: set[Future[AnalysisOutcome]] = set()
-            for _ in range(workers):
-                try:
-                    track = next(tracks_iterator)
-                except StopIteration:
-                    break
-                futures.add(executor.submit(extract, track))
-
-            while futures:
-                completed, futures = wait(futures, return_when=FIRST_COMPLETED)
-                for future in completed:
-                    outcome = future.result()
-                    self._persistence.persist_outcome(
-                        run_id,
-                        self._identity,
-                        outcome,
-                        occurred_at=_now(),
-                    )
-                    if outcome.error is not None:
-                        self._progress.diagnostic(
-                            "error", f"{outcome.track.relative_path}: {outcome.error}"
-                        )
-                    self._progress.analysis_advanced()
-                    try:
-                        track = next(tracks_iterator)
-                    except StopIteration:
-                        continue
-                    futures.add(executor.submit(extract, track))
+        for outcome in bounded_results(tracks, extract, workers=workers):
+            self._persistence.persist_outcome(
+                run_id,
+                self._identity,
+                outcome,
+                occurred_at=_now(),
+            )
+            if outcome.error is not None:
+                self._progress.diagnostic(
+                    "error", f"{outcome.track.relative_path}: {outcome.error}"
+                )
+            self._progress.analysis_advanced()
 
 
 def _now() -> str:

@@ -7,7 +7,13 @@ from typing import Any, cast
 
 from dj_digger.core.analysis.audio import TechnicalAudioMetadata
 from dj_digger.core.catalog.database import Database
-from dj_digger.core.catalog.models import PresenceStatus, Track
+from dj_digger.core.catalog.models import Track
+from dj_digger.core.catalog.queries import (
+    TRACK_COLUMNS,
+    TRACK_ORDER,
+    TrackScope,
+    track_from_row,
+)
 
 
 def _now() -> str:
@@ -189,7 +195,7 @@ class TrackRepository:
             """,
             (source_id, relative_path),
         ).fetchone()
-        return None if row is None else _track_from_row(row)
+        return None if row is None else track_from_row(row)
 
     def present_for_source(self, source_id: str) -> list[Track]:
         """List present tracks for one configured source."""
@@ -201,7 +207,7 @@ class TrackRepository:
             """,
             (source_id,),
         ).fetchall()
-        return [_track_from_row(row) for row in rows]
+        return [track_from_row(row) for row in rows]
 
     def pending_analysis(
         self,
@@ -213,9 +219,8 @@ class TrackRepository:
         path_prefix: str | None = None,
     ) -> list[Track]:
         """Return tracks without a successful result for their current input facts."""
-        query = """
-            SELECT t.id, t.source_id, t.relative_path, t.filename, t.extension, t.size_bytes,
-                   t.mtime_ns, t.presence_status
+        query = f"""
+            SELECT {TRACK_COLUMNS}
             FROM tracks t
             JOIN library_sources s ON s.source_id = t.source_id
             LEFT JOIN audio_analysis a ON a.track_id = t.id
@@ -229,18 +234,56 @@ class TrackRepository:
               AND a.id IS NULL
         """
         parameters: list[Any] = [schema_version, analyzer_version, config_hash]
-        if source_id is not None:
-            query += " AND t.source_id = ?"
-            parameters.append(source_id)
-        if path_prefix is not None:
-            escaped_prefix = (
-                path_prefix.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
-            )
-            query += " AND t.relative_path LIKE ? ESCAPE '\\'"
-            parameters.append(f"{escaped_prefix}%")
-        query += " ORDER BY t.source_id, t.relative_path, t.id"
+        clause, scoped = TrackScope(source_id, path_prefix).as_sql()
+        query += clause + TRACK_ORDER
+        parameters.extend(scoped)
         rows = self._database.execute(query, parameters).fetchall()
-        return [_track_from_row(row) for row in rows]
+        return [track_from_row(row) for row in rows]
+
+    def eligible_for_analysis(
+        self, *, source_id: str | None = None, path_prefix: str | None = None
+    ) -> list[Track]:
+        """Return every present track an enabled, analyzable source owns."""
+        query = f"""
+            SELECT {TRACK_COLUMNS}
+            FROM tracks t JOIN library_sources s ON s.source_id = t.source_id
+            WHERE t.presence_status = 'present' AND s.enabled = 1 AND s.analyze = 1
+        """
+        clause, parameters = TrackScope(source_id, path_prefix).as_sql()
+        rows = self._database.execute(query + clause + TRACK_ORDER, parameters).fetchall()
+        return [track_from_row(row) for row in rows]
+
+    def ids_with_current_analysis(
+        self,
+        *,
+        schema_version: int,
+        analyzer_version: str,
+        config_hash: str,
+        source_id: str | None = None,
+        path_prefix: str | None = None,
+    ) -> set[int]:
+        """Return the tracks whose current input facts already have a usable result.
+
+        One query for the whole scope: deciding this per track turned a run into
+        one round trip per catalogued file.
+        """
+        query = """
+            SELECT t.id
+            FROM tracks t
+            JOIN library_sources s ON s.source_id = t.source_id
+            JOIN audio_analysis a ON a.track_id = t.id
+              AND a.input_size_bytes = t.size_bytes
+              AND a.input_mtime_ns = t.mtime_ns
+              AND a.analysis_schema_version = ?
+              AND a.analyzer_version = ?
+              AND a.config_hash = ?
+              AND a.analysis_status = 'succeeded'
+            WHERE t.presence_status = 'present' AND s.enabled = 1 AND s.analyze = 1
+        """
+        parameters: list[Any] = [schema_version, analyzer_version, config_hash]
+        clause, scoped = TrackScope(source_id, path_prefix).as_sql()
+        parameters.extend(scoped)
+        return {int(row[0]) for row in self._database.execute(query + clause, parameters)}
 
     def analysis_history(self, track_id: int) -> list[tuple[Any, ...]]:
         """Return all retained analysis rows for a track, newest first."""
@@ -461,7 +504,7 @@ class EmbeddedMetadataRepository:
                 FROM tracks t WHERE {where} ORDER BY t.id
             """
             rows = self._database.execute(query, tuple(filters)).fetchall()
-            return [_track_from_row(row) for row in rows]
+            return [track_from_row(row) for row in rows]
         query = f"""
             SELECT t.id, t.source_id, t.relative_path, t.filename, t.extension, t.size_bytes,
                    t.mtime_ns, t.presence_status
@@ -474,7 +517,7 @@ class EmbeddedMetadataRepository:
         """
         parameters = (*filters, extractor_version, normalization_version)
         rows = self._database.execute(query, parameters).fetchall()
-        return [_track_from_row(row) for row in rows]
+        return [track_from_row(row) for row in rows]
 
     def present_count(self, source_id: str | None) -> int:
         """Count present tracks in the requested source scope."""
@@ -625,16 +668,3 @@ class TrackObservation:
     discovered: bool
     restored: bool
     metadata_changed: bool
-
-
-def _track_from_row(row: tuple[Any, ...]) -> Track:
-    return Track(
-        id=int(row[0]),
-        source_id=str(row[1]),
-        relative_path=str(row[2]),
-        filename=str(row[3]),
-        extension=str(row[4]),
-        size_bytes=int(row[5]),
-        mtime_ns=int(row[6]),
-        presence_status=PresenceStatus(row[7]),
-    )

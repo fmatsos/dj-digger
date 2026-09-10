@@ -2,7 +2,6 @@
 
 import time
 from collections.abc import Mapping
-from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor, wait
 from dataclasses import dataclass
 from math import isfinite
 from pathlib import Path
@@ -11,10 +10,10 @@ from dj_digger.core.analysis.audio import TechnicalAudioMetadata
 from dj_digger.core.analysis.config import DEFAULT_TRACK_TIMEOUT_SECONDS, DEFAULT_WORKERS
 from dj_digger.core.analysis.ebur128 import EbuR128Analyzer
 from dj_digger.core.analysis.ffmpeg import FFmpegProbe
-from dj_digger.core.application.analysis_progress import NullProgressReporter, ProgressReporter
 from dj_digger.core.catalog.database import Database
 from dj_digger.core.catalog.models import Track
 from dj_digger.core.catalog.repositories import TechnicalAudioMetadataRepository
+from dj_digger.core.concurrency import bounded_results
 from dj_digger.core.config import MasteringConfig
 from dj_digger.core.duplicates.fingerprint import (
     FINGERPRINT_VERSION,
@@ -28,6 +27,7 @@ from dj_digger.core.duplicates.mastering_repository import MasteringRepository
 from dj_digger.core.duplicates.quality import QualityMarkResult, QualitySelector
 from dj_digger.core.duplicates.repository import DuplicateGroup, DuplicateRepository
 from dj_digger.core.errors import InvalidInputError
+from dj_digger.core.progress import NullProgressReporter, ProgressReporter
 
 TECHNICAL_PROBE_VERSION = "ffmpeg-facts/1"
 
@@ -331,37 +331,22 @@ class DuplicateService:
                 return track, None, str(stage), str(error)
 
         analyzed = failed = 0
-        iterator = iter(pending)
-        with ThreadPoolExecutor(max_workers=workers) as executor:
-            futures: set[
-                Future[tuple[Track, MasteringMeasurements | None, str | None, str | None]]
-            ] = set()
-            for _ in range(workers):
-                try:
-                    futures.add(executor.submit(analyze, next(iterator)))
-                except StopIteration:
-                    break
-            while futures:
-                completed, futures = wait(futures, return_when=FIRST_COMPLETED)
-                for future in completed:
-                    track, measurements, stage, message = future.result()
-                    if measurements is None:
-                        self._mastering_repository.persist_failure(
-                            track,
-                            MASTERING_ANALYSIS_VERSION,
-                            stage or "analysis",
-                            message or "failed",
-                        )
-                        failed += 1
-                    else:
-                        self._mastering_repository.persist_success(
-                            track, MASTERING_ANALYSIS_VERSION, measurements
-                        )
-                        analyzed += 1
-                    try:
-                        futures.add(executor.submit(analyze, next(iterator)))
-                    except StopIteration:
-                        pass
+        for track, measurements, stage, message in bounded_results(
+            pending, analyze, workers=workers
+        ):
+            if measurements is None:
+                self._mastering_repository.persist_failure(
+                    track,
+                    MASTERING_ANALYSIS_VERSION,
+                    stage or "analysis",
+                    message or "failed",
+                )
+                failed += 1
+            else:
+                self._mastering_repository.persist_success(
+                    track, MASTERING_ANALYSIS_VERSION, measurements
+                )
+                analyzed += 1
         self._mastering_repository.rebuild_dj(
             self._mastering_config.dj_target_lufs,
             self._mastering_config.dj_target_true_peak_dbtp,
@@ -400,35 +385,17 @@ class DuplicateService:
 
         analyzed = 0
         failed = 0
-        tracks_iterator = iter(tracks)
-        with ThreadPoolExecutor(max_workers=workers) as executor:
-            futures: set[Future[Outcome]] = set()
-            for _ in range(workers):
-                try:
-                    track = next(tracks_iterator)
-                except StopIteration:
-                    break
-                futures.add(executor.submit(extract, track))
-
-            while futures:
-                completed, futures = wait(futures, return_when=FIRST_COMPLETED)
-                for future in completed:
-                    track, fingerprint, facts, error = future.result()
-                    if fingerprint is not None:
-                        with self._database.transaction():
-                            self._repository.upsert_fingerprint(track, fingerprint)
-                            if facts is not None:
-                                self._technical_repository.upsert_facts(
-                                    track, facts, TECHNICAL_PROBE_VERSION
-                                )
-                        analyzed += 1
-                    else:
-                        failed += 1
-                        self._progress.diagnostic("error", f"{track.relative_path}: {error}")
-                    self._progress.analysis_advanced()
-                    try:
-                        next_track = next(tracks_iterator)
-                    except StopIteration:
-                        continue
-                    futures.add(executor.submit(extract, next_track))
+        for track, fingerprint, facts, error in bounded_results(tracks, extract, workers=workers):
+            if fingerprint is not None:
+                with self._database.transaction():
+                    self._repository.upsert_fingerprint(track, fingerprint)
+                    if facts is not None:
+                        self._technical_repository.upsert_facts(
+                            track, facts, TECHNICAL_PROBE_VERSION
+                        )
+                analyzed += 1
+            else:
+                failed += 1
+                self._progress.diagnostic("error", f"{track.relative_path}: {error}")
+            self._progress.analysis_advanced()
         return analyzed, failed

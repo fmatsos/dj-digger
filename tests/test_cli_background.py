@@ -101,13 +101,29 @@ def test_duplicates_analyze_background_launches_a_detached_job(
     monkeypatch.setattr(cli.background, "launch", _fake_launch(calls))
 
     result = CliRunner().invoke(
-        app, ["duplicates", "--config", str(config), "--analyze", "--background"]
+        app, ["duplicates", "analyze", "--config", str(config), "--background"]
     )
 
     assert result.exit_code == 0
     assert calls[0]["command"] == "duplicates"
-    assert "--analyze" in calls[0]["argv"]
+    assert calls[0]["argv"][:2] == ["duplicates", "analyze"]
     assert "--background" not in calls[0]["argv"]
+
+
+def test_legacy_duplicates_flag_relaunches_itself_with_the_subcommand_form(
+    config: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The detached process must not inherit the retired flag form."""
+    calls: list = []
+    monkeypatch.setattr(cli.background, "launch", _fake_launch(calls))
+
+    result = CliRunner().invoke(
+        app, ["duplicates", "--config", str(config), "--analyze", "--background"]
+    )
+
+    assert result.exit_code == 0
+    assert calls[0]["argv"][:2] == ["duplicates", "analyze"]
+    assert "--analyze" not in calls[0]["argv"]
 
 
 def test_jobs_command_reports_launched_jobs(config: Path, monkeypatch: pytest.MonkeyPatch) -> None:

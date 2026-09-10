@@ -3,6 +3,7 @@
 from collections.abc import Sequence
 from typing import Any
 
+from dj_digger.core.diagnostics import DiagnosticStatus, open_diagnostic
 from dj_digger.core.duplicates.quality import QualityMarkResult
 from dj_digger.core.duplicates.service import (
     DuplicateAnalysisResult,
@@ -12,11 +13,7 @@ from dj_digger.core.duplicates.service import (
 
 def duplicate_analysis_payload(result: DuplicateAnalysisResult) -> dict[str, Any]:
     """Map a typed analysis result to the historical compact JSON payload."""
-    return {
-        "event": "duplicates",
-        "status": result.status,
-        **result.__dict__,
-    }
+    return open_diagnostic("duplicates", result.status, **result.__dict__)
 
 
 def duplicate_groups_payload(
@@ -27,21 +24,21 @@ def duplicate_groups_payload(
     if dj_review:
         selected = [group for group in selected if group.dj_review_recommended is True]
         selected.sort(key=_review_sort_key)
-    return {
-        "event": "duplicates",
-        "status": "succeeded",
-        "groups": [_group_json(group) for group in selected],
-    }
+    return open_diagnostic(
+        "duplicates",
+        DiagnosticStatus.SUCCEEDED,
+        groups=[_group_json(group) for group in selected],
+    )
 
 
 def duplicate_mark_best_payload(result: QualityMarkResult) -> dict[str, Any]:
     """Map a typed quality-selection result to the historical JSON payload."""
-    return {
-        "event": "duplicates",
-        "status": result.status,
-        "marked_best": result.marked_best,
-        "incomplete_track_ids": list(result.incomplete_track_ids),
-    }
+    return open_diagnostic(
+        "duplicates",
+        result.status,
+        marked_best=result.marked_best,
+        incomplete_track_ids=list(result.incomplete_track_ids),
+    )
 
 
 def _group_json(group: DuplicateGroupDescription) -> dict[str, Any]:

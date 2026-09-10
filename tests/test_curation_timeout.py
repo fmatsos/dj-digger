@@ -24,6 +24,7 @@ from dj_digger.core.curation.agent import (
     CurationTurnLimitError,
 )
 from dj_digger.core.curation.client import AssistantMessage, OpenAICompatibleClient
+from dj_digger.core.mcp_server import create_curation_mcp_server
 
 
 class _BlockingHandler(BaseHTTPRequestHandler):
@@ -119,7 +120,7 @@ def test_blocked_model_process_is_terminated_at_aggregate_deadline(
 ) -> None:
     monkeypatch.setenv("OPENAI_API_KEY", "test-credential")
     config = _workspace(tmp_path / "catalog.sqlite", blocked_endpoint)
-    agent = CurationAgent(config)
+    agent = CurationAgent(config, tool_server=create_curation_mcp_server(config))
     started = time.monotonic()
     with pytest.raises(CurationTurnLimitError):
         anyio.run(agent.run, CurationRequest(prompt="Build a set"))
@@ -153,7 +154,7 @@ def test_explicit_client_seam_calls_overridden_complete(
     client = _InjectedClient(config.curation)
     with pytest.raises(CurationGroundingError, match="must create"):
         anyio.run(
-            CurationAgent(config, client).run,
+            CurationAgent(config, client, tool_server=create_curation_mcp_server(config)).run,
             CurationRequest(prompt="Build a set"),
         )
     assert client.calls == 1

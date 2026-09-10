@@ -2,7 +2,7 @@
 
 from typing import Any
 
-from dj_digger.core.application.progress import ProgressEvent
+from dj_digger.core.progress import ProgressEvent
 from dj_digger.core.set_copy import SetCopyResult
 
 

@@ -1,5 +1,6 @@
 """Command-line interface for DJ Digger."""
 
+import logging
 import math
 import os
 from pathlib import Path
@@ -7,11 +8,19 @@ from typing import Annotated, Any
 
 import typer
 
-from dj_digger.cli import background
+import dj_digger.cli.background as background
 from dj_digger.cli.commands.analyze import execute as execute_analyze
 from dj_digger.cli.commands.copy import execute as execute_copy
 from dj_digger.cli.commands.curation import curation_app
-from dj_digger.cli.commands.duplicates import execute as execute_duplicates
+from dj_digger.cli.commands.duplicates import (
+    execute_analyze as execute_duplicates_analyze,
+)
+from dj_digger.cli.commands.duplicates import (
+    execute_list as execute_duplicates_list,
+)
+from dj_digger.cli.commands.duplicates import (
+    execute_mark_best as execute_duplicates_mark_best,
+)
 from dj_digger.cli.commands.export import execute as execute_export
 from dj_digger.cli.commands.mcp import serve as serve_mcp
 from dj_digger.cli.commands.metadata import execute as execute_metadata
@@ -31,7 +40,6 @@ from dj_digger.cli.presenters.copy import copy_payload, copy_progress_lines
 from dj_digger.cli.presenters.jobs import jobs_payload
 from dj_digger.cli.runtime import (
     EXIT_FAILED,
-    Diagnostic,
     configure_logging,
     emit_json,
     run_command,
@@ -42,7 +50,6 @@ from dj_digger.core.analysis.config import DEFAULT_TRACK_TIMEOUT_SECONDS, DEFAUL
 from dj_digger.core.application import (
     AnalyzeRequest,
     CopySetRequest,
-    CoreApplication,
     DuplicateAnalyzeRequest,
     DuplicateListRequest,
     DuplicateMarkBestRequest,
@@ -53,6 +60,8 @@ from dj_digger.core.application import (
     SnapshotRequest,
 )
 from dj_digger.core.diagnostics import DiagnosticStatus
+
+_logger = logging.getLogger("dj_digger")
 
 app = typer.Typer(
     help="Catalog and export DJ music libraries.",
@@ -249,42 +258,45 @@ def analyze(
     )
 
 
-@app.command()
-def duplicates(
-    config: ConfigOption,
-    ctx: typer.Context,
-    analyze: Annotated[bool, typer.Option("--analyze")] = False,
-    list_: Annotated[bool, typer.Option("--list")] = False,
-    mark_best_quality: Annotated[bool, typer.Option("--mark-best-quality")] = False,
-    mastering: Annotated[bool, typer.Option("--mastering")] = False,
-    dj_review: Annotated[bool, typer.Option("--dj-review")] = False,
-    source: Annotated[str | None, typer.Option()] = None,
-    workers: PositiveWorkersOption = DEFAULT_WORKERS,
-    track_timeout: TrackTimeoutOption = DEFAULT_TRACK_TIMEOUT_SECONDS,
-    background: BackgroundOption = False,
-    json_output: JsonOption = False,
-) -> None:
-    """Fingerprint audio, list duplicate recordings, and mark the best-quality copy."""
-    if not (analyze or list_ or mark_best_quality):
-        raise typer.BadParameter("one of --analyze, --list, or --mark-best-quality is required")
-    if analyze and list_:
-        raise typer.BadParameter("--analyze and --list are mutually exclusive")
-    if list_ and mark_best_quality:
-        raise typer.BadParameter("--list and --mark-best-quality are mutually exclusive")
-    if mastering and not analyze:
-        raise typer.BadParameter("--mastering is only valid with --analyze")
-    if dj_review and not list_:
-        raise typer.BadParameter("--dj-review is only valid with --list")
-    if not analyze:
-        if _was_passed_on_command_line(ctx, "workers"):
-            raise typer.BadParameter("--workers is only valid with --analyze")
-        if _was_passed_on_command_line(ctx, "track_timeout"):
-            raise typer.BadParameter("--track-timeout is only valid with --analyze")
-        if background:
-            raise typer.BadParameter("--background is only valid with --analyze")
+duplicates_app = typer.Typer(
+    help="Fingerprint audio, list duplicate recordings, and mark the best-quality copy.",
+    invoke_without_command=True,
+)
+app.add_typer(duplicates_app, name="duplicates")
 
+#: The callback cannot use ``ConfigOption``: its default factory would run (and
+#: fail) even when a subcommand carries its own ``--config``.
+LegacyConfigOption = Annotated[
+    Path | None,
+    typer.Option(
+        "--config",
+        exists=True,
+        file_okay=True,
+        dir_okay=False,
+        readable=True,
+        resolve_path=True,
+        show_default=False,
+        help="Workspace config; discovered automatically when omitted.",
+    ),
+]
+SourceOption = Annotated[str | None, typer.Option("--source")]
+
+
+def _duplicates_analyze(
+    ctx: typer.Context,
+    config: Path,
+    *,
+    source: str | None,
+    mastering: bool,
+    mark_best_quality: bool,
+    workers: int,
+    track_timeout: float,
+    background: bool,
+    json_output: bool,
+) -> None:
+    """Run one duplicate analysis, in the foreground or detached."""
     if background:
-        argv = ["duplicates", "--config", str(config), "--analyze"]
+        argv = ["duplicates", "analyze", "--config", str(config)]
         if source is not None:
             argv += ["--source", source]
         argv += ["--workers", str(workers), "--track-timeout", str(track_timeout)]
@@ -296,37 +308,155 @@ def duplicates(
             argv.append("--json")
         _run_in_background(config, "duplicates", argv, json_output=json_output)
         return
-
-    if analyze:
-        run_command_with_progress(
-            config,
-            lambda service, progress: execute_duplicates(
-                service,
-                DuplicateAnalyzeRequest(
-                    source_id=source,
-                    workers=workers,
-                    track_timeout=track_timeout,
-                    mark_best_quality=mark_best_quality,
-                    mastering=mastering,
-                ),
-                progress=progress,
+    run_command_with_progress(
+        config,
+        lambda service, progress: execute_duplicates_analyze(
+            service,
+            DuplicateAnalyzeRequest(
+                source_id=source,
+                workers=workers,
+                track_timeout=track_timeout,
+                mark_best_quality=mark_best_quality,
+                mastering=mastering,
             ),
-            event="duplicates",
-            verbosity=ctx.obj.get("verbosity", 0),
+            progress=progress,
+        ),
+        event="duplicates",
+        verbosity=ctx.obj.get("verbosity", 0),
+        json_output=json_output,
+    )
+
+
+@duplicates_app.command("analyze")
+def duplicates_analyze(
+    ctx: typer.Context,
+    config: ConfigOption,
+    source: SourceOption = None,
+    mastering: Annotated[bool, typer.Option("--mastering")] = False,
+    mark_best_quality: Annotated[bool, typer.Option("--mark-best-quality")] = False,
+    workers: PositiveWorkersOption = DEFAULT_WORKERS,
+    track_timeout: TrackTimeoutOption = DEFAULT_TRACK_TIMEOUT_SECONDS,
+    background: BackgroundOption = False,
+    json_output: JsonOption = False,
+) -> None:
+    """Fingerprint present tracks and derive duplicate groups."""
+    _duplicates_analyze(
+        ctx,
+        config,
+        source=source,
+        mastering=mastering,
+        mark_best_quality=mark_best_quality,
+        workers=workers,
+        track_timeout=track_timeout,
+        background=background,
+        json_output=json_output,
+    )
+
+
+@duplicates_app.command("list")
+def duplicates_list(
+    config: ConfigOption,
+    source: SourceOption = None,
+    dj_review: Annotated[bool, typer.Option("--dj-review")] = False,
+    json_output: JsonOption = False,
+) -> None:
+    """List known duplicate groups without touching the catalog."""
+    run_command(
+        config,
+        lambda service: execute_duplicates_list(
+            service, DuplicateListRequest(source_id=source), dj_review=dj_review
+        ),
+        event="duplicates",
+        json_output=json_output,
+    )
+
+
+@duplicates_app.command("mark-best-quality")
+def duplicates_mark_best_quality(
+    config: ConfigOption,
+    source: SourceOption = None,
+    json_output: JsonOption = False,
+) -> None:
+    """Mark the best-quality copy in each duplicate group."""
+    run_command(
+        config,
+        lambda service: execute_duplicates_mark_best(
+            service, DuplicateMarkBestRequest(source_id=source)
+        ),
+        event="duplicates",
+        json_output=json_output,
+    )
+
+
+@duplicates_app.callback()
+def duplicates(
+    ctx: typer.Context,
+    config: LegacyConfigOption = None,
+    analyze: Annotated[bool, typer.Option("--analyze", hidden=True)] = False,
+    list_: Annotated[bool, typer.Option("--list", hidden=True)] = False,
+    mark_best_quality: Annotated[bool, typer.Option("--mark-best-quality", hidden=True)] = False,
+    mastering: Annotated[bool, typer.Option("--mastering", hidden=True)] = False,
+    dj_review: Annotated[bool, typer.Option("--dj-review", hidden=True)] = False,
+    source: Annotated[str | None, typer.Option("--source", hidden=True)] = None,
+    workers: Annotated[int, typer.Option("--workers", hidden=True)] = DEFAULT_WORKERS,
+    track_timeout: Annotated[
+        float, typer.Option("--track-timeout", hidden=True)
+    ] = DEFAULT_TRACK_TIMEOUT_SECONDS,
+    background: Annotated[bool, typer.Option("--background", hidden=True)] = False,
+    json_output: Annotated[bool, typer.Option("--json", hidden=True)] = False,
+) -> None:
+    """Accept the retired flag form so existing scripts keep working."""
+    if ctx.invoked_subcommand is not None:
+        return
+    selected = [
+        name
+        for name, chosen in (
+            ("analyze", analyze),
+            ("list", list_),
+            ("mark-best-quality", mark_best_quality),
+        )
+        if chosen
+    ]
+    if not selected:
+        raise typer.BadParameter("one of --analyze, --list, or --mark-best-quality is required")
+    if len(selected) > 1 and selected != ["analyze", "mark-best-quality"]:
+        raise typer.BadParameter(f"--{selected[0]} and --{selected[1]} are mutually exclusive")
+    workflow = selected[0]
+    # The retired form keeps its own exclusivity checks so a stale script is told
+    # about an ignored option instead of silently getting different behaviour.
+    if workflow != "analyze":
+        for option, name in (("--workers", "workers"), ("--track-timeout", "track_timeout")):
+            if _was_passed_on_command_line(ctx, name):
+                raise typer.BadParameter(f"{option} is only valid with --analyze")
+        if background:
+            raise typer.BadParameter("--background is only valid with --analyze")
+        if mastering:
+            raise typer.BadParameter("--mastering is only valid with --analyze")
+    if dj_review and workflow != "list":
+        raise typer.BadParameter("--dj-review is only valid with --list")
+    _logger.warning(
+        "`dj-digger duplicates --%s` is deprecated; use `dj-digger duplicates %s` instead",
+        workflow,
+        workflow,
+    )
+    resolved = config if config is not None else _default_config_path()
+    if workflow == "analyze":
+        _duplicates_analyze(
+            ctx,
+            resolved,
+            source=source,
+            mastering=mastering,
+            mark_best_quality=mark_best_quality,
+            workers=_positive_workers(workers),
+            track_timeout=_positive_track_timeout(track_timeout),
+            background=background,
             json_output=json_output,
         )
         return
-
-    def action(service: CoreApplication) -> Diagnostic:
-        if list_:
-            return execute_duplicates(
-                service,
-                DuplicateListRequest(source_id=source),
-                dj_review=dj_review,
-            )
-        return execute_duplicates(service, DuplicateMarkBestRequest(source_id=source))
-
-    run_command(config, action, event="duplicates", json_output=json_output)
+    if workflow == "list":
+        duplicates_list(resolved, source=source, dj_review=dj_review, json_output=json_output)
+        return
+    duplicates_mark_best_quality(resolved, source=source, json_output=json_output)
 
 
 def _was_passed_on_command_line(ctx: typer.Context, name: str) -> bool:

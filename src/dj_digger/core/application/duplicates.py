@@ -5,7 +5,6 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from dj_digger.core.analysis.config import DEFAULT_TRACK_TIMEOUT_SECONDS
-from dj_digger.core.application.analysis_progress import ProgressReporter
 from dj_digger.core.catalog.database import Database
 from dj_digger.core.config import MasteringConfig
 from dj_digger.core.duplicates.quality import QualityMarkResult
@@ -14,6 +13,7 @@ from dj_digger.core.duplicates.service import (
     DuplicateGroupDescription,
     DuplicateService,
 )
+from dj_digger.core.progress import ProgressReporter
 
 
 @dataclass(frozen=True)

@@ -16,18 +16,18 @@ from dj_digger.core.analysis.pipeline import (
     AnalysisRunResult,
     TimedAnalysisExtractor,
 )
-from dj_digger.core.application.analysis_progress import (
-    NullProgressReporter,
-    ProgressEventReporter,
-    ProgressReporter,
-)
 from dj_digger.core.application.analyze import AnalyzeRequest, AnalyzeUseCase
 from dj_digger.core.application.export import ExportRequest, ExportResult, ExportUseCase
 from dj_digger.core.application.metadata import MetadataRequest, MetadataRunResult, MetadataUseCase
-from dj_digger.core.application.progress import ProgressSink
 from dj_digger.core.application.scan import ScanRequest, ScanRunResult, ScanUseCase
 from dj_digger.core.catalog.database import Database
 from dj_digger.core.config import WorkspaceConfig
+from dj_digger.core.progress import (
+    NullProgressReporter,
+    ProgressEventReporter,
+    ProgressReporter,
+    ProgressSink,
+)
 
 
 @dataclass(frozen=True)

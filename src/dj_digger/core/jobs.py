@@ -146,7 +146,7 @@ class JobRepository:
         with self._locked():
             return self._read_locked(job_id)
 
-    def record_result(self, job_id: str, diagnostic: dict[str, Any]) -> JobRecord:
+    def record_result(self, job_id: str, diagnostic: Mapping[str, Any]) -> JobRecord:
         _validate_job_id(job_id)
         raw_status = diagnostic.get("status")
         if not isinstance(raw_status, str) or raw_status not in _RESULT_STATUSES:
@@ -301,7 +301,7 @@ def current_job_id() -> str | None:
     return job_id if job_id is not None and _is_valid_job_id(job_id) else None
 
 
-def record_result(database_path: Path, job_id: str, diagnostic: dict[str, Any]) -> None:
+def record_result(database_path: Path, job_id: str, diagnostic: Mapping[str, Any]) -> None:
     JobRepository(database_path).record_result(job_id, diagnostic)
 
 

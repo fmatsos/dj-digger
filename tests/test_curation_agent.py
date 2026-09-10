@@ -28,6 +28,7 @@ from dj_digger.core.curation.client import (
     OpenAICompatibleClient,
 )
 from dj_digger.core.curation.prompts import CUSTOM_SYSTEM_PROMPT_PREFIX, SYSTEM_PROMPT
+from dj_digger.core.mcp_server import create_curation_mcp_server
 
 
 class _Handler(BaseHTTPRequestHandler):
@@ -158,7 +159,7 @@ def _call(identifier: str, name: str, arguments: dict[str, Any]) -> dict[str, An
 def _run(config: WorkspaceConfig, *, custom_system_prompt: str | None = None) -> CurationResult:
     client = OpenAICompatibleClient(config.curation, "test-credential")
     return anyio.run(
-        CurationAgent(config, client).run,
+        CurationAgent(config, client, tool_server=create_curation_mcp_server(config)).run,
         CurationRequest(prompt="Build a set", custom_system_prompt=custom_system_prompt),
     )
 
@@ -372,7 +373,11 @@ def test_timeout_and_errors_never_expose_secret(
     secret = "never-report-this-credential"
     with pytest.raises(CurationTimeoutError) as captured:
         anyio.run(
-            CurationAgent(config, OpenAICompatibleClient(config.curation, secret)).run,
+            CurationAgent(
+                config,
+                OpenAICompatibleClient(config.curation, secret),
+                tool_server=create_curation_mcp_server(config),
+            ).run,
             CurationRequest(prompt="Build a set"),
         )
     assert secret not in str(captured.value)
@@ -396,9 +401,10 @@ def test_http_error_detail_reaches_the_caller_without_the_credential(
         }
     ]
 
+    config = _workspace(tmp_path / "catalog.sqlite", url)
     with pytest.raises(CurationTransportError) as captured:
         anyio.run(
-            CurationAgent(_workspace(tmp_path / "catalog.sqlite", url)).run,
+            CurationAgent(config, tool_server=create_curation_mcp_server(config)).run,
             CurationRequest(prompt="Build a set"),
         )
 

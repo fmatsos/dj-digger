@@ -1,12 +1,10 @@
 """Presentation mapping for typed scan results."""
 
-from typing import Any
-
 from dj_digger.core.application import ScanRunResult
-from dj_digger.core.diagnostics import DiagnosticStatus
+from dj_digger.core.diagnostics import DiagnosticStatus, ScanDiagnostic
 
 
-def scan_payload(result: ScanRunResult) -> dict[str, Any]:
+def scan_payload(result: ScanRunResult) -> ScanDiagnostic:
     """Preserve the compact scan JSON contract at the CLI boundary."""
     scans = [
         {

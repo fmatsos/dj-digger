@@ -2,6 +2,7 @@
 
 import json
 import re
+from collections.abc import Mapping
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -29,7 +30,7 @@ def sanitize_error(error: object) -> str:
     return classify(error)
 
 
-def sanitize_diagnostic(diagnostic: dict[str, Any]) -> dict[str, Any]:
+def sanitize_diagnostic(diagnostic: Mapping[str, Any]) -> dict[str, Any]:
     """Remove private paths and arbitrary exception detail from persisted facts.
 
     A boundary that caught a real exception records its failure class under
@@ -67,7 +68,7 @@ class RunLogger:
     def __init__(self, database_path: Path) -> None:
         self._path = database_path.parent / "logs" / "dj-digger.log"
 
-    def write(self, diagnostic: dict[str, Any]) -> None:
+    def write(self, diagnostic: Mapping[str, Any]) -> None:
         self._path.parent.mkdir(parents=True, exist_ok=True)
         timestamp = datetime.now(UTC).isoformat()
         event = diagnostic.get("event", "command")

@@ -22,16 +22,8 @@ from dj_digger.core.curation.client import (
 )
 from dj_digger.core.curation.models import CandidateDetails, CandidateRef, CurationCreation
 from dj_digger.core.curation.prompts import CUSTOM_SYSTEM_PROMPT_PREFIX, SYSTEM_PROMPT
+from dj_digger.core.curation.tools import ALLOWED_TOOLS, WRITE_TOOL, CatalogToolServer
 from dj_digger.core.errors import StateConflictError
-from dj_digger.core.mcp_server import create_curation_mcp_server
-
-ALLOWED_TOOLS = (
-    "get_library_overview",
-    "search_curation_candidates",
-    "get_curation_candidates",
-    "create_curation",
-)
-WRITE_TOOL = "create_curation"
 
 __all__ = [
     "ALLOWED_TOOLS",
@@ -112,10 +104,16 @@ class CurationAgent:
     injected code is not claimed to be hard-killable.
     """
 
-    def __init__(self, config: WorkspaceConfig, client: CompletionClient | None = None) -> None:
+    def __init__(
+        self,
+        config: WorkspaceConfig,
+        client: CompletionClient | None = None,
+        *,
+        tool_server: CatalogToolServer,
+    ) -> None:
         self._config = config
         self._catalog = CurationCatalog(config.database)
-        self._server = create_curation_mcp_server(config)
+        self._server = tool_server
         self._uses_default_transport = client is None
         self._client: CompletionClient = (
             client

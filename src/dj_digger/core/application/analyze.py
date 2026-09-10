@@ -12,13 +12,13 @@ from dj_digger.core.analysis.pipeline import (
     AnalysisRunResult,
     TimedAnalysisExtractor,
 )
-from dj_digger.core.application.analysis_progress import (
+from dj_digger.core.catalog.database import Database
+from dj_digger.core.progress import (
     AnalysisProgressReporter,
     NullProgressReporter,
     ProgressEventReporter,
+    ProgressSink,
 )
-from dj_digger.core.application.progress import ProgressSink
-from dj_digger.core.catalog.database import Database
 
 
 @dataclass(frozen=True)
