@@ -14,10 +14,12 @@ from dj_digger.core.errors import UNCLASSIFIED, classify
 _URL = r"[A-Za-z][A-Za-z0-9+.\-]*://[^\s,;\"']+"
 _ABSOLUTE_PATH = r"(?<![A-Za-z0-9_:/])/(?:[^\s,;\"']+)"
 _SCRUBBED = re.compile(f"(?P<url>{_URL})|(?P<path>{_ABSOLUTE_PATH})")
+_FILE_URL = re.compile(r"(?i)\bfile:///(?:[^\s,;\"']+)")
 
 
 def _scrub_paths(value: str) -> str:
-    return _SCRUBBED.sub(lambda match: match.group("url") or "<path>", value)
+    without_file_paths = _FILE_URL.sub("file://<path>", value)
+    return _SCRUBBED.sub(lambda match: match.group("url") or "<path>", without_file_paths)
 
 
 def sanitize_error(error: object) -> str:

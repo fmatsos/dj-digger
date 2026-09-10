@@ -279,6 +279,19 @@ LegacyConfigOption = Annotated[
         help="Workspace config; discovered automatically when omitted.",
     ),
 ]
+
+
+def _duplicates_config(ctx: typer.Context, config: Path | None) -> Path:
+    """Resolve a subcommand config, including one supplied to its parent."""
+    if config is not None:
+        return config
+    if ctx.parent is not None:
+        parent_config = ctx.parent.params.get("config")
+        if isinstance(parent_config, (str, Path)):
+            return Path(parent_config)
+    return _default_config_path()
+
+
 SourceOption = Annotated[str | None, typer.Option("--source")]
 
 
@@ -330,7 +343,7 @@ def _duplicates_analyze(
 @duplicates_app.command("analyze")
 def duplicates_analyze(
     ctx: typer.Context,
-    config: ConfigOption,
+    config: LegacyConfigOption = None,
     source: SourceOption = None,
     mastering: Annotated[bool, typer.Option("--mastering")] = False,
     mark_best_quality: Annotated[bool, typer.Option("--mark-best-quality")] = False,
@@ -342,7 +355,7 @@ def duplicates_analyze(
     """Fingerprint present tracks and derive duplicate groups."""
     _duplicates_analyze(
         ctx,
-        config,
+        _duplicates_config(ctx, config),
         source=source,
         mastering=mastering,
         mark_best_quality=mark_best_quality,
@@ -355,14 +368,15 @@ def duplicates_analyze(
 
 @duplicates_app.command("list")
 def duplicates_list(
-    config: ConfigOption,
+    ctx: typer.Context,
+    config: LegacyConfigOption = None,
     source: SourceOption = None,
     dj_review: Annotated[bool, typer.Option("--dj-review")] = False,
     json_output: JsonOption = False,
 ) -> None:
     """List known duplicate groups without touching the catalog."""
     run_command(
-        config,
+        _duplicates_config(ctx, config),
         lambda service: execute_duplicates_list(
             service, DuplicateListRequest(source_id=source), dj_review=dj_review
         ),
@@ -373,13 +387,14 @@ def duplicates_list(
 
 @duplicates_app.command("mark-best-quality")
 def duplicates_mark_best_quality(
-    config: ConfigOption,
+    ctx: typer.Context,
+    config: LegacyConfigOption = None,
     source: SourceOption = None,
     json_output: JsonOption = False,
 ) -> None:
     """Mark the best-quality copy in each duplicate group."""
     run_command(
-        config,
+        _duplicates_config(ctx, config),
         lambda service: execute_duplicates_mark_best(
             service, DuplicateMarkBestRequest(source_id=source)
         ),
@@ -454,9 +469,9 @@ def duplicates(
         )
         return
     if workflow == "list":
-        duplicates_list(resolved, source=source, dj_review=dj_review, json_output=json_output)
+        duplicates_list(ctx, resolved, source=source, dj_review=dj_review, json_output=json_output)
         return
-    duplicates_mark_best_quality(resolved, source=source, json_output=json_output)
+    duplicates_mark_best_quality(ctx, resolved, source=source, json_output=json_output)
 
 
 def _was_passed_on_command_line(ctx: typer.Context, name: str) -> bool:

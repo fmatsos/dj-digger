@@ -122,6 +122,18 @@ def test_mark_best_quality_subcommand_runs_its_workflow(
     assert json.loads(result.stdout.strip().splitlines()[-1])["status"] == "succeeded"
 
 
+def test_parent_config_is_forwarded_to_the_selected_subcommand(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    config = _config(tmp_path)
+    monkeypatch.chdir(tmp_path / "music")
+
+    result = CliRunner().invoke(app, ["duplicates", "--config", str(config), "list", "--json"])
+
+    assert result.exit_code == 0
+    assert json.loads(result.stdout.strip().splitlines()[-1])["status"] == "succeeded"
+
+
 def test_the_legacy_flag_form_still_works_and_warns(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
 ) -> None:

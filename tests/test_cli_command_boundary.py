@@ -101,7 +101,9 @@ def test_unexpected_failures_are_logged_with_their_traceback(
     config = _write_config(tmp_path)
     monkeypatch.setattr(
         "dj_digger.core.application.app.CoreApplication.status",
-        lambda self: (_ for _ in ()).throw(KeyError("internal-bug")),
+        lambda self: (_ for _ in ()).throw(
+            KeyError("private-sentinel /private/library/root/track.flac")
+        ),
     )
 
     with caplog.at_level("ERROR", logger="dj_digger"):
@@ -110,7 +112,9 @@ def test_unexpected_failures_are_logged_with_their_traceback(
     assert result.exit_code == runtime.EXIT_FAILED
     record = next(entry for entry in caplog.records if entry.name == "dj_digger")
     assert record.exc_info is not None
-    assert "internal-bug" in caplog.text
+    assert "operation failed" in caplog.text
+    assert "private-sentinel" not in caplog.text
+    assert "/private/library/root" not in caplog.text
 
 
 @pytest.mark.parametrize(
