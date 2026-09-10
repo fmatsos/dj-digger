@@ -22,7 +22,8 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
         with:
-          ref: ${{ github.event.inputs.git_tag || github.ref }}
+          ref: ${{ inputs.git_tag || github.ref }}
+          fetch-depth: 0
 
       - name: Setup Python
         uses: actions/setup-python@v5
