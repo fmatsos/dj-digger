@@ -141,9 +141,15 @@ def execute_command(
         with application_factory(config) as service:
             diagnostic = action(service)
     except Exception as error:
-        # The operator gets the traceback on stderr; the persisted run log only
-        # ever gets the failure class, never private library detail.
-        _logger.exception("%s failed", event)
+        # Preserve an exception-shaped troubleshooting record without handing
+        # arbitrary exception text (or source lines containing it) to logging.
+        # Detached commands redirect this stream into a persistent job log.
+        safe_error = RuntimeError(classify(error))
+        _logger.exception(
+            "%s failed",
+            event,
+            exc_info=(type(safe_error), safe_error, None),
+        )
         diagnostic = FailureDiagnostic(
             event=event,
             status=DiagnosticStatus.FAILED,

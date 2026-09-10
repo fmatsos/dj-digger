@@ -9,6 +9,7 @@ never silently changes — a policy that would keep the profile from loading.
 import codecs
 import subprocess
 import sys
+from collections.abc import Callable
 from pathlib import Path
 
 from typer import _completion_shared
@@ -26,6 +27,7 @@ _EXECUTION_POLICY_NOTICE = (
 )
 
 _patched = False
+_typer_install_powershell: Callable[..., Path] | None = None
 
 
 def _without_marked_regions(profile: str) -> str:
@@ -139,11 +141,12 @@ def _install_powershell(*, prog_name: str, complete_var: str, shell: str) -> Pat
 
 
 def _original_install_powershell(*, prog_name: str, complete_var: str, shell: str) -> Path:
-    """Delegate to whichever installer Typer shipped, resolved at call time."""
-    installer = getattr(_completion_shared, "install_powershell", None)
-    if installer is None or installer is _install_powershell:
+    """Delegate to the Typer installer captured before applying our patch."""
+    if _typer_install_powershell is None:
         raise RuntimeError("Typer no longer exposes a PowerShell completion installer")
-    installed: Path = installer(prog_name=prog_name, complete_var=complete_var, shell=shell)
+    installed: Path = _typer_install_powershell(
+        prog_name=prog_name, complete_var=complete_var, shell=shell
+    )
     return installed
 
 
@@ -153,12 +156,14 @@ def install_patches() -> None:
     Called from the CLI entry point rather than at import time: importing
     ``dj_digger.cli`` must not mutate a third-party module for the whole process.
     """
-    global _patched
+    global _patched, _typer_install_powershell
     if _patched:
         return
     _patched = True
-    if getattr(_completion_shared, "install_powershell", None) is None:
+    installer = getattr(_completion_shared, "install_powershell", None)
+    if installer is None:
         return
+    _typer_install_powershell = installer
     _completion_shared.install_powershell = _install_powershell
 
 

@@ -175,25 +175,29 @@ per source. It requires an FFmpeg build providing the `chromaprint` muxer; it do
 require Essentia.
 
 ```text
-dj-digger duplicates --analyze [--mark-best-quality] [--source NAME]
-                     [--workers N] [--track-timeout SECONDS] --config PATH
+dj-digger duplicates analyze [--mark-best-quality] [--source NAME]
+                            [--workers N] [--track-timeout SECONDS] --config PATH
 
-dj-digger duplicates --list [--source NAME] --config PATH
+dj-digger duplicates list [--source NAME] --config PATH
 
-dj-digger duplicates --mark-best-quality [--source NAME] --config PATH
+dj-digger duplicates mark-best-quality [--source NAME] --config PATH
 ```
 
-`--analyze` and `--list` are mutually exclusive, and at least one action is required.
-`--mark-best-quality` is valid alone or combined with `--analyze`. `--workers` and
-`--track-timeout` are only valid with `--analyze`; both default to the same values as
-`analyze`. Invalid combinations fail as usage errors (exit code `2`) before the catalog
-is opened.
+Each workflow is a subcommand, so options that do not apply are not accepted.
+`--mark-best-quality` on `analyze` elects winners after fingerprinting. `--workers` and
+`--track-timeout` belong only to `analyze`; both default to the same values as the main
+`analyze` command. Invalid options fail as usage errors (exit code `2`) before the
+catalog is opened.
 
 ```bash
-dj-digger duplicates --analyze --mark-best-quality --config config/local.toml
-dj-digger duplicates --list --config config/local.toml
-dj-digger duplicates --list --source djing --config config/local.toml
+dj-digger duplicates analyze --mark-best-quality --config config/local.toml
+dj-digger duplicates list --config config/local.toml
+dj-digger duplicates list --source djing --config config/local.toml
 ```
+
+The former hidden flag syntax (`duplicates --analyze`, `duplicates --list`, and
+`duplicates --mark-best-quality`) remains available only for legacy script
+compatibility and emits a deprecation warning. New scripts should use the subcommands.
 
 Grouping is conservative: two present tracks are duplicates only when their complete
 Chromaprint fingerprints match exactly. Perceptually similar but distinct recordings
