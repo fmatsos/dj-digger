@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib
+import itertools
 from dataclasses import dataclass
 from math import isfinite, sqrt
 from typing import Any, Protocol
@@ -82,7 +83,7 @@ class EssentiaBeatGridAdapter:
             maxBpm=210,
         )(np.asarray(novelty, dtype=np.float32))
         beats = tuple(float(position) for position in outputs[5])
-        intervals = tuple(right - left for left, right in zip(beats, beats[1:], strict=False))
+        intervals = tuple(right - left for left, right in itertools.pairwise(beats))
         return beats, _beat_stability(intervals), intervals
 
 

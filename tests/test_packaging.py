@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 import pytest
@@ -53,3 +54,11 @@ def test_packaged_resources_are_resolved_without_current_working_directory(
     assert resources.read_text("analysis.toml").startswith("[meta]\n")
     assert '"$schema"' in resources.read_text("core/schemas/tracks.schema.json")
     assert '"schema_version"' in resources.read_text("core/schemas/curation-result.schema.json")
+
+
+def test_schema_bundle_references_the_canonical_packaged_resources() -> None:
+    bundle = json.loads(Path("schema-bundle.json").read_text(encoding="utf-8"))
+
+    for relative_path in bundle["schemas"].values():
+        assert relative_path.startswith("dj_digger/")
+        assert (Path("src") / relative_path).is_file(), relative_path

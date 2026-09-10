@@ -74,5 +74,4 @@ class CurrentAnalysisProjector:
         with self._database.transaction():
             self._database.execute("DELETE FROM current_track_analysis")
             self._database.execute(UPSERT_CURRENT, (None, None))
-            count = int(self._database.scalar("SELECT COUNT(*) FROM current_track_analysis"))
-        return count
+            return int(self._database.scalar("SELECT COUNT(*) FROM current_track_analysis"))

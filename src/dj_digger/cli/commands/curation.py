@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import os
 from collections.abc import Callable
 from pathlib import Path
@@ -125,7 +126,7 @@ def curation_create(
     except Exception as error:
         message = curation_error(error)
         if workspace is not None:
-            try:
+            with contextlib.suppress(OSError):
                 RunLogger(workspace.database).write(
                     {
                         "event": "curation",
@@ -134,8 +135,6 @@ def curation_create(
                         "error_class": classify(error),
                     }
                 )
-            except OSError:
-                pass
         typer.echo(f"Error: {message}", err=True)
         raise typer.Exit(1) from None
     emit_curation(creation_payload(result.creation), json_output=json_output)
