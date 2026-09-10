@@ -3,10 +3,11 @@
 from collections.abc import Sequence
 from typing import Any
 
+from dj_digger.core.diagnostics import JobsDiagnostic
 from dj_digger.core.jobs import JobRecord
 
 
-def jobs_payload(records: Sequence[JobRecord | dict[str, Any]]) -> dict[str, Any]:
+def jobs_payload(records: Sequence[JobRecord | dict[str, Any]]) -> JobsDiagnostic:
     return {
         "event": "jobs",
         "status": "succeeded",

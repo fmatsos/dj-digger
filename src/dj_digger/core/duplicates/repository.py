@@ -5,6 +5,12 @@ from datetime import UTC, datetime
 
 from dj_digger.core.catalog.database import Database
 from dj_digger.core.catalog.models import Track
+from dj_digger.core.catalog.queries import (
+    TRACK_COLUMNS,
+    TRACK_ORDER,
+    TrackScope,
+    track_from_row,
+)
 from dj_digger.core.duplicates.fingerprint import FINGERPRINT_VERSION, Fingerprint
 
 
@@ -32,18 +38,14 @@ class DuplicateRepository:
 
     def present_tracks(self, source_id: str | None) -> list[Track]:
         """List present tracks from enabled sources, optionally scoped to one source."""
-        query = """
-            SELECT t.id, t.source_id, t.relative_path, t.filename, t.extension, t.size_bytes,
-                   t.mtime_ns, t.presence_status
+        query = f"""
+            SELECT {TRACK_COLUMNS}
             FROM tracks t JOIN library_sources s ON s.source_id = t.source_id
             WHERE t.presence_status = 'present' AND s.enabled = 1
         """
-        parameters: list[object] = []
-        if source_id is not None:
-            query += " AND t.source_id = ?"
-            parameters.append(source_id)
-        query += " ORDER BY t.source_id, t.relative_path, t.id"
-        return [Track(*row) for row in self._database.execute(query, parameters).fetchall()]
+        clause, parameters = TrackScope(source_id).as_sql()
+        rows = self._database.execute(query + clause + TRACK_ORDER, parameters).fetchall()
+        return [track_from_row(row) for row in rows]
 
     def reusable_fingerprint(self, track: Track, fingerprint_version: str) -> Fingerprint | None:
         """Return the current fingerprint if it still matches this track's input identity."""

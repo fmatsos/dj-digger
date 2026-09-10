@@ -1,12 +1,10 @@
 """Presentation mapping for typed analysis results."""
 
-from typing import Any
-
 from dj_digger.core.analysis.pipeline import AnalysisRunResult
-from dj_digger.core.diagnostics import DiagnosticStatus
+from dj_digger.core.diagnostics import AnalyzeDiagnostic, DiagnosticStatus
 
 
-def analyze_payload(result: AnalysisRunResult) -> dict[str, Any]:
+def analyze_payload(result: AnalysisRunResult) -> AnalyzeDiagnostic:
     """Preserve the compact analysis JSON contract at the CLI boundary."""
     failed = int(getattr(result, "failed", 0))
     analyzed = int(getattr(result, "analyzed", 0))

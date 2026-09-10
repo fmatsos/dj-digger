@@ -1,11 +1,10 @@
 """Presentation mapping for typed snapshot results."""
 
-from typing import Any
-
 from dj_digger.core.application import SnapshotResult
+from dj_digger.core.diagnostics import SnapshotDiagnostic
 
 
-def snapshot_payload(result: SnapshotResult) -> dict[str, Any]:
+def snapshot_payload(result: SnapshotResult) -> SnapshotDiagnostic:
     """Preserve the compact snapshot JSON contract at the CLI boundary."""
     return {
         "event": "snapshot",

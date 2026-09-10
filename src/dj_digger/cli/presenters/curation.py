@@ -4,7 +4,7 @@ from typing import Any
 
 import typer
 
-from dj_digger.cli.runtime import emit_json
+from dj_digger.cli.terminal import emit_json
 from dj_digger.core.curation.models import CurationCreation
 
 

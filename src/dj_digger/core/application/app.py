@@ -18,7 +18,6 @@ from dj_digger.core.analysis.pipeline import (
     TimedAnalysisExtractor,
 )
 from dj_digger.core.analysis.worker_client import IsolatedAnalysisExtractor
-from dj_digger.core.application.analysis_progress import ProgressEventReporter, ProgressReporter
 from dj_digger.core.application.analyze import AnalyzeRequest, AnalyzeUseCase
 from dj_digger.core.application.curation import CurationRequest, CurationResult, CurationUseCase
 from dj_digger.core.application.duplicates import (
@@ -50,7 +49,6 @@ from dj_digger.core.application.operations import (
     StatusUseCase,
     has_chromaprint_muxer,
 )
-from dj_digger.core.application.progress import ProgressSink
 from dj_digger.core.application.refresh import RefreshRequest, RefreshResult, RefreshUseCase
 from dj_digger.core.application.scan import (
     ScanRequest,
@@ -78,6 +76,7 @@ from dj_digger.core.exports.curation import (
     CurationExportResult,
     export_curation,
 )
+from dj_digger.core.progress import ProgressEventReporter, ProgressReporter, ProgressSink
 
 
 class CoreApplication:

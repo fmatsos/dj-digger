@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
-from dj_digger.core.application.progress import ProgressEvent, ProgressSink
+from dj_digger.core.progress import ProgressEvent, ProgressSink
 from dj_digger.core.set_copy import (
     OwnerResolver,
     OwnershipSetter,

@@ -6,32 +6,35 @@ status to an exit code. Dependencies are passed in explicitly so tests can
 substitute them without reaching into ``sys.modules``.
 """
 
-import json
 import logging
 import tomllib
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from contextlib import AbstractContextManager
 from pathlib import Path
 from typing import Any, Protocol
 
 import typer
 
-from dj_digger.cli import background
+import dj_digger.cli.background as background
 from dj_digger.cli.rich_progress import RichProgressReporter
-from dj_digger.cli.terminal import render
+from dj_digger.cli.terminal import emit, emit_json
 from dj_digger.core.application import CoreApplication
-from dj_digger.core.application.progress import ProgressSink
 from dj_digger.core.config import WorkspaceConfig
-from dj_digger.core.diagnostics import DiagnosticStatus
+from dj_digger.core.diagnostics import (
+    Diagnostic,
+    DiagnosticStatus,
+    FailureDiagnostic,
+)
 from dj_digger.core.errors import classify
+from dj_digger.core.progress import ProgressSink
 from dj_digger.core.run_log import RunLogger
 
 EXIT_FAILED = 1
 EXIT_PARTIAL = 2
 
-Diagnostic = dict[str, Any]
-Action = Callable[[CoreApplication], Diagnostic]
-ProgressAction = Callable[[CoreApplication, ProgressSink], Diagnostic]
+Payload = Mapping[str, Any]
+Action = Callable[[CoreApplication], Payload]
+ProgressAction = Callable[[CoreApplication, ProgressSink], Payload]
 
 _logger = logging.getLogger("dj_digger")
 
@@ -39,7 +42,7 @@ _logger = logging.getLogger("dj_digger")
 class RunLogSink(Protocol):
     """The only run-logger capability a command boundary needs."""
 
-    def write(self, diagnostic: Diagnostic) -> None: ...
+    def write(self, diagnostic: Mapping[str, Any]) -> None: ...
 
 
 class ApplicationFactory(Protocol):
@@ -91,31 +94,18 @@ def load_config(config_path: Path) -> WorkspaceConfig:
         raise ConfigLoadError(f"invalid configuration: {detail}") from None
 
 
-def config_failure(event: str, error: ConfigLoadError) -> Diagnostic:
-    return {
-        "event": event,
-        "status": DiagnosticStatus.FAILED,
-        "code": "invalid_config",
-        "error": str(error),
-    }
+def config_failure(event: str, error: ConfigLoadError) -> FailureDiagnostic:
+    return FailureDiagnostic(
+        event=event,
+        status=DiagnosticStatus.FAILED,
+        code="invalid_config",
+        error=str(error),
+    )
 
 
 def progress_reporter(verbosity: int) -> AbstractContextManager[ProgressSink]:
     """Build the interactive progress reporter for one command run."""
     return RichProgressReporter(verbosity=verbosity)
-
-
-def emit_json(payload: Diagnostic) -> None:
-    """Emit one compact machine-readable payload."""
-    typer.echo(json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")))
-
-
-def emit(payload: Diagnostic, *, json_output: bool) -> None:
-    """Emit one payload in the format the caller selected."""
-    if json_output:
-        emit_json(payload)
-    else:
-        render(payload)
 
 
 _EXIT_CODES: dict[str, int] = {
@@ -124,7 +114,7 @@ _EXIT_CODES: dict[str, int] = {
 }
 
 
-def exit_code_for(diagnostic: Diagnostic) -> int:
+def exit_code_for(diagnostic: Payload) -> int:
     """Map one diagnostic status to the documented process exit code."""
     status = diagnostic.get("status")
     return _EXIT_CODES.get(status, 0) if isinstance(status, str) else 0
@@ -137,7 +127,7 @@ def execute_command(
     event: str,
     application_factory: ApplicationFactory = CoreApplication,
     logger_factory: LoggerFactory = RunLogger,
-) -> Diagnostic:
+) -> Payload:
     """Run one action against a scoped application and return its diagnostic."""
     try:
         config = load_config(config_path)
@@ -154,12 +144,12 @@ def execute_command(
         # The operator gets the traceback on stderr; the persisted run log only
         # ever gets the failure class, never private library detail.
         _logger.exception("%s failed", event)
-        diagnostic = {
-            "event": event,
-            "status": DiagnosticStatus.FAILED,
-            "error": str(error),
-            "error_class": classify(error),
-        }
+        diagnostic = FailureDiagnostic(
+            event=event,
+            status=DiagnosticStatus.FAILED,
+            error=str(error),
+            error_class=classify(error),
+        )
     logger.write(diagnostic)
     job_id = background.current_job_id()
     if job_id is not None:
@@ -204,7 +194,7 @@ def run_command_with_progress(
     command has to remember to close it on failure.
     """
 
-    def with_progress(service: CoreApplication) -> Diagnostic:
+    def with_progress(service: CoreApplication) -> Payload:
         with progress_reporter(verbosity) as progress:
             return action(service, progress)
 
@@ -213,7 +203,7 @@ def run_command_with_progress(
 
 def run_with_config(
     config_path: Path,
-    action: Callable[[WorkspaceConfig], Diagnostic],
+    action: Callable[[WorkspaceConfig], Payload],
     *,
     event: str,
     json_output: bool = False,
