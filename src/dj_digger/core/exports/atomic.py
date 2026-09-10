@@ -6,6 +6,7 @@ Multi-file publication is not atomic on POSIX: the best available guarantee is
 that a failed swap restores the previously published set.
 """
 
+import contextlib
 import os
 import tempfile
 from collections.abc import Callable, Sequence
@@ -74,10 +75,8 @@ def replace_all_atomically(
     except BaseException:
         # Best effort: a restore that fails too must never mask the original cause.
         for target in replaced:
-            try:
+            with contextlib.suppress(OSError):
                 target.unlink(missing_ok=True)
-            except OSError:
-                pass
         for target, backup in backups:
             try:
                 if backup.exists():

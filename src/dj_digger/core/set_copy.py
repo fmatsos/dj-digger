@@ -9,7 +9,7 @@ import shutil
 import stat
 import tempfile
 from collections.abc import Callable, Iterator, Sequence
-from contextlib import contextmanager
+from contextlib import contextmanager, suppress
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -102,10 +102,8 @@ def _open_target_directory(
     current_fd = os.open(output, flags)
     try:
         for component in components:
-            try:
+            with suppress(FileExistsError):
                 os.mkdir(component, dir_fd=current_fd)
-            except FileExistsError:
-                pass
             try:
                 child_fd = os.open(component, flags, dir_fd=current_fd)
             except OSError:
@@ -176,10 +174,8 @@ def copy_track_atomic(
     finally:
         if temporary_fd >= 0:
             os.close(temporary_fd)
-        try:
+        with suppress(FileNotFoundError):
             os.unlink(temporary_name, dir_fd=directory_fd)
-        except FileNotFoundError:
-            pass
 
 
 def _copy_track_atomic(

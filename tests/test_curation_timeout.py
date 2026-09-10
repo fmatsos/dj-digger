@@ -31,7 +31,7 @@ class _BlockingHandler(BaseHTTPRequestHandler):
     started = threading.Event()
     release = threading.Event()
 
-    def do_POST(self) -> None:  # noqa: N802
+    def do_POST(self) -> None:
         type(self).started.set()
         type(self).release.wait()
         body = json.dumps({"choices": []}).encode()
@@ -46,7 +46,7 @@ class _BlockingHandler(BaseHTTPRequestHandler):
 
 
 class _CompletionHandler(BaseHTTPRequestHandler):
-    def do_POST(self) -> None:  # noqa: N802
+    def do_POST(self) -> None:
         body = json.dumps(
             {
                 "choices": [

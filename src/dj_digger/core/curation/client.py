@@ -18,16 +18,16 @@ from dj_digger.core.config import CurationConfig
 from dj_digger.core.errors import DependencyError
 
 __all__ = [
-    "CurationClientError",
+    "AssistantMessage",
+    "CompletionClient",
     "CurationAuthenticationError",
+    "CurationClientError",
+    "CurationResponseError",
     "CurationTimeoutError",
     "CurationTransportError",
-    "CurationResponseError",
-    "ToolCall",
-    "AssistantMessage",
     "OpenAICompatibleClient",
+    "ToolCall",
     "complete_in_subprocess",
-    "CompletionClient",
 ]
 
 

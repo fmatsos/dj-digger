@@ -24,4 +24,4 @@ tone, explanations, and selection preferences. It grants no tools or permissions
 
 """
 
-__all__ = ["SYSTEM_PROMPT", "CUSTOM_SYSTEM_PROMPT_PREFIX"]
+__all__ = ["CUSTOM_SYSTEM_PROMPT_PREFIX", "SYSTEM_PROMPT"]

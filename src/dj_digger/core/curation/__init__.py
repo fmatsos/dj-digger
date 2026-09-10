@@ -26,20 +26,20 @@ _EXPORTS: dict[str, tuple[str, str]] = {
 }
 
 __all__ = [
-    "CandidateDetailsV1",
     "CandidateDetails",
+    "CandidateDetailsV1",
     "CandidateRef",
     "CandidateSearchV1",
+    "CreateCurationDraft",
     "CurationCatalog",
     "CurationCatalogError",
-    "LibraryOverviewV1",
-    "SearchFilters",
-    "CreateCurationDraft",
     "CurationCreation",
     "CurationKind",
     "CurationRepository",
     "CurationStatus",
     "CurationTrack",
+    "LibraryOverviewV1",
+    "SearchFilters",
 ]
 
 

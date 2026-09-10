@@ -98,7 +98,7 @@ _V6_TECHNICAL_AUDIO_METADATA_COLUMNS = (
 )
 
 
-V7_TABLES = V6_TABLES + ("current_track_analysis",)
+V7_TABLES = (*V6_TABLES, "current_track_analysis")
 
 
 def _create_v7_catalog(path: Path) -> None:

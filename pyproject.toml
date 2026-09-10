@@ -26,6 +26,7 @@ dj-digger = "dj_digger.cli:main"
 # Keep the package root so both canonical ``core`` resources and the CLI
 # subpackages are included in wheels and source distributions.
 packages = ["src/dj_digger"]
+exclude = ["**/AGENTS.md", "**/CLAUDE.md"]
 
 [tool.hatch.build.targets.wheel.force-include]
 "schema-bundle.json" = "dj_digger/schema-bundle.json"
@@ -33,18 +34,54 @@ packages = ["src/dj_digger"]
 [tool.pytest.ini_options]
 pythonpath = ["src"]
 testpaths = ["tests"]
+addopts = ["--strict-markers"]
+markers = [
+    "integration: exercises multiple application layers or external processes",
+    "requires_ffmpeg: requires a working FFmpeg installation",
+]
 
 [tool.ruff]
 target-version = "py312"
 line-length = 100
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "UP"]
+select = ["E", "F", "I", "UP", "B", "SIM", "RET", "PTH", "TRY", "PL", "RUF", "DTZ", "ARG"]
+ignore = [
+    "PLC0415",  # Deferred imports protect optional dependencies and startup time.
+    "PLR0911", "PLR0912", "PLR0913", "PLR0915", "PLR0917",  # Existing API complexity.
+    "PLR2004",  # Domain constants are clearer at their point of use.
+    "PLW0603", "PLW1510", "PLW1641",  # Intentional process state and protocol behavior.
+    "PTH105", "PTH211",  # os.replace/symlink flags are required by atomic publication.
+    "DTZ006",  # Export timestamps intentionally preserve the host's local-time contract.
+    "TRY003", "TRY004", "TRY300", "TRY301",  # Existing exception API; migrate incrementally.
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**/*.py" = ["ARG001", "ARG002", "ARG004", "ARG005", "B017", "PTH", "RUF012", "SIM117"]
+"tests/*.py" = ["ARG001", "ARG002", "ARG004", "ARG005", "B017", "DTZ006", "PTH", "PLW2901", "RUF012", "RUF043", "SIM117"]
+"src/dj_digger/cli/rich_progress.py" = ["ARG002"]
+"src/dj_digger/cli/app.py" = ["PLC0415", "PLR0402"]
+"src/dj_digger/cli/runtime.py" = ["PLR0402"]
+"src/dj_digger/core/analysis/exporters.py" = ["ARG002"]
+"src/dj_digger/core/analysis/extractor.py" = ["ARG004"]
+"src/dj_digger/core/application/export.py" = ["RUF012"]
+"src/dj_digger/core/curation/catalog.py" = ["PLC0206"]
 
 [tool.mypy]
 python_version = "3.12"
 strict = true
 files = ["src"]
+
+[tool.pyright]
+include = ["src"]
+venvPath = "."
+venv = ".venv"
+# Mypy remains the strict checker; Pyright adds an independent import/type pass.
+reportArgumentType = false
+reportAssignmentType = false
+reportInvalidTypeForm = false
+reportReturnType = false
+reportUnsupportedDunderAll = false
 
 [dependency-groups]
 dev = [

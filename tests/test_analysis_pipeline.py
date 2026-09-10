@@ -322,7 +322,7 @@ def test_pipeline_aggregates_empty_success_partial_and_failure_statuses(
 
     database = Database.open(tmp_path / "catalog.sqlite")
     database.migrate()
-    for index, outcome in enumerate(outcomes):
+    for index, _outcome in enumerate(outcomes):
         _track(database, "one", f"House/{index}.flac")
 
     def extract(track: Track) -> Mapping[str, object]:

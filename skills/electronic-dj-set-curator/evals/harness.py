@@ -11,7 +11,9 @@ from typing import Any
 from jsonschema import Draft202012Validator
 
 ROOT = Path(__file__).parents[3]
-SCHEMA = json.loads((ROOT / "schemas/dj-set.schema.json").read_text(encoding="utf-8"))
+SCHEMA = json.loads(
+    (ROOT / "src/dj_digger/core/schemas/dj-set.schema.json").read_text(encoding="utf-8")
+)
 STRATEGIES = {
     "LONG_BLEND",
     "STANDARD_BLEND",

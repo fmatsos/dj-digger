@@ -1,5 +1,6 @@
 """Catalog scan use case and typed result contracts."""
 
+import contextlib
 from dataclasses import dataclass
 
 from dj_digger.core.catalog.database import Database
@@ -55,10 +56,8 @@ class ScanUseCase:
                 lifecycle.succeed(run_id)
             except Exception as error:
                 if run_id is not None:
-                    try:
+                    with contextlib.suppress(Exception):
                         lifecycle.fail(run_id, "scan", str(error))
-                    except Exception:
-                        pass
                 results.append(ScanSourceResult(source.id, False, run_id, str(error)))
             else:
                 results.append(ScanSourceResult(source.id, True, run_id))
