@@ -35,6 +35,7 @@ class CurationUseCase:
 
 
 __all__ = [
+    "CuratedTrack",
     "CurationAgent",
     "CurationAgentError",
     "CurationAuthenticationError",
@@ -47,6 +48,5 @@ __all__ = [
     "CurationTimeoutError",
     "CurationTransportError",
     "CurationTurnLimitError",
-    "CuratedTrack",
     "CurationUseCase",
 ]

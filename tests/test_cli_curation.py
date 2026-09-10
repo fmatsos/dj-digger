@@ -17,7 +17,7 @@ from dj_digger.core.catalog.database import Database
 class _Endpoint(BaseHTTPRequestHandler):
     response: bytes = b""
 
-    def do_POST(self) -> None:  # noqa: N802
+    def do_POST(self) -> None:
         self.rfile.read(int(self.headers["Content-Length"]))
         self.send_response(200)
         self.send_header("Content-Type", "application/json")

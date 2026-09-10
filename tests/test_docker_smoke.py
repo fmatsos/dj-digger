@@ -12,6 +12,15 @@ from pathlib import Path
 import pytest
 
 
+def test_dockerfile_uses_frozen_uv_install_and_non_root_runtime() -> None:
+    dockerfile = Path("Dockerfile").read_text(encoding="utf-8")
+
+    assert " AS uv" in dockerfile
+    assert "uv sync --frozen --no-dev" in dockerfile
+    assert "USER dj-digger" in dockerfile
+    assert "pip install" not in dockerfile
+
+
 def _write_periodic_smoke_audio(path: Path) -> None:
     """Write an onset-rich 120 BPM signal suitable for the rhythm smoke gate."""
     sample_rate = 48_000

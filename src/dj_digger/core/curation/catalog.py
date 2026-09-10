@@ -37,7 +37,7 @@ from dj_digger.core.curation.models import (
 )
 from dj_digger.core.errors import StateConflictError
 
-__all__ = ["CurationCatalogError", "CurationCatalog"]
+__all__ = ["CurationCatalog", "CurationCatalogError"]
 
 
 class CurationCatalogError(StateConflictError):
@@ -393,7 +393,7 @@ def _rank_rows(rows: list[_Row]) -> list[_Row]:
     for row in rows:
         groups.setdefault(row.group_key, []).append(row)
     result: list[_Row] = []
-    for group_key, members in groups.items():
+    for _group_key, members in groups.items():
         winner = min(members, key=_quality_key)
         group_values = tuple(
             value

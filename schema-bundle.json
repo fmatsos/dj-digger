@@ -7,14 +7,14 @@
   "analysis_schema_version": 2,
   "set_schema_version": 2,
   "schemas": {
-    "tracks.tsv": "schemas/tracks.schema.json",
-    "library-artifacts.tsv": "schemas/library-artifacts.schema.json",
-    "dj-analysis.tsv": "schemas/dj-analysis.schema.json",
-    "dj-sections.jsonl": "schemas/dj-sections.schema.json",
-    "dj-analysis-run.json": "schemas/dj-analysis-run.schema.json",
-    "<set>.set.json": "schemas/dj-set.schema.json",
-    "snapshot-manifest.json": "schemas/snapshot-manifest.schema.json",
-    "catalog": "schemas/catalog-v1.sql"
+    "tracks.tsv": "dj_digger/core/schemas/tracks.schema.json",
+    "library-artifacts.tsv": "dj_digger/core/schemas/library-artifacts.schema.json",
+    "dj-analysis.tsv": "dj_digger/core/schemas/dj-analysis.schema.json",
+    "dj-sections.jsonl": "dj_digger/core/schemas/dj-sections.schema.json",
+    "dj-analysis-run.json": "dj_digger/core/schemas/dj-analysis-run.schema.json",
+    "<set>.set.json": "dj_digger/core/schemas/dj-set.schema.json",
+    "snapshot-manifest.json": "dj_digger/core/schemas/snapshot-manifest.schema.json",
+    "catalog": "dj_digger/core/catalog/sql/catalog.sql"
   },
   "validation_policy": {
     "producer": "MUST validate structured artifacts before atomic publication",

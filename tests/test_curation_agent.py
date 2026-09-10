@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 import json
 import threading
 import time
@@ -38,7 +39,7 @@ class _Handler(BaseHTTPRequestHandler):
     status = 200
     paths: list[str] = []
 
-    def do_POST(self) -> None:  # noqa: N802
+    def do_POST(self) -> None:
         length = int(self.headers["Content-Length"])
         type(self).paths.append(self.path)
         type(self).requests.append(json.loads(self.rfile.read(length)))
@@ -49,10 +50,8 @@ class _Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(payload)))
         self.end_headers()
-        try:
+        with contextlib.suppress(BrokenPipeError):
             self.wfile.write(payload)
-        except BrokenPipeError:
-            pass
 
     def log_message(self, format: str, *args: object) -> None:
         pass

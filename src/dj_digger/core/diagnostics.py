@@ -98,7 +98,7 @@ __all__ = [
     "FailureDiagnostic",
     "JobsDiagnostic",
     "MetadataDiagnostic",
-    "open_diagnostic",
     "ScanDiagnostic",
     "SnapshotDiagnostic",
+    "open_diagnostic",
 ]

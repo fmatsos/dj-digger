@@ -342,7 +342,7 @@ class CompositeAudioExtractor:
         if bpm is not None and rhythm.beat_stability >= 0.8:
             bar_duration = 60.0 / bpm * 4.0
             start_bar = int(s.start / bar_duration) + 1
-            end_bar = max(start_bar, int(ceil(s.end / bar_duration)))
+            end_bar = max(start_bar, ceil(s.end / bar_duration))
         else:
             start_bar = None
             end_bar = None

@@ -10,8 +10,8 @@ from dj_digger.core.exports.audit import AuditExporter
 
 
 def test_removed_legacy_python_interfaces_are_absent() -> None:
-    import dj_digger.core.analysis.persistence as persistence
-    import dj_digger.core.catalog.repositories as repositories
+    from dj_digger.core.analysis import persistence
+    from dj_digger.core.catalog import repositories
 
     assert importlib.util.find_spec("dj_digger.core.exports.legacy") is None
     assert not hasattr(persistence.AnalysisPersistence, "persist_run")

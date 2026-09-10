@@ -33,9 +33,9 @@ def validate_snapshot(snapshot: SnapshotResult) -> bool:
     manifest_path = snapshot.directory / "snapshot-manifest.json"
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     schema = json.loads(
-        (Path(__file__).parents[2] / "schemas" / "snapshot-manifest.schema.json").read_text(
-            encoding="utf-8"
-        )
+        (
+            Path(__file__).parents[2] / "src/dj_digger/core/schemas/snapshot-manifest.schema.json"
+        ).read_text(encoding="utf-8")
     )
     Draft202012Validator(schema, format_checker=FormatChecker()).validate(manifest)
     for facet in manifest["facets"]:

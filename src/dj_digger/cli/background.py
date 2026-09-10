@@ -126,8 +126,8 @@ __all__ = [
     "jobs_dir",
     "launch",
     "list_jobs",
-    "record_result",
     "os",
+    "record_result",
     "signal",
     "subprocess",
 ]

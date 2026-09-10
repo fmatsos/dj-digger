@@ -18,7 +18,7 @@ class StubSpectrumAdapter:
 
 
 def config() -> SpectrumConfig:
-    return SpectrumConfig.load(Path(__file__).parents[1] / "config" / "analysis.toml")
+    return SpectrumConfig.load(Path(__file__).parents[1] / "src" / "dj_digger" / "analysis.toml")
 
 
 def test_normalizes_spectral_facts_and_rejects_non_finite_values() -> None:

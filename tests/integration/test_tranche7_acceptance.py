@@ -59,6 +59,7 @@ def _real_workspace(tmp_path: Path, source: Path) -> WorkspaceConfig:
     )
 
 
+@pytest.mark.requires_ffmpeg
 @pytest.mark.skipif(
     any(shutil.which(binary) is None for binary in ("exiftool", "ffmpeg", "ffprobe"))
     or importlib.util.find_spec("essentia") is None,
@@ -209,6 +210,7 @@ def test_reconstructed_curator_consumes_canonical_facets_and_emits_three_valid_o
     }
 
 
+@pytest.mark.requires_ffmpeg
 @pytest.mark.skipif(
     any(shutil.which(binary) is None for binary in ("exiftool", "ffmpeg", "ffprobe"))
     or importlib.util.find_spec("essentia") is None,

@@ -266,7 +266,7 @@ def test_run_records_the_failure_class_derived_from_the_exception_type(monkeypat
         Path("config.toml"),
         failing,
         event="probe",
-        application_factory=lambda _config: FakeApplication(_config),
+        application_factory=FakeApplication,
         logger_factory=FakeLogger,
     )
 

@@ -109,7 +109,7 @@ def _cycles(graph: dict[str, set[str]]) -> list[list[str]]:
             if state.get(target, 0) == 0:
                 visit(target)
             elif state[target] == 1:
-                found.append(stack[stack.index(target) :] + [target])
+                found.append([*stack[stack.index(target) :], target])
         stack.pop()
         state[module] = 2
 

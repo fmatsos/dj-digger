@@ -151,7 +151,7 @@ def test_dsp_configuration_rejects_missing_required_sections(tmp_path: Path) -> 
 
 
 def test_dsp_config_hash_changes_when_a_canonical_value_changes(tmp_path: Path) -> None:
-    source = Path("config/analysis.toml").read_text(encoding="utf-8")
+    source = Path("src/dj_digger/analysis.toml").read_text(encoding="utf-8")
     changed = tmp_path / "analysis.toml"
     changed.write_text(
         source.replace("min_confidence = 0.80", "min_confidence = 0.81"), encoding="utf-8"

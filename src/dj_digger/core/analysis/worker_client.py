@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import signal
@@ -176,10 +177,8 @@ class IsolatedAnalysisExtractor(TimedAnalysisExtractor):
     @staticmethod
     def _kill_process_tree(process: subprocess.Popen[bytes]) -> None:
         if os.name == "posix":
-            try:
+            with contextlib.suppress(ProcessLookupError):
                 os.killpg(process.pid, signal.SIGKILL)
-            except ProcessLookupError:
-                pass
         elif os.name == "nt":
             subprocess.run(
                 ["taskkill", "/PID", str(process.pid), "/T", "/F"],
