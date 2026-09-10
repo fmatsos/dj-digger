@@ -18,6 +18,7 @@ from dj_digger.core.curation.client import (
     CurationTimeoutError,
     CurationTransportError,
 )
+from dj_digger.core.mcp_server import create_curation_mcp_server
 
 
 class CurationUseCase:
@@ -27,7 +28,10 @@ class CurationUseCase:
         self._config = config
 
     async def execute(self, request: CurationRequest) -> CurationResult:
-        return await CurationAgent(self._config).run(request)
+        # Composition root: the MCP server is an inbound adapter wired in here,
+        # so the curation domain never has to import it.
+        server = create_curation_mcp_server(self._config)
+        return await CurationAgent(self._config, tool_server=server).run(request)
 
 
 __all__ = [

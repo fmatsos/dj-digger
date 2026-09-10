@@ -4,7 +4,7 @@ from typing import Any
 
 from dj_digger.cli.presenters.refresh import refresh_payload
 from dj_digger.core.application import CoreApplication, RefreshRequest
-from dj_digger.core.application.progress import ProgressSink
+from dj_digger.core.progress import ProgressSink
 
 
 def execute(

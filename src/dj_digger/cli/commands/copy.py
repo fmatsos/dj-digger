@@ -1,7 +1,7 @@
 """CLI adapter for the catalog-independent portable set copy."""
 
 from dj_digger.core.application.copy_set import CopySetRequest, CopySetUseCase
-from dj_digger.core.application.progress import ProgressSink
+from dj_digger.core.progress import ProgressSink
 from dj_digger.core.set_copy import SetCopyResult
 
 

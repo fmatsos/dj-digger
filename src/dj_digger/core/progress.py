@@ -1,8 +1,26 @@
-"""Analysis progress contracts and the core-to-event adapter."""
+"""Progress ports emitted by the domain and adapted by the outer layers.
 
+These are ports, not use cases: the analysis pipeline and the duplicate
+service report through them, so they must live where the domain can reach
+them without depending on the application layer above it.
+"""
+
+from collections.abc import Callable
+from dataclasses import dataclass
 from typing import Protocol
 
-from dj_digger.core.application.progress import ProgressEvent, ProgressSink
+
+@dataclass(frozen=True)
+class ProgressEvent:
+    """One framework-independent progress update."""
+
+    kind: str
+    completed: int | None
+    total: int | None
+    subject: str | None
+
+
+ProgressSink = Callable[[ProgressEvent], None]
 
 
 class ProgressReporter(Protocol):
@@ -74,3 +92,13 @@ class NullProgressReporter:
 
     def diagnostic(self, level: str, message: str) -> None:
         pass
+
+
+__all__ = [
+    "AnalysisProgressReporter",
+    "NullProgressReporter",
+    "ProgressEvent",
+    "ProgressEventReporter",
+    "ProgressReporter",
+    "ProgressSink",
+]

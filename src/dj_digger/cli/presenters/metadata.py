@@ -1,11 +1,10 @@
 """Presentation mapping for typed metadata results."""
 
-from typing import Any
-
 from dj_digger.core.application import MetadataRunResult
+from dj_digger.core.diagnostics import MetadataDiagnostic
 
 
-def metadata_payload(result: MetadataRunResult) -> dict[str, Any]:
+def metadata_payload(result: MetadataRunResult) -> MetadataDiagnostic:
     """Preserve the compact metadata JSON contract at the CLI boundary."""
     return {
         "event": "metadata",
